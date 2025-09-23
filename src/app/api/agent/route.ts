@@ -1,4 +1,10 @@
 import { NextResponse } from "next/server";
+import {
+  fetchBinanceCandles,
+  fetchBinanceMarketSummary,
+  formatBinanceSummary,
+  type BinanceCandle,
+} from "@/lib/binance";
 
 type DataMode = "scrape" | "upload" | "manual";
 
@@ -9,9 +15,26 @@ type AgentRequest = {
   manualNotes?: string;
   datasetName?: string;
   datasetPreview?: string;
+  timeframe?: string;
 };
 
 type AgentDecision = "buy" | "sell" | "hold";
+
+type ChartPoint = {
+  time: string;
+  close: number;
+};
+
+type TradePlan = {
+  bias: "long" | "short" | "neutral";
+  entries: number[];
+  entry: number | null;
+  stopLoss: number | null;
+  takeProfits: number[];
+  executionWindow: string;
+  sizingNotes: string;
+  rationale: string;
+};
 
 type AgentPayload = {
   summary: string;
@@ -23,31 +46,37 @@ type AgentPayload = {
   };
   highlights: string[];
   nextSteps: string[];
+  market: {
+    chart: {
+      interval: string;
+      points: ChartPoint[];
+      narrative: string;
+      forecast: string;
+    };
+    technical: string[];
+    fundamental: string[];
+  };
+  tradePlan: TradePlan;
 };
 
-const POSITIVE_KEYWORDS = [
-  "bullish",
-  "positive",
-  "buy",
-  "long",
-  "accumulate",
-  "support",
-  "breakout",
-  "institutional inflow",
-];
+const FIREWORKS_API_URL = "https://api.fireworks.ai/inference/v1/chat/completions";
+const DEFAULT_FIREWORKS_MODEL =
+  "accounts/sentientfoundation/models/dobby-unhinged-llama-3-3-70b-new";
 
-const NEGATIVE_KEYWORDS = [
-  "bearish",
-  "negative",
-  "sell",
-  "short",
-  "distribution",
-  "resistance",
-  "dump",
-  "liquidation",
-];
+const ALLOWED_TIMEFRAMES = ["5m", "15m", "30m", "1h", "4h", "1d"] as const;
+type Timeframe = (typeof ALLOWED_TIMEFRAMES)[number];
+const DEFAULT_TIMEFRAME: Timeframe = "5m";
 
-const pickTimeframe = (objective: string) => {
+const TIMEFRAME_TO_INTERVAL: Record<Timeframe, string> = {
+  "5m": "5m",
+  "15m": "15m",
+  "30m": "30m",
+  "1h": "1h",
+  "4h": "4h",
+  "1d": "1d",
+};
+
+const pickFallbackTimeframe = (objective: string) => {
   const lower = objective.toLowerCase();
   if (/(scalp|intraday|1h|4h|harian)/i.test(lower)) {
     return "1D";
@@ -61,23 +90,651 @@ const pickTimeframe = (objective: string) => {
   return "4H";
 };
 
-const excerpt = (text: string, length = 160) =>
-  text.length > length ? `${text.slice(0, length)}...` : text;
+const clamp = (value: number, min: number, max: number) =>
+  Math.min(Math.max(value, min), max);
 
-const scoreSentiment = (corpus: string) => {
-  let score = 0;
-  const lowered = corpus.toLowerCase();
-  for (const keyword of POSITIVE_KEYWORDS) {
-    if (lowered.includes(keyword)) {
-      score += 1;
+const excerpt = (value: string, length = 1400) =>
+  value.length > length ? `${value.slice(0, length)}...` : value;
+
+const normalizeTimeframe = (value?: string): Timeframe => {
+  if (!value) {
+    return DEFAULT_TIMEFRAME;
+  }
+  const normalized = value.trim().toLowerCase();
+  const match = ALLOWED_TIMEFRAMES.find(
+    (option) => option.toLowerCase() === normalized
+  );
+  return match ?? DEFAULT_TIMEFRAME;
+};
+
+const calculateSMA = (values: number[], period: number) => {
+  if (period <= 0 || values.length < period) {
+    return null;
+  }
+  const recent = values.slice(values.length - period);
+  const total = recent.reduce((acc, item) => acc + item, 0);
+  return total / period;
+};
+
+const calculateRSI = (candles: BinanceCandle[], period = 14) => {
+  if (candles.length <= period) {
+    return null;
+  }
+  let gains = 0;
+  let losses = 0;
+  for (let i = candles.length - period + 1; i < candles.length; i += 1) {
+    const current = candles[i];
+    const previous = candles[i - 1];
+    const delta = current.close - previous.close;
+    if (delta >= 0) {
+      gains += delta;
+    } else {
+      losses += Math.abs(delta);
     }
   }
-  for (const keyword of NEGATIVE_KEYWORDS) {
-    if (lowered.includes(keyword)) {
-      score -= 1;
+  const averageGain = gains / period;
+  const averageLoss = losses / period;
+  if (averageLoss === 0) {
+    return 100;
+  }
+  const rs = averageGain / averageLoss;
+  return 100 - 100 / (1 + rs);
+};
+
+const calculateVolatility = (values: number[]) => {
+  if (values.length < 2) {
+    return null;
+  }
+  const mean = values.reduce((acc, value) => acc + value, 0) / values.length;
+  const variance =
+    values.reduce((acc, value) => acc + (value - mean) ** 2, 0) / (values.length - 1);
+  return Math.sqrt(variance);
+};
+
+const sanitizeChartPoints = (value: unknown): ChartPoint[] => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .map((item) => {
+      if (!item || typeof item !== "object") {
+        return null;
+      }
+      const map = item as Record<string, unknown>;
+      const time = map.time;
+      const close = map.close;
+      if (typeof time !== "string") {
+        return null;
+      }
+      const numericClose = ensureNumber(close);
+      if (numericClose === null) {
+        return null;
+      }
+      return { time, close: Number(numericClose.toFixed(2)) };
+    })
+    .filter((point): point is ChartPoint => Boolean(point));
+};
+
+const ensureNumber = (value: unknown) => {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string") {
+    const parsed = Number.parseFloat(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
     }
   }
-  return score;
+  return null;
+};
+
+const ensureNumericArray = (value: unknown): number[] => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .map((item) => ensureNumber(item))
+    .filter((number): number is number => number !== null);
+};
+
+const ensureString = (value: unknown, fallback: string) =>
+  typeof value === "string" && value.trim().length > 0 ? value : fallback;
+
+const repairJsonString = (input: string) => {
+  let inString = false;
+  let result = "";
+
+  for (let i = 0; i < input.length; i += 1) {
+    const char = input[i];
+    const prev = input[i - 1];
+
+    if (char === '"' && prev !== '\\') {
+      inString = !inString;
+      result += char;
+      continue;
+    }
+
+    if (inString) {
+      if (char === '\r') {
+        if (input[i + 1] === '\n') {
+          result += "\\n";
+          i += 1;
+        } else {
+          result += "\\n";
+        }
+        continue;
+      }
+      if (char === '\n') {
+        result += "\\n";
+        continue;
+      }
+      if (char === '\t') {
+        result += "\\t";
+        continue;
+      }
+    }
+
+    result += char;
+  }
+
+  return result;
+};
+
+const ensureStringArray = (value: unknown): string[] => {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => (typeof item === "string" ? item.trim() : ""))
+      .filter(Boolean)
+      .slice(0, 12);
+  }
+  if (typeof value === "string" && value.trim().length > 0) {
+    return value
+      .split(/\n|\r|â€¢|\-/)
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .slice(0, 12);
+  }
+  return [];
+};
+
+const buildMarketAnalytics = (candles: BinanceCandle[], timeframe: Timeframe) => {
+  if (candles.length === 0) {
+    return {
+      chartPoints: [] as ChartPoint[],
+      technical: [] as string[],
+      chartNarrative: "Data candle tidak tersedia.",
+      chartForecast: "Tidak dapat melakukan forecasting tanpa data harga.",
+      promptSeries: "",
+      changePct: null as number | null,
+      volatilityPct: null as number | null,
+      high: null as number | null,
+      low: null as number | null,
+      lastClose: null as number | null,
+    };
+  }
+
+  const trimmed = candles.slice(-120);
+  const closes = trimmed.map((item) => item.close);
+  const last = trimmed[trimmed.length - 1];
+  const first = trimmed[0];
+  const high = Math.max(...trimmed.map((item) => item.high));
+  const low = Math.min(...trimmed.map((item) => item.low));
+  const changePct = ((last.close - first.open) / first.open) * 100;
+  const smaShortPeriod = Math.min(7, closes.length);
+  const smaLongPeriod = Math.min(21, closes.length);
+  const smaShort = calculateSMA(closes, smaShortPeriod);
+  const smaLong = calculateSMA(closes, smaLongPeriod);
+  const rsi = calculateRSI(trimmed);
+  const volatilityRaw = calculateVolatility(closes.slice(-Math.min(30, closes.length)));
+  const volatilityPct = volatilityRaw ? (volatilityRaw / last.close) * 100 : null;
+  const chartPoints: ChartPoint[] = trimmed.slice(-60).map((item) => ({
+    time: new Date(item.openTime).toISOString(),
+    close: Number(item.close.toFixed(2)),
+  }));
+
+  const technical: string[] = [];
+  if (typeof smaShort === "number" && typeof smaLong === "number") {
+    technical.push(
+      `SMA${smaShortPeriod}: ${smaShort.toFixed(2)} | SMA${smaLongPeriod}: ${smaLong.toFixed(2)}`
+    );
+    if (smaShort > smaLong) {
+      technical.push("Sinyal bullish: SMA cepat di atas SMA lambat.");
+    } else if (smaShort < smaLong) {
+      technical.push("Sinyal bearish: SMA cepat di bawah SMA lambat.");
+    }
+  }
+  if (typeof rsi === "number") {
+    technical.push(`RSI ${rsi.toFixed(1)}`);
+  }
+  if (typeof volatilityPct === "number") {
+    technical.push(`Volatilitas ${timeframe.toUpperCase()}: ${volatilityPct.toFixed(2)}%`);
+  }
+  technical.push(`Rentang harga: ${low.toFixed(2)} - ${high.toFixed(2)}`);
+  technical.push(`Perubahan sejak awal sesi: ${changePct.toFixed(2)}%`);
+
+  const momentumLabel = changePct > 0 ? "bullish" : changePct < 0 ? "bearish" : "netral";
+  const chartNarrative = `Harga ${timeframe.toUpperCase()} bergerak ${momentumLabel} dengan close terakhir ${last.close.toFixed(2)} USDT.`;
+  const chartForecast =
+    changePct > 0
+      ? "Momentum positif mendominasi; waspadai konsolidasi sebelum kelanjutan tren."
+      : changePct < 0
+      ? "Tekanan jual masih terasa; butuh katalis positif untuk reversal."
+      : "Pergerakan datar; tunggu breakout untuk konfirmasi arah berikutnya.";
+
+  const promptSeries = trimmed
+    .slice(-60)
+    .map(
+      (item) =>
+        `${new Date(item.openTime).toISOString()}|O:${item.open.toFixed(2)} H:${item.high.toFixed(2)} L:${item.low.toFixed(2)} C:${item.close.toFixed(2)} V:${item.volume.toFixed(2)}`
+    )
+    .join("\n");
+
+  return {
+    chartPoints,
+    technical,
+    chartNarrative,
+    chartForecast,
+    promptSeries,
+    changePct,
+    volatilityPct,
+    high,
+    low,
+    lastClose: last.close,
+  };
+};
+
+const buildDefaultFundamentals = (summary: string, timeframe: Timeframe) => {
+  const lines = summary.split("\n").map((line) => line.trim()).filter(Boolean);
+  const priceLine = lines.find((line) => line.toLowerCase().includes("harga terakhir"));
+  const changeLine = lines.find((line) => line.toLowerCase().includes("perubahan"));
+  const volumeLine = lines.find((line) => line.toLowerCase().includes("volume"));
+
+  const fundamentals = [
+    priceLine ?? "Harga terakhir dari Binance tidak tersedia.",
+    changeLine ?? "Perubahan 24 jam belum terhitung.",
+  ];
+
+  if (volumeLine) {
+    fundamentals.push(volumeLine);
+  }
+
+  fundamentals.push(
+    `Sinkronkan strategi ${timeframe.toUpperCase()} dengan agenda makro & on-chain terbaru sebelum eksekusi.`
+  );
+
+  return fundamentals;
+};
+
+const buildTradeHighlights = (tradePlan: TradePlan) => {
+  const price = (value: number | null) =>
+    typeof value === "number" && Number.isFinite(value) ? value.toFixed(2) : "-";
+
+  const entryLines = tradePlan.entries.length
+    ? tradePlan.entries.map((value) => `? ${price(value)}`)
+    : tradePlan.entry !== null
+    ? [`,? ${price(tradePlan.entry)}`]
+    : [];
+
+  const targetEmojis = ["??", "??", "??", "??"];
+  const targetLines = tradePlan.takeProfits.map((target, index) => {
+    const icon = targetEmojis[index] ?? "â€¢";
+    return `${icon} ${price(target)}`;
+  });
+
+  const highlights: string[] = [];
+  if (entryLines.length) {
+    highlights.push(["?? ENTRY:", ...entryLines].join("\n"));
+  }
+  if (targetLines.length) {
+    highlights.push(["?? TARGETS:", ...targetLines].join("\n"));
+  }
+  highlights.push(`? STOP LOSS: ${price(tradePlan.stopLoss)}`);
+  return highlights;
+};
+
+const buildUserMessage = (params: {
+  objective: string;
+  dataMode: DataMode;
+  urls: string[];
+  manualNotes: string;
+  datasetName?: string;
+  datasetPreview: string;
+  marketSummary: string;
+  timeframe: Timeframe;
+  marketAnalytics: {
+    promptSeries: string;
+    technical: string[];
+    chartNarrative: string;
+    chartForecast: string;
+  };
+}) => {
+  const urlList = params.urls.length
+    ? params.urls.map((url, index) => `${index + 1}. ${url}`).join("\n")
+    : "(Tidak ada URL yang diberikan)";
+
+  const datasetBlock = params.datasetPreview
+    ? `Nama Dataset: ${params.datasetName ?? "Tidak diketahui"}\nIsi (dipangkas):\n${excerpt(
+        params.datasetPreview,
+        2000
+      )}`
+    : "(Tidak ada dataset yang diunggah)";
+
+  const manualBlock = params.manualNotes
+    ? excerpt(params.manualNotes, 1600)
+    : "(Tidak ada catatan manual)";
+
+  const technicalBlock = params.marketAnalytics.technical.length
+    ? params.marketAnalytics.technical.map((item, index) => `${index + 1}. ${item}`).join("\n")
+    : "(Tidak ada ringkasan teknikal)";
+
+  return `Objective analisa: ${params.objective}
+
+Sumber data aktif: ${params.dataMode}
+
+Daftar URL berita:
+${urlList}
+
+Catatan manual:
+${manualBlock}
+
+Dataset kustom:
+${datasetBlock}
+
+Timeframe target analisa:
+${params.timeframe.toUpperCase()}
+
+Data pasar Binance (BTCUSDT):
+${params.marketSummary}
+
+Narasi harga:
+${params.marketAnalytics.chartNarrative}
+
+Forecast internal:
+${params.marketAnalytics.chartForecast}
+
+Data candle (ISO|O/H/L/C/V):
+${params.marketAnalytics.promptSeries || "(Data candle tidak tersedia)"}
+
+Teknikal ringkas:
+${technicalBlock}
+
+Tugas:
+- Lakukan analisa sentimen, highlight insight penting, dan berikan rekomendasi trading.
+- Buat forecasting harga BTC/USDT pada timeframe ${params.timeframe.toUpperCase()} dengan skenario dasar/bullish/bearish bila relevan.
+- Sertakan ringkasan teknikal dan fundamental yang mendukung keputusan trading.
+- Sediakan rencana eksekusi (entry, stop loss, take profit, execution window) yang selaras dengan timeframe.
+- Jawab hanya dalam format JSON sesuai skema.`;
+};
+
+const buildSystemPrompt = () => `Anda adalah Web Analytic AI, analis crypto profesional.
+Berikan jawaban ringkas dalam Bahasa Indonesia.
+RESPON HANYA JSON valid tanpa teks tambahan.
+Skema:
+{
+  "summary": string,
+  "decision": {
+    "action": "buy" | "sell" | "hold",
+    "confidence": number (0-1),
+    "timeframe": string,
+    "rationale": string
+  },
+  "market": {
+    "chart": {
+      "interval": string,
+      "points": Array<{ "time": string, "close": number }>,
+      "narrative": string,
+      "forecast": string
+    },
+    "technical": string[],
+    "fundamental": string[]
+  },
+  "tradePlan": {
+    "bias": "long" | "short" | "neutral",
+    "entries": number[],
+    "entry": number | null,
+    "stopLoss": number | null,
+    "takeProfits": number[],
+    "executionWindow": string,
+    "sizingNotes": string,
+    "rationale": string
+  },
+  "highlights": string[],
+  "nextSteps": string[]
+}`;
+
+const stripCodeFences = (content: string) => {
+  const trimmed = content.trim();
+  if (trimmed.startsWith("```")) {
+    const fenceEnd = trimmed.lastIndexOf("```\n");
+    if (fenceEnd !== -1) {
+      return trimmed.slice(trimmed.indexOf("\n") + 1, fenceEnd).trim();
+    }
+    return trimmed.replace(/```[a-zA-Z]*|```/g, "").trim();
+  }
+  return trimmed;
+};
+
+const parseModelPayload = (content: string) => {
+  const cleaned = stripCodeFences(content);
+  const start = cleaned.indexOf("{");
+  const end = cleaned.lastIndexOf("}");
+
+  if (start === -1 || end === -1 || end <= start) {
+    throw new Error("Response does not contain JSON object");
+  }
+
+  const jsonString = cleaned.slice(start, end + 1);
+  try {
+    return JSON.parse(jsonString) as Partial<AgentPayload>;
+  } catch (error) {
+    const repaired = repairJsonString(jsonString);
+    if (repaired !== jsonString) {
+      try {
+        return JSON.parse(repaired) as Partial<AgentPayload>;
+      } catch (secondaryError) {
+        const secondaryMessage =
+          secondaryError instanceof Error
+            ? secondaryError.message
+            : String(secondaryError ?? "unknown error");
+        console.warn("Fireworks JSON parse (after repair) failed", secondaryMessage);
+      }
+    }
+
+    const message = error instanceof Error ? error.message : String(error ?? "unknown error");
+    console.warn("Fireworks JSON parse failed", message, jsonString.slice(0, 400));
+    return { highlights: ["PARSE_WARNING: " + message] } as Partial<AgentPayload>;
+  }
+};
+
+const buildTradePlan = (
+  draft: Partial<TradePlan> | undefined,
+  action: AgentDecision,
+  marketSupport: {
+    context: MarketContext;
+    analytics: ReturnType<typeof buildMarketAnalytics>;
+  }
+): TradePlan => {
+  const biasDraft = typeof draft?.bias === "string" ? draft.bias.toLowerCase() : null;
+  const bias: "long" | "short" | "neutral" =
+    biasDraft === "long" || biasDraft === "short" || biasDraft === "neutral"
+      ? biasDraft
+      : action === "buy"
+      ? "long"
+      : action === "sell"
+      ? "short"
+      : "neutral";
+
+  const entryArrayCandidate = ensureNumericArray((draft as Record<string, unknown>)?.entries);
+  const entryCandidate = ensureNumber(draft?.entry);
+  const marketPrice =
+    (typeof marketSupport.context.lastPrice === "number" && marketSupport.context.lastPrice > 0
+      ? marketSupport.context.lastPrice
+      : marketSupport.analytics.lastClose) ?? null;
+
+  const primaryEntry =
+    entryCandidate ?? entryArrayCandidate[0] ?? (marketPrice !== null ? marketPrice : null);
+  const normalizedPrimary =
+    primaryEntry !== null ? Number(primaryEntry.toFixed(2)) : null;
+
+  const fallbackEntries = normalizedPrimary !== null
+    ? action === "buy"
+      ? [Number((normalizedPrimary * 0.985).toFixed(2)), normalizedPrimary]
+      : action === "sell"
+      ? [normalizedPrimary, Number((normalizedPrimary * 1.015).toFixed(2))]
+      : [normalizedPrimary]
+    : [];
+
+  const entries = (entryArrayCandidate.length
+    ? entryArrayCandidate.map((value) => Number(value.toFixed(2)))
+    : fallbackEntries
+  ).slice(0, 4);
+
+  const stopLossCandidate = ensureNumber(draft?.stopLoss);
+  const fallbackStopLoss = normalizedPrimary !== null
+    ? action === "buy"
+      ? Number((normalizedPrimary * 0.96).toFixed(2))
+      : action === "sell"
+      ? Number((normalizedPrimary * 1.04).toFixed(2))
+      : null
+    : null;
+  const stopLoss =
+    stopLossCandidate !== null ? Number(stopLossCandidate.toFixed(2)) : fallbackStopLoss;
+
+  const takeProfitCandidate = ensureNumericArray(draft?.takeProfits);
+  const fallbackTakeProfits = normalizedPrimary !== null
+    ? action === "buy"
+      ? [normalizedPrimary * 1.02, normalizedPrimary * 1.05, normalizedPrimary * 1.08]
+      : action === "sell"
+      ? [normalizedPrimary * 0.98, normalizedPrimary * 0.95, normalizedPrimary * 0.92]
+      : []
+    : [];
+  const takeProfits = (takeProfitCandidate.length ? takeProfitCandidate : fallbackTakeProfits)
+    .map((value) => Number(value.toFixed(2)))
+    .filter((value, index, array) => Number.isFinite(value) && array.indexOf(value) === index)
+    .slice(0, 4);
+
+  const executionWindow = ensureString(
+    draft?.executionWindow,
+    `${new Date().toISOString()} - ${new Date(Date.now() + 60 * 60 * 1000).toISOString()}`
+  );
+
+  const sizingNotesDefault =
+    bias === "long"
+      ? "Risiko per posisi disarankan <= 2% dari ekuitas; gunakan position sizing bertahap."
+      : bias === "short"
+      ? "Pastikan modal siap untuk short dan lindungi dengan ukuran posisi konservatif."
+      : "Tahan eksekusi sampai sinyal tambahan mengkonfirmasi arah.";
+
+  return {
+    bias,
+    entries,
+    entry: entries[0] ?? normalizedPrimary,
+    stopLoss,
+    takeProfits,
+    executionWindow,
+    sizingNotes: ensureString(draft?.sizingNotes, sizingNotesDefault),
+    rationale: ensureString(
+      draft?.rationale,
+      "Validasi trade setup dengan order flow dan berita makro sebelum eksekusi."
+    ),
+  };
+};
+
+const buildAgentPayload = (
+  draft: Partial<AgentPayload>,
+  objective: string,
+  preferredTimeframe: Timeframe,
+  marketSupport: {
+    context: MarketContext;
+    analytics: ReturnType<typeof buildMarketAnalytics>;
+    summary: string;
+  }
+): AgentPayload => {
+  const decision = draft.decision ?? {};
+
+  const action = ((): AgentDecision => {
+    if (decision.action === "buy" || decision.action === "sell" || decision.action === "hold") {
+      return decision.action;
+    }
+    if (typeof decision.action === "string") {
+      const lower = decision.action.toLowerCase();
+      if (lower.includes("buy")) {
+        return "buy";
+      }
+      if (lower.includes("sell") || lower.includes("short")) {
+        return "sell";
+      }
+    }
+    return "hold";
+  })();
+
+  const confidenceRaw = typeof decision.confidence === "number" ? decision.confidence : 0.62;
+  const timeframe =
+    typeof decision.timeframe === "string" && decision.timeframe.trim().length > 0
+      ? decision.timeframe
+      : pickFallbackTimeframe(objective);
+  const rationale = ensureString(
+    decision.rationale,
+    "Model tidak memberikan rasionalisasi. Tambahkan detail objektif untuk analisa lanjutan."
+  );
+
+  const summary = ensureString(
+    draft.summary,
+    "Analisa tidak berhasil dibuat. Coba jalankan ulang agent dengan data yang lebih lengkap."
+  );
+
+  const baseHighlights = ensureStringArray(draft.highlights);
+  const nextSteps = ensureStringArray(draft.nextSteps);
+
+  const marketDraft = draft.market ?? {};
+  const chartDraft = (marketDraft as Record<string, unknown>).chart ?? {};
+  const chartPoints = sanitizeChartPoints((chartDraft as Record<string, unknown>).points);
+  const chartInterval = ensureString(
+    (chartDraft as Record<string, unknown>).interval,
+    marketSupport.context.interval
+  );
+
+  const tradePlan = buildTradePlan(draft.tradePlan, action, marketSupport);
+  const tradeHighlights = buildTradeHighlights(tradePlan);
+
+  const technical = ensureStringArray((marketDraft as Record<string, unknown>).technical);
+  const fundamental = ensureStringArray((marketDraft as Record<string, unknown>).fundamental);
+
+  return {
+    summary,
+    decision: {
+      action,
+      confidence: clamp(confidenceRaw, 0, 1),
+      timeframe,
+      rationale,
+    },
+    highlights: [...tradeHighlights, ...baseHighlights].slice(0, 12),
+    nextSteps: nextSteps.length
+      ? nextSteps
+      : [
+          "Validasi rencana trading dengan chart real-time dan order book.",
+          "Perbarui data berita / on-chain, lalu jalankan ulang agent bila perlu.",
+        ],
+    market: {
+      chart: {
+        interval: chartInterval,
+        points: chartPoints.length ? chartPoints : marketSupport.analytics.chartPoints,
+        narrative: ensureString(
+          (chartDraft as Record<string, unknown>).narrative,
+          marketSupport.analytics.chartNarrative
+        ),
+        forecast: ensureString(
+          (chartDraft as Record<string, unknown>).forecast,
+          marketSupport.analytics.chartForecast
+        ),
+      },
+      technical: technical.length ? technical : marketSupport.analytics.technical,
+      fundamental: fundamental.length
+        ? fundamental
+        : buildDefaultFundamentals(marketSupport.summary, preferredTimeframe),
+    },
+    tradePlan,
+  };
 };
 
 export async function POST(request: Request) {
@@ -105,96 +762,119 @@ export async function POST(request: Request) {
   const manualNotes = body.manualNotes?.trim() ?? "";
   const datasetPreview = body.datasetPreview?.trim() ?? "";
   const dataMode = body.dataMode ?? "scrape";
+  const timeframe = normalizeTimeframe(body.timeframe);
 
-  const combinedText = [body.objective, manualNotes, datasetPreview].join(" \n ");
-  const sentimentScore = scoreSentiment(combinedText);
-
-  let action: AgentDecision = "hold";
-  if (sentimentScore > 0.5) {
-    action = "buy";
-  } else if (sentimentScore < -0.5) {
-    action = "sell";
+  const apiKey = process.env.FIREWORKS_API_KEY;
+  if (!apiKey) {
+    return NextResponse.json(
+      { error: "Fireworks API key belum dikonfigurasi." },
+      { status: 500 }
+    );
   }
 
-  const coverageBonus = Math.min(urls.length, 6) * 0.04;
-  const convictionBonus = Math.min(Math.abs(sentimentScore) * 0.1, 0.2);
-  const confidence = Math.max(0.35, Math.min(0.92, 0.55 + coverageBonus + convictionBonus));
-
-  const rationaleSegments: string[] = [];
-  if (urls.length > 0) {
-    rationaleSegments.push(`Menggunakan ${urls.length} sumber berita terbaru.`);
-  }
-  if (manualNotes) {
-    rationaleSegments.push("Memasukkan catatan analis internal.");
-  }
-  if (datasetPreview) {
-    rationaleSegments.push("Menganalisa dataset kustom yang diunggah.");
-  }
-  if (rationaleSegments.length === 0) {
-    rationaleSegments.push("Menjalankan penilaian berbasis objektif yang diberikan.");
-  }
-
-  const highlights: string[] = [];
-  if (urls.length > 0) {
-    highlights.push(`Memproses ${urls.length} URL berita untuk sentiment & trend.`);
-  }
-  if (manualNotes) {
-    highlights.push(`Catatan manual: ${excerpt(manualNotes)}`);
-  }
-  if (datasetPreview) {
-    const datasetLabel = body.datasetName ?? "Dataset kustom";
-    highlights.push(`${datasetLabel}: ${excerpt(datasetPreview)}`);
-  }
-
-  if (highlights.length === 0) {
-    highlights.push("Belum ada data terlampir. Tambahkan sumber untuk insight yang lebih tajam.");
-  }
-
-  const nextSteps: string[] = [
-    "Validasi rekomendasi dengan chart / indikator teknikal sebelum eksekusi.",
-    "Tambahkan lebih banyak URL terpercaya atau data on-chain untuk memperkuat sinyal.",
-  ];
-
-  if (action === "buy") {
-    nextSteps.push("Siapkan rencana pembelian bertahap dengan risk ratio yang sesuai.");
-  } else if (action === "sell") {
-    nextSteps.push("Pertimbangkan hedging atau proteksi downside (mis. stop-loss / options).");
-  } else {
-    nextSteps.push("Monitor perkembangan berita dan volume untuk konfirmasi sinyal berikutnya.");
-  }
-
-  const summaryParts = [
-    `Agent memproses ${urls.length > 0 ? `${urls.length} sumber berita` : "instruksi"}.`,
-  ];
-
-  if (dataMode === "upload" && datasetPreview) {
-    summaryParts.push("Dataset kustom digunakan sebagai referensi tambahan.");
-  }
-  if (manualNotes) {
-    summaryParts.push("Catatan analis memberi konteks strategis tambahan.");
-  }
-
-  summaryParts.push(
-    action === "buy"
-      ? "Sentimen agregat condong bullish sehingga rekomendasi saat ini adalah BUY."
-      : action === "sell"
-      ? "Sentimen agregat condong bearish sehingga rekomendasi saat ini adalah SELL."
-      : "Sentimen campuran, agent menyarankan HOLD sambil menunggu konfirmasi tambahan."
-  );
-
-  const payload: AgentPayload = {
-    summary: summaryParts.join(" "),
-    decision: {
-      action,
-      confidence,
-      timeframe: pickTimeframe(body.objective),
-      rationale: rationaleSegments.join(" "),
-    },
-    highlights,
-    nextSteps,
+  const [summaryData, candles] = await Promise.all([
+    fetchBinanceMarketSummary("BTCUSDT"),
+    fetchBinanceCandles("BTCUSDT", TIMEFRAME_TO_INTERVAL[timeframe], 120),
+  ]);
+  const marketSummary = formatBinanceSummary(summaryData);
+  const marketAnalytics = buildMarketAnalytics(candles, timeframe);
+  const resolvedLastPrice =
+    (typeof marketAnalytics.lastClose === "number" && marketAnalytics.lastClose > 0
+      ? marketAnalytics.lastClose
+      : undefined) ?? (summaryData?.lastPrice && summaryData.lastPrice > 0 ? summaryData.lastPrice : 0);
+  const marketContext: MarketContext = {
+    timeframe,
+    interval: TIMEFRAME_TO_INTERVAL[timeframe],
+    candles,
+    lastPrice: resolvedLastPrice,
   };
 
-  return NextResponse.json(payload);
+  const marketSupport = {
+    context: marketContext,
+    analytics: marketAnalytics,
+    summary: marketSummary,
+  } as const;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 45_000);
+
+  try {
+    const response = await fetch(FIREWORKS_API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: process.env.FIREWORKS_MODEL ?? DEFAULT_FIREWORKS_MODEL,
+        temperature: 0.25,
+        max_tokens: 1_000,
+        messages: [
+          {
+            role: "system",
+            content: buildSystemPrompt(),
+          },
+          {
+            role: "user",
+            content: buildUserMessage({
+              objective: body.objective,
+              dataMode,
+              urls,
+              manualNotes,
+              datasetName: body.datasetName,
+              datasetPreview,
+              marketSummary,
+              timeframe,
+              marketAnalytics: {
+                promptSeries: marketAnalytics.promptSeries,
+                technical: marketAnalytics.technical,
+                chartNarrative: marketAnalytics.chartNarrative,
+                chartForecast: marketAnalytics.chartForecast,
+              },
+            }),
+          },
+        ],
+      }),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => "");
+      throw new Error(
+        `Fireworks API error (${response.status}): ${errorText || response.statusText}`
+      );
+    }
+
+    const result = (await response.json()) as {
+      choices?: Array<{ message?: { content?: string } }>;
+    };
+    const content = result.choices?.[0]?.message?.content;
+
+    if (!content) {
+      throw new Error("Fireworks API tidak mengembalikan konten.");
+    }
+
+    const draft = parseModelPayload(content);
+    const payload = buildAgentPayload(draft, body.objective, timeframe, marketSupport);
+
+    return NextResponse.json(payload);
+  } catch (error) {
+    const message =
+      error instanceof Error && error.name === "AbortError"
+        ? "Permintaan ke Fireworks melewati batas waktu."
+        : error instanceof Error
+        ? error.message
+        : "Integrasi Fireworks gagal.";
+
+    return NextResponse.json(
+      {
+        error: message,
+      },
+      { status: 500 }
+    );
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 

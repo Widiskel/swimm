@@ -1,36 +1,59 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Web Analytic AI
 
-## Getting Started
+Dashboard analitik berita crypto dengan agen AI yang menyusun rekomendasi trading (buy/sell/hold).
+Aplikasi dibangun menggunakan Next.js (App Router) + Tailwind dan terintegrasi dengan Fireworks API
+(model `accounts/sentientfoundation/models/dobby-unhinged-llama-3-3-70b-new`) serta snapshot pasar Binance
+untuk pasangan BTC/USDT.
 
-First, run the development server:
+## Fitur utama
+- Input objektif analisa, daftar URL scraping, dataset kustom, dan catatan manual.
+- Agen AI berbasis Fireworks yang merangkum sentimen dan memberikan keputusan trading terstruktur.
+- Highlight temuan, confidence, timeframe, dan next steps siap eksekusi.
+- Pemilihan timeframe forecasting (5m sampai 1D) untuk menyesuaikan horizon analisa dan proyeksi harga.
+- Snapshot harga Binance BTC/USDT otomatis masuk ke prompt agen.
+- UI gelap responsif dengan fokus pada alur riset trader.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## Prasyarat
+- Node.js 18+ dan npm.
+- Akun Fireworks dengan API key aktif.
+- API key & secret Binance (direkomendasikan untuk header otorisasi, meski endpoint harga publik dapat berjalan tanpa keduanya).
+
+## Konfigurasi lingkungan
+Buat file `.env.local` di root proyek dan isi variabel berikut:
+
+```env
+FIREWORKS_API_KEY=your_fireworks_api_key
+# Opsional: override model bawaan Fireworks
+# FIREWORKS_MODEL=accounts/.../model-name
+
+# Binance spot
+BINANCE_API_KEY=your_binance_api_key
+BINANCE_API_SECRET=your_binance_api_secret
+# Opsional: override simbol & URL
+# BINANCE_SYMBOL=BTCUSDT
+# BINANCE_API_URL=https://api.binance.com
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Semua variabel hanya dibaca di sisi server (`/api/agent`), sehingga kredensial tetap aman.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Menjalankan secara lokal
+```bash
+npm install
+npm run dev
+```
+Buka `http://localhost:3000` lalu masukkan objective + sumber data untuk mencoba agen.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Alur backend
+- Endpoint server (`src/app/api/agent/route.ts`) mengirim prompt terstruktur ke Fireworks Chat Completions API.
+- Sebelum ke Fireworks, server mengambil snapshot harga Binance BTC/USDT (`src/lib/binance.ts`) dan memasukkannya
+  ke prompt sebagai konteks pasar real-time.
+- Model diwajibkan merespon dalam format JSON sesuai skema aplikasi, lalu respons dipost-proses untuk memastikan
+  action, confidence (0-1), dan daftar highlight/next steps valid.
 
-## Learn More
+Jika permintaan gagal (timeout, kredensial salah, atau Binance tidak tersedia), antarmuka akan menampilkan pesan error
+sehingga pengguna bisa memperbaiki konfigurasi dan menjalankan ulang agen.
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Pengembangan lanjutan
+- Integrasikan modul scraping nyata atau pipeline ingestion untuk mengisi daftar URL otomatis.
+- Sambungkan ke data on-chain / teknikal dan perkuat prompt dengan ringkasan statistik tersebut.
+- Tambahkan penyimpanan historis keputusan agent dan automasi eksekusi ke exchange favorit.

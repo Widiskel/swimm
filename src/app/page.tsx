@@ -4,6 +4,11 @@ import { useMemo, useState, type ChangeEvent } from "react";
 
 type DataMode = "scrape" | "upload" | "manual";
 
+type ChartPoint = {
+  time: string;
+  close: number;
+};
+
 type AgentResponse = {
   summary: string;
   decision: {
@@ -14,6 +19,26 @@ type AgentResponse = {
   };
   highlights: string[];
   nextSteps: string[];
+  market: {
+    chart: {
+      interval: string;
+      points: ChartPoint[];
+      narrative: string;
+      forecast: string;
+    };
+    technical: string[];
+    fundamental: string[];
+  };
+  tradePlan: {
+    bias: "long" | "short" | "neutral";
+    entries: number[];
+    entry: number | null;
+    stopLoss: number | null;
+    takeProfits: number[];
+    executionWindow: string;
+    sizingNotes: string;
+    rationale: string;
+  };
 };
 
 const DATA_MODE_LABELS: Record<DataMode, string> = {
@@ -28,6 +53,13 @@ const ACTION_COLORS: Record<AgentResponse["decision"]["action"], string> = {
   hold: "bg-amber-500/10 text-amber-200 border border-amber-400/40",
 };
 
+const TIMEFRAME_OPTIONS = ["5m", "15m", "30m", "1h", "4h", "1d"] as const;
+
+type TimeframeOption = (typeof TIMEFRAME_OPTIONS)[number];
+
+const entryIcon = "➤" as const;
+const targetIcons = ["🥇", "🥈", "🏁", "🎯"] as const;
+
 export default function Home() {
   const [objective, setObjective] = useState(
     "Temukan sentimen berita terbaru untuk menentukan aksi trading BTC/USDT harian."
@@ -36,6 +68,7 @@ export default function Home() {
   const [manualNotes, setManualNotes] = useState("");
   const [uploadedName, setUploadedName] = useState<string | undefined>();
   const [datasetPreview, setDatasetPreview] = useState("");
+  const [timeframe, setTimeframe] = useState<TimeframeOption>("5m");
   const [dataMode, setDataMode] = useState<DataMode>("scrape");
   const [isRunning, setIsRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -53,6 +86,79 @@ export default function Home() {
   const canRunAgent =
     objective.trim().length > 0 &&
     (parsedUrls.length > 0 || datasetPreview || manualNotes.trim().length > 0);
+
+  const priceFormatter = useMemo(
+    () =>
+      new Intl.NumberFormat("id-ID", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }),
+    []
+  );
+  const formatPrice = (value: number | null) =>
+    typeof value === "number" && Number.isFinite(value)
+      ? `${priceFormatter.format(value)} USDT`
+      : "-";
+
+  const formatDateTime = (iso?: string) =>
+    iso
+      ? new Date(iso).toLocaleString("id-ID", {
+          day: "2-digit",
+          month: "short",
+          hour: "2-digit",
+          minute: "2-digit",
+        })
+      : "-";
+
+  const chartPoints = useMemo(() => response?.market?.chart?.points ?? [], [response]);
+  const sparkline = useMemo(() => {
+    if (chartPoints.length < 2) {
+      return { path: "", area: "", min: null as number | null, max: null as number | null };
+    }
+    const width = 240;
+    const height = 80;
+    const padding = 6;
+    const closes = chartPoints.map((point) => point.close);
+    const min = Math.min(...closes);
+    const max = Math.max(...closes);
+    const range = max - min || 1;
+    const coordinates = chartPoints.map((point, index) => {
+      const x = (index / (chartPoints.length - 1)) * width;
+      const y = height - ((point.close - min) / range) * (height - padding * 2) - padding;
+      return { x, y };
+    });
+    const path = coordinates
+      .map((coord, index) => `${index === 0 ? "M" : "L"}${coord.x.toFixed(2)} ${coord.y.toFixed(2)}`)
+      .join(" ");
+    const area = [
+      `M${coordinates[0].x.toFixed(2)} ${height}`,
+      ...coordinates.map((coord) => `L${coord.x.toFixed(2)} ${coord.y.toFixed(2)}`),
+      `L${coordinates[coordinates.length - 1].x.toFixed(2)} ${height}`,
+      "Z",
+    ].join(" ");
+    return { path, area, min, max };
+  }, [chartPoints]);
+
+  const tradeEntries = useMemo(() => {
+    if (!response) {
+      return [] as number[];
+    }
+    if (response.tradePlan?.entries && response.tradePlan.entries.length > 0) {
+      return response.tradePlan.entries;
+    }
+    return response?.tradePlan?.entry !== null && response?.tradePlan?.entry !== undefined
+      ? [response.tradePlan.entry]
+      : [];
+  }, [response]);
+  const tradeTargets = response?.tradePlan?.takeProfits ?? [];
+  const tradeStopLoss = response?.tradePlan?.stopLoss ?? null;
+  const tradeExecutionWindow = response?.tradePlan?.executionWindow ?? "-";
+  const tradeSizingNotes = response?.tradePlan?.sizingNotes ?? "-";
+  const tradeRationale = response?.tradePlan?.rationale ?? "-";
+
+  const chartStart = chartPoints[0]?.time;
+  const chartEnd = chartPoints.length > 0 ? chartPoints[chartPoints.length - 1].time : undefined;
+  const sparklineGradientId = "sparkline-gradient";
 
   const handleFileUpload = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -92,17 +198,32 @@ export default function Home() {
           manualNotes,
           datasetName: uploadedName,
           datasetPreview,
+          timeframe,
         }),
       });
 
       if (!res.ok) {
-        throw new Error("Agent gagal merespon");
+        let message = "Agent gagal merespon";
+        try {
+          const errorPayload = (await res.json()) as { error?: unknown };
+          if (errorPayload && typeof errorPayload.error === "string") {
+            message = errorPayload.error;
+          }
+        } catch (parseError) {
+          console.warn("Gagal membaca pesan error agent", parseError);
+        }
+        throw new Error(message);
       }
 
       const payload: AgentResponse = await res.json();
       setResponse(payload);
-    } catch {
-      setError("Terjadi masalah saat menjalankan agent. Coba ulangi.");
+    } catch (runError) {
+      console.error(runError);
+      if (runError instanceof Error) {
+        setError(runError.message);
+      } else {
+        setError("Terjadi masalah saat menjalankan agent. Coba ulangi.");
+      }
     } finally {
       setIsRunning(false);
     }
@@ -204,6 +325,26 @@ export default function Home() {
               value={objective}
               onChange={(event) => setObjective(event.target.value)}
             />
+            <div className="mt-6">
+              <div className="text-sm font-semibold text-slate-100">Timeframe forecasting</div>
+              <p className="mt-1 text-xs text-slate-400">Pilih timeframe analisa (minimum 5 menit) agar proyeksi harga menyesuaikan horizon trading Anda.</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {TIMEFRAME_OPTIONS.map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    onClick={() => setTimeframe(option)}
+                    className={`rounded-full border px-4 py-2 text-xs font-semibold transition ${
+                      timeframe === option
+                        ? "border-sky-500 bg-sky-500/20 text-sky-200"
+                        : "border-slate-800 bg-slate-950/40 text-slate-300 hover:border-slate-600 hover:text-slate-100"
+                    }`}
+                  >
+                    {option.toUpperCase()}
+                  </button>
+                ))}
+              </div>
+            </div>
             <p className="mt-3 text-xs text-slate-500">
               Contoh: &quot;Ukur sentimen harga Bitcoin dari 24 jam terakhir dan sarankan aksi jangka pendek.&quot;
             </p>
@@ -332,6 +473,9 @@ export default function Home() {
               <p className="mt-1 text-sm text-slate-400">
                 Agent akan membaca sumber, melakukan scoring sentimen, dan menyusun rekomendasi trading.
               </p>
+              <p className="mt-2 text-xs text-slate-500">
+                Timeframe target saat ini: {timeframe.toUpperCase()}. Forecast akan menghitung pergerakan pada horizon ini.
+              </p>
             </div>
             <button
               type="button"
@@ -369,34 +513,90 @@ export default function Home() {
                     <span>{response.decision.action.toUpperCase()}</span>
                   </div>
                 </div>
-                <p className="mt-4 text-base text-slate-200">
-                  {response.summary}
-                </p>
+                <p className="mt-4 text-base text-slate-200">{response.summary}</p>
                 <div className="mt-6 grid gap-4 md:grid-cols-2">
                   <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4">
-                    <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                      Confidence
-                    </div>
+                    <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">Confidence</div>
                     <div className="mt-1 text-2xl font-semibold text-slate-50">
                       {(response.decision.confidence * 100).toFixed(0)}%
                     </div>
-                    <p className="mt-2 text-xs text-slate-400">
-                      Timeframe: {response.decision.timeframe}
-                    </p>
+                    <p className="mt-2 text-xs text-slate-400">Timeframe: {response.decision.timeframe}</p>
                   </div>
                   <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4">
-                    <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                      Rationale utama
-                    </div>
-                    <p className="mt-2 text-xs text-slate-300">
-                      {response.decision.rationale}
-                    </p>
+                    <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">Rationale utama</div>
+                    <p className="mt-2 text-xs text-slate-300">{response.decision.rationale}</p>
+                  </div>
+                </div>
+                <div className="mt-6 rounded-2xl border border-slate-800 bg-slate-950/70 p-4">
+                  <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-slate-400">
+                    <span>Market snapshot</span>
+                    <span>{response.market.chart.interval.toUpperCase()}</span>
+                  </div>
+                  {sparkline.path ? (
+                    <svg
+                      className="mt-4 h-24 w-full"
+                      viewBox="0 0 240 80"
+                      preserveAspectRatio="none"
+                    >
+                      <defs>
+                        <linearGradient id={sparklineGradientId} x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#38bdf8" stopOpacity="0.4" />
+                          <stop offset="100%" stopColor="#38bdf8" stopOpacity="0" />
+                        </linearGradient>
+                      </defs>
+                      <path d={sparkline.area} fill={`url(#${sparklineGradientId})`} />
+                      <path d={sparkline.path} stroke="#38bdf8" strokeWidth={2} fill="none" />
+                    </svg>
+                  ) : (
+                    <div className="mt-4 text-xs text-slate-500">Grafik tidak tersedia.</div>
+                  )}
+                  <div className="mt-4 grid gap-2 text-[11px] text-slate-400 sm:grid-cols-2">
+                    <div>Mulai: {formatDateTime(chartStart)}</div>
+                    <div>Selesai: {formatDateTime(chartEnd)}</div>
+                    <div>Min: {formatPrice(sparkline.min)}</div>
+                    <div>Maks: {formatPrice(sparkline.max)}</div>
+                  </div>
+                  <p className="mt-4 text-xs text-slate-300">{response.market.chart.narrative}</p>
+                  <p className="mt-2 text-xs text-slate-400">Forecast: {response.market.chart.forecast}</p>
+                </div>
+                <div className="mt-6 grid gap-4 md:grid-cols-2">
+                  <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">Teknikal pendukung</div>
+                    {response.market.technical.length ? (
+                      <ul className="mt-3 space-y-2 text-xs text-slate-300">
+                        {response.market.technical.map((item) => (
+                          <li
+                            key={item}
+                            className="rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-2"
+                          >
+                            {item}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="mt-3 text-xs text-slate-500">Ringkasan teknikal belum tersedia.</p>
+                    )}
+                  </div>
+                  <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">Fundamental pendukung</div>
+                    {response.market.fundamental.length ? (
+                      <ul className="mt-3 space-y-2 text-xs text-slate-300">
+                        {response.market.fundamental.map((item) => (
+                          <li
+                            key={item}
+                            className="rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-2"
+                          >
+                            {item}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="mt-3 text-xs text-slate-500">Ringkasan fundamental belum tersedia.</p>
+                    )}
                   </div>
                 </div>
                 <div className="mt-6 space-y-3">
-                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                    Highlight temuan
-                  </div>
+                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">Highlight temuan</div>
                   <ul className="space-y-2 text-sm text-slate-300">
                     {response.highlights.map((highlight) => (
                       <li
@@ -411,9 +611,61 @@ export default function Home() {
               </div>
               <div className="space-y-6">
                 <div className="rounded-3xl border border-slate-800 bg-slate-950/60 p-6">
-                  <div className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">
-                    Next steps
+                  <div className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">Trade plan</div>
+                  <div className="mt-4 space-y-4 text-sm text-slate-300">
+                    <div className="flex items-center justify-between">
+                      <span>Bias</span>
+                      <span className="uppercase text-slate-100">{response.tradePlan.bias.toUpperCase()}</span>
+                    </div>
+                    <div>
+                      <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">Entry levels</div>
+                      {tradeEntries.length ? (
+                        <ul className="mt-2 space-y-1 text-xs text-slate-300">
+                          {tradeEntries.map((entry, index) => (
+                            <li
+                              key={`entry-${entry}-${index}`}
+                              className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-2"
+                            >
+                              <span>{entryIcon}</span>
+                              <span>{formatPrice(entry)}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="mt-2 text-xs text-slate-500">Entry belum tersedia.</p>
+                      )}
+                    </div>
+                    <div>
+                      <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">Targets</div>
+                      {tradeTargets.length ? (
+                        <ul className="mt-2 space-y-1 text-xs text-slate-300">
+                          {tradeTargets.map((target, index) => (
+                            <li
+                              key={`target-${target}-${index}`}
+                              className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-2"
+                            >
+                              <span>{targetIcons[index] ?? "•"}</span>
+                              <span>{formatPrice(target)}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="mt-2 text-xs text-slate-500">Target profit belum tersedia.</p>
+                      )}
+                    </div>
+                    <div className="flex items-center justify-between text-xs text-slate-400">
+                      <span>Stop loss</span>
+                      <span>{formatPrice(tradeStopLoss)}</span>
+                    </div>
+                    <div className="text-xs text-slate-400">
+                      Execution window: <span className="text-slate-200">{tradeExecutionWindow}</span>
+                    </div>
+                    <p className="text-xs text-slate-400">Sizing: {tradeSizingNotes}</p>
+                    <p className="text-xs text-slate-400">Catatan: {tradeRationale}</p>
                   </div>
+                </div>
+                <div className="rounded-3xl border border-slate-800 bg-slate-950/60 p-6">
+                  <div className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">Next steps</div>
                   <ul className="mt-4 space-y-3 text-sm text-slate-300">
                     {response.nextSteps.map((step) => (
                       <li
@@ -427,12 +679,9 @@ export default function Home() {
                   </ul>
                 </div>
                 <div className="rounded-3xl border border-slate-800 bg-slate-950/60 p-6 text-sm text-slate-400">
-                  <div className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">
-                    Integrasi lanjut
-                  </div>
+                  <div className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">Integrasi lanjut</div>
                   <p className="mt-3">
-                    Hubungkan endpoint scraping Anda sendiri, streaming data on-chain, atau model
-                    LLM favorit (OpenAI, Claude, dsb) melalui API route <code className="rounded bg-slate-800 px-1 py-0.5 text-[11px] text-slate-200">/api/agent</code>.
+                    Hubungkan endpoint scraping Anda sendiri, streaming data on-chain, atau model LLM favorit (OpenAI, Claude, dsb) melalui API route <code className="rounded bg-slate-800 px-1 py-0.5 text-[11px] text-slate-200">/api/agent</code>.
                   </p>
                   <p className="mt-2">
                     Tambahkan automation ke exchange pilihan untuk eksekusi trading berbasis rekomendasi.
