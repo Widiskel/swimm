@@ -575,6 +575,75 @@ const stripCodeFences = (content: string) => {
   return trimmed;
 };
 
+const stripArrayField = (input: string, fieldName: string) => {
+  const key = `"${fieldName}"`;
+  let searchStart = 0;
+  let output = input;
+
+  while (searchStart < output.length) {
+    const keyIndex = output.indexOf(key, searchStart);
+    if (keyIndex === -1) {
+      break;
+    }
+
+    let cursor = keyIndex + key.length;
+    while (cursor < output.length && /\s/.test(output[cursor])) {
+      cursor += 1;
+    }
+    if (output[cursor] !== ':') {
+      searchStart = cursor;
+      continue;
+    }
+    cursor += 1;
+    while (cursor < output.length && /\s/.test(output[cursor])) {
+      cursor += 1;
+    }
+    if (output[cursor] !== '[') {
+      searchStart = cursor;
+      continue;
+    }
+
+    let inString = false;
+    let depth = 0;
+    const startBracket = cursor;
+
+    for (; cursor < output.length; cursor += 1) {
+      const char = output[cursor];
+      const prev = output[cursor - 1];
+
+      if (char === '"' && prev !== '\\') {
+        inString = !inString;
+        continue;
+      }
+      if (inString) {
+        continue;
+      }
+      if (char === '[') {
+        depth += 1;
+        continue;
+      }
+      if (char === ']') {
+        depth -= 1;
+        if (depth === 0) {
+          const endBracket = cursor;
+          output =
+            output.slice(0, startBracket) +
+            '[]' +
+            output.slice(endBracket + 1);
+          searchStart = startBracket + 2;
+          break;
+        }
+      }
+    }
+
+    if (depth !== 0) {
+      break;
+    }
+  }
+
+  return output;
+};
+
 const parseModelPayload = (content: string) => {
   const cleaned = stripCodeFences(content);
   const start = cleaned.indexOf("{");
@@ -598,6 +667,31 @@ const parseModelPayload = (content: string) => {
             ? secondaryError.message
             : String(secondaryError ?? "unknown error");
         console.warn("Fireworks JSON parse (after repair) failed", secondaryMessage);
+        const stripped = stripArrayField(repaired, "points");
+        if (stripped !== repaired) {
+          try {
+            return JSON.parse(stripped) as Partial<AgentPayload>;
+          } catch (tertiaryError) {
+            const tertiaryMessage =
+              tertiaryError instanceof Error
+                ? tertiaryError.message
+                : String(tertiaryError ?? "unknown error");
+            console.warn("Fireworks JSON parse (after strip) failed", tertiaryMessage);
+          }
+        }
+      }
+    }
+
+    const strippedOriginal = stripArrayField(jsonString, "points");
+    if (strippedOriginal !== jsonString) {
+      try {
+        return JSON.parse(strippedOriginal) as Partial<AgentPayload>;
+      } catch (tertiaryError) {
+        const tertiaryMessage =
+          tertiaryError instanceof Error
+            ? tertiaryError.message
+            : String(tertiaryError ?? "unknown error");
+        console.warn("Fireworks JSON parse (original strip) failed", tertiaryMessage);
       }
     }
 
