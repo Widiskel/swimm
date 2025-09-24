@@ -114,6 +114,27 @@ const clamp = (value: number, min: number, max: number) =>
 const excerpt = (value: string, length = 1400) =>
   value.length > length ? `${value.slice(0, length)}...` : value;
 
+const formatPairLabel = (rawSymbol: string) => {
+  if (!rawSymbol) {
+    return "UNKNOWN/PAIR";
+  }
+  const upper = rawSymbol.trim().toUpperCase();
+  if (upper.includes("/") || upper.includes("-")) {
+    return upper.replace(/-/g, "/");
+  }
+  const knownQuotes = ["USDT", "USDC", "BUSD", "BTC", "ETH", "EUR", "USD"];
+  const quote = knownQuotes.find((item) => upper.endsWith(item));
+  if (quote) {
+    const base = upper.slice(0, upper.length - quote.length) || upper;
+    return `${base}/${quote}`;
+  }
+  if (upper.length >= 6) {
+    const base = upper.slice(0, upper.length - 3);
+    const fallbackQuote = upper.slice(-3);
+    return `${base}/${fallbackQuote}`;
+  }
+  return upper;
+};
 const normalizeTimeframe = (value?: string): Timeframe => {
   if (!value) {
     return DEFAULT_TIMEFRAME;
@@ -267,7 +288,7 @@ const ensureStringArray = (value: unknown): string[] => {
   }
   if (typeof value === "string" && value.trim().length > 0) {
     return value
-      .split(/\n|\r|â€¢|\-/)
+      .split(/\n|\r|ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢|\-/)
       .map((item) => item.trim())
       .filter(Boolean)
       .slice(0, 12);
@@ -402,20 +423,7 @@ const buildUserMessage = (params: {
   tavilyArticles: TavilyExtractedArticle[];
   pairSymbol: string;
 }) => {
-  const formattedPair = (() => {
-    const raw = params.pairSymbol.trim();
-    if (!raw) {
-      return "BTC/USDT";
-    }
-    if (raw.includes("/") || raw.includes("-")) {
-      return raw.toUpperCase();
-    }
-    if (raw.toUpperCase().endsWith("USDT")) {
-      const base = raw.slice(0, -4);
-      return `${base}/${"USDT"}`.toUpperCase();
-    }
-    return raw.toUpperCase();
-  })();
+  const formattedPair = formatPairLabel(params.pairSymbol);
 
   const urlList = params.urls.length
     ? params.urls.map((url, index) => `${index + 1}. ${url}`).join("\n")
@@ -476,61 +484,94 @@ const buildUserMessage = (params: {
         .join("\n\n")
     : "(Tidak ada konten URL yang diekstrak Tavily)";
 
-  return `Objective analisa: ${params.objective}
+    return `Analysis objective (EN): ${params.objective}
+Tujuan analisa (ID): ${params.objective}
 
-Sumber data aktif: ${params.dataMode}
+Active data mode (EN): ${params.dataMode}
+Mode sumber data (ID): ${params.dataMode}
 
-Daftar URL berita:
+News URLs (EN):
+${urlList}
+Daftar URL berita (ID):
 ${urlList}
 
-Catatan manual:
+Manual notes (EN):
+${manualBlock}
+Catatan manual (ID):
 ${manualBlock}
 
-Dataset kustom:
+Custom dataset (EN):
+${datasetBlock}
+Dataset kustom (ID):
 ${datasetBlock}
 
-Pasangan analisa:
-${formattedPair}
+Pair under analysis (EN):
+${formattedPair} (${params.pairSymbol})
+Pair yang dianalisis (ID):
+${formattedPair} (${params.pairSymbol})
 
-Timeframe target analisa:
+Target timeframe (EN):
+${params.timeframe.toUpperCase()}
+Timeframe target (ID):
 ${params.timeframe.toUpperCase()}
 
-Data pasar Binance (BTCUSDT):
+Binance market data for ${formattedPair} (EN):
+${params.marketSummary}
+Data pasar Binance untuk ${formattedPair} (ID):
 ${params.marketSummary}
 
-Narasi harga:
+Price narrative (EN):
+${params.marketAnalytics.chartNarrative}
+Narasi harga (ID):
 ${params.marketAnalytics.chartNarrative}
 
-Forecast internal:
+Internal forecast (EN):
+${params.marketAnalytics.chartForecast}
+Forecast internal (ID):
 ${params.marketAnalytics.chartForecast}
 
-Data candle (ISO|O/H/L/C/V):
+Candle data (ISO|O/H/L/C/V) (EN):
+${params.marketAnalytics.promptSeries || "(No candle data)"}
+Data candle (ISO|O/H/L/C/V) (ID):
 ${params.marketAnalytics.promptSeries || "(Data candle tidak tersedia)"}
 
-Teknikal ringkas:
+Technical snapshot (EN):
+${technicalBlock}
+Ringkasan teknikal (ID):
 ${technicalBlock}
 
-Ringkasan Tavily:
+Tavily summary (EN):
+${tavilyAnswer}
+Ringkasan Tavily (ID):
 ${tavilyAnswer}
 
-Hasil pencarian Tavily:
+Tavily search results (EN):
+${tavilyResultsBlock}
+Hasil pencarian Tavily (ID):
 ${tavilyResultsBlock}
 
-Konten URL (Tavily extract):
+Tavily article extracts (EN):
+${tavilyArticlesBlock}
+Konten URL Tavily (ID):
 ${tavilyArticlesBlock}
 
-Tugas:
-- Lakukan analisa sentimen, highlight insight penting, dan berikan rekomendasi trading.
-- Buat forecasting harga BTC/USDT pada timeframe ${params.timeframe.toUpperCase()} dengan skenario dasar/bullish/bearish bila relevan.
-- Sertakan ringkasan teknikal dan fundamental yang mendukung keputusan trading.
-- Sediakan rencana eksekusi (entry, stop loss, take profit, execution window) yang selaras dengan timeframe.
-- Jawab hanya dalam format JSON sesuai skema.`;
+Instructions (EN):
+- Perform sentiment, news, and market analysis for ${formattedPair}; surface tradable insights.
+- Produce base / bullish / bearish price scenarios for ${formattedPair} on timeframe ${params.timeframe.toUpperCase()}.
+- Supply supporting technical & fundamental notes plus a risk-aware execution plan (entries, targets, stop, sizing).
+- Respond with JSON only, English text first followed by Indonesian translation in each field.
+
+Instruksi (ID):
+- Lakukan analisa sentimen, berita, dan pasar untuk ${formattedPair}; tampilkan insight yang dapat dieksekusi.
+- Sajikan skenario harga dasar / bullish / bearish untuk ${formattedPair} pada timeframe ${params.timeframe.toUpperCase()}.
+- Lengkapi catatan teknikal & fundamental serta rencana eksekusi yang memperhatikan risiko (entry, target, stop, sizing).
+- Jawab dalam JSON saja dengan teks Bahasa Inggris terlebih dahulu lalu terjemahan Bahasa Indonesia pada setiap field.`;
 };
 
-const buildSystemPrompt = () => `Anda adalah Web Analytic AI, analis crypto profesional.
-Berikan jawaban ringkas dalam Bahasa Indonesia.
-RESPON HANYA JSON valid tanpa teks tambahan.
-Skema:
+const buildSystemPrompt = () => `You are SWIMM (Soon You Will Make Money), a bilingual crypto markets analyst.
+Always reply with valid JSON only.
+Each string must contain English text first, followed by the Indonesian translation separated by " // ".
+Schema:
 {
   "summary": string,
   "decision": {
@@ -540,6 +581,7 @@ Skema:
     "rationale": string
   },
   "market": {
+    "pair": string,
     "chart": {
       "interval": string,
       "points": Array<{ "time": string, "close": number }>,

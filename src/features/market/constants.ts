@@ -1,11 +1,5 @@
 import type { IndicatorConfigItem } from "./types";
 
-export const TRADING_PAIRS = [
-  { label: "BTC/USDT", symbol: "BTCUSDT" },
-  { label: "ETH/USDT", symbol: "ETHUSDT" },
-  { label: "SOL/USDT", symbol: "SOLUSDT" },
-] as const;
-
 export const TIMEFRAME_OPTIONS = ["1m", "5m", "15m", "1h", "4h", "1d"] as const;
 
 export const INDICATOR_CONFIG: IndicatorConfigItem[] = [
@@ -78,4 +72,4 @@ export const INDICATOR_CONFIG: IndicatorConfigItem[] = [
 
 export const TARGET_LABELS = ["TP1", "TP2", "TP3", "TP4", "TP5"] as const;
 
-export const DEFAULT_PAIR_SYMBOL = "BTCUSDT" as const;
+export const DEFAULT_PAIR_SYMBOL = (process.env.BINANCE_SYMBOL ?? "BTCUSDT") as const;

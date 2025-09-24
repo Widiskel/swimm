@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { PrivyAuthProvider } from "@/providers/privy-provider";
+import { LanguageProvider } from "@/providers/language-provider";
+import { HistoryProvider } from "@/providers/history-provider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -13,9 +16,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Web Analytic AI | Crypto News Agent",
+  title: "SWIMM | Soon You Will Make Money",
   description:
-    "Dashboard analisa berita crypto berbasis agent AI untuk rekomendasi trading buy/sell/hold.",
+    "SWIMM (Soon You Will Make Money) delivers multi-pair crypto intelligence with bilingual insights. SWIMM menyajikan analisa kripto multi-pair dengan insight dwibahasa.",
 };
 
 export default function RootLayout({
@@ -25,10 +28,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
-        {children}
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+        <PrivyAuthProvider>
+          <LanguageProvider>
+            <HistoryProvider>{children}</HistoryProvider>
+          </LanguageProvider>
+        </PrivyAuthProvider>
       </body>
     </html>
   );

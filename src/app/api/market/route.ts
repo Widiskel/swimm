@@ -3,10 +3,11 @@ import {
   fetchBinanceCandles,
   fetchBinanceMarketSummary,
   fetchBinanceOrderBook,
+  fetchBinanceTradablePairs,
   formatBinanceSummary,
+  isPairTradable,
 } from "@/lib/binance";
 
-const ALLOWED_SYMBOLS = new Set(["BTCUSDT", "ETHUSDT", "SOLUSDT", "HYPEUSDT"]);
 const ALLOWED_INTERVALS = new Set(["1m", "5m", "15m", "1h", "4h", "1d"]);
 
 export async function GET(request: NextRequest) {
@@ -15,9 +16,12 @@ export async function GET(request: NextRequest) {
   const intervalParam = searchParams.get("interval")?.toLowerCase() ?? "15m";
   const limitParam = Number.parseInt(searchParams.get("limit") ?? "500", 10);
 
-  if (!ALLOWED_SYMBOLS.has(symbolParam)) {
+  const isSupported = await isPairTradable(symbolParam);
+  if (!isSupported) {
+    const pairs = await fetchBinanceTradablePairs();
+    const topSamples = pairs.slice(0, 20).map((item) => item.label).join(", ");
     return NextResponse.json(
-      { error: "Symbol tidak didukung. Pilih salah satu dari BTCUSDT, ETHUSDT, SOLUSDT, HYPEUSDT." },
+      { error: `Pair tidak didukung. Contoh pair: ${topSamples}` },
       { status: 400 }
     );
   }

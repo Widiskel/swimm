@@ -1,6 +1,25 @@
 const BINANCE_REST_URL = process.env.BINANCE_API_URL ?? "https://api.binance.com";
 const DEFAULT_SYMBOL = process.env.BINANCE_SYMBOL ?? "BTCUSDT";
 
+const QUOTE_ASSET_ALLOW_LIST = new Set([
+  "USDT",
+  "USDC",
+  "FDUSD",
+  "BUSD",
+  "TUSD",
+  "BTC",
+  "ETH",
+  "EUR",
+  "TRY",
+  "GBP"
+]);
+
+const EXCLUDED_BASE_SUFFIXES = ["UP", "DOWN", "BULL", "BEAR", "HEDGE"];
+const PAIR_CACHE_TTL_MS = 5 * 60 * 1000;
+
+let pairCache: BinanceTradingPair[] | null = null;
+let pairCacheExpiresAt = 0;
+
 export type BinanceMarketSummary = {
   symbol: string;
   lastPrice: number;
@@ -48,6 +67,26 @@ export type BinanceOrderBookSide = {
   quantity: number;
 };
 
+type BinanceExchangeInfoSymbol = {
+  symbol: string;
+  status: string;
+  baseAsset: string;
+  quoteAsset: string;
+  isSpotTradingAllowed?: boolean;
+  permissions?: string[];
+};
+
+type BinanceExchangeInfoResponse = {
+  symbols: BinanceExchangeInfoSymbol[];
+};
+
+export type BinanceTradingPair = {
+  symbol: string;
+  baseAsset: string;
+  quoteAsset: string;
+  label: string;
+};
+
 const withHeaders = () => {
   const headers = new Headers({ "Content-Type": "application/json" });
   const apiKey = process.env.BINANCE_API_KEY;
@@ -59,8 +98,146 @@ const withHeaders = () => {
   return headers;
 };
 
+const normalise = (value: string | undefined | null): string =>
+  value ? value.toString().trim().toUpperCase() : "";
+
+const compressSymbol = (value: string | undefined | null): string =>
+  normalise(value).replace(/[^A-Z0-9]/g, "");
+
+const resolveSymbol = (value?: string): string => {
+  const cleaned = compressSymbol(value);
+  if (cleaned) {
+    return cleaned;
+  }
+  const fallback = compressSymbol(DEFAULT_SYMBOL);
+  return fallback || "BTCUSDT";
+};
+
+const buildPairLabel = (base: string, quote: string) => `${base} / ${quote}`;
+
+const shouldIncludeSymbol = (item: BinanceExchangeInfoSymbol) => {
+  if (!item) {
+    return false;
+  }
+  if (item.status !== "TRADING") {
+    return false;
+  }
+  if (item.isSpotTradingAllowed === false) {
+    return false;
+  }
+  if (Array.isArray(item.permissions) && item.permissions.length > 0 && !item.permissions.includes("SPOT")) {
+    return false;
+  }
+  const base = normalise(item.baseAsset);
+  const quote = normalise(item.quoteAsset);
+  if (!base || !quote) {
+    return false;
+  }
+  if (!QUOTE_ASSET_ALLOW_LIST.has(quote)) {
+    return false;
+  }
+  if (EXCLUDED_BASE_SUFFIXES.some((suffix) => base.endsWith(suffix))) {
+    return false;
+  }
+  return true;
+};
+
+const dedupePairs = (pairs: BinanceTradingPair[]): BinanceTradingPair[] => {
+  const seen = new Map<string, BinanceTradingPair>();
+  for (const pair of pairs) {
+    if (!seen.has(pair.symbol)) {
+      seen.set(pair.symbol, pair);
+    }
+  }
+  return Array.from(seen.values());
+};
+
+const derivePairFromSymbol = (symbol: string): BinanceTradingPair => {
+  const upper = resolveSymbol(symbol);
+  const quote = Array.from(QUOTE_ASSET_ALLOW_LIST).find((item) => upper.endsWith(item));
+  const base = quote ? upper.slice(0, upper.length - quote.length) : upper;
+  const resolvedBase = base || upper;
+  const resolvedQuote = quote || "USDT";
+  return {
+    symbol: upper,
+    baseAsset: resolvedBase,
+    quoteAsset: resolvedQuote,
+    label: buildPairLabel(resolvedBase, resolvedQuote),
+  };
+};
+
+const ensureDefaultPair = (pairs: BinanceTradingPair[]): BinanceTradingPair[] => {
+  const symbol = resolveSymbol(DEFAULT_SYMBOL);
+  if (pairs.some((pair) => pair.symbol === symbol)) {
+    return pairs;
+  }
+  return [derivePairFromSymbol(symbol), ...pairs];
+};
+
+export const fetchBinanceTradablePairs = async (): Promise<BinanceTradingPair[]> => {
+  const now = Date.now();
+  if (pairCache && now < pairCacheExpiresAt) {
+    return pairCache;
+  }
+
+  try {
+    const url = new URL("/api/v3/exchangeInfo", BINANCE_REST_URL);
+    const response = await fetch(url, {
+      method: "GET",
+      headers: withHeaders(),
+      cache: "no-store",
+    });
+
+    if (!response.ok) {
+      throw new Error(`Binance exchange info responded with ${response.status}`);
+    }
+
+    const payload = (await response.json()) as BinanceExchangeInfoResponse;
+    const pairs = payload.symbols
+      .filter(shouldIncludeSymbol)
+      .map((item) => {
+        const symbol = resolveSymbol(item.symbol);
+        const base = normalise(item.baseAsset);
+        const quote = normalise(item.quoteAsset);
+        return {
+          symbol,
+          baseAsset: base,
+          quoteAsset: quote,
+          label: buildPairLabel(base, quote),
+        };
+      });
+
+    const sortedPairs = dedupePairs(pairs).sort((a, b) => {
+      if (a.baseAsset === b.baseAsset) {
+        return a.quoteAsset.localeCompare(b.quoteAsset);
+      }
+      return a.baseAsset.localeCompare(b.baseAsset);
+    });
+
+    const finalPairs = ensureDefaultPair(sortedPairs);
+    pairCache = finalPairs;
+    pairCacheExpiresAt = now + PAIR_CACHE_TTL_MS;
+    return finalPairs;
+  } catch (error) {
+    console.error("Failed to fetch Binance symbols", error);
+    const fallback = ensureDefaultPair(pairCache ?? []);
+    pairCache = fallback;
+    pairCacheExpiresAt = now + PAIR_CACHE_TTL_MS;
+    return pairCache;
+  }
+};
+
+export const isPairTradable = async (symbol: string): Promise<boolean> => {
+  if (!symbol) {
+    return false;
+  }
+  const target = resolveSymbol(symbol);
+  const pairs = await fetchBinanceTradablePairs();
+  return pairs.some((pair) => pair.symbol === target);
+};
+
 const parseTicker = (data: BinanceTicker24hResponse): BinanceMarketSummary => ({
-  symbol: data.symbol,
+  symbol: resolveSymbol(data.symbol),
   lastPrice: Number.parseFloat(data.lastPrice),
   priceChangePercent: Number.parseFloat(data.priceChangePercent),
   highPrice: Number.parseFloat(data.highPrice),
@@ -78,8 +255,9 @@ export const fetchBinanceCandles = async (
   limit = 120
 ): Promise<BinanceCandle[]> => {
   try {
+    const resolvedSymbol = resolveSymbol(symbol);
     const url = new URL("/api/v3/klines", BINANCE_REST_URL);
-    url.searchParams.set("symbol", symbol.toUpperCase());
+    url.searchParams.set("symbol", resolvedSymbol);
     url.searchParams.set("interval", interval);
     url.searchParams.set("limit", String(limit));
 
@@ -113,8 +291,9 @@ export const fetchBinanceMarketSummary = async (
   symbol: string = DEFAULT_SYMBOL
 ): Promise<BinanceMarketSummary | null> => {
   try {
+    const resolvedSymbol = resolveSymbol(symbol);
     const url = new URL("/api/v3/ticker/24hr", BINANCE_REST_URL);
-    url.searchParams.set("symbol", symbol.toUpperCase());
+    url.searchParams.set("symbol", resolvedSymbol);
 
     const response = await fetch(url, {
       method: "GET",
@@ -139,8 +318,9 @@ export const fetchBinanceOrderBook = async (
   limit = 20
 ): Promise<{ bids: BinanceOrderBookSide[]; asks: BinanceOrderBookSide[] }> => {
   try {
+    const resolvedSymbol = resolveSymbol(symbol);
     const url = new URL("/api/v3/depth", BINANCE_REST_URL);
-    url.searchParams.set("symbol", symbol.toUpperCase());
+    url.searchParams.set("symbol", resolvedSymbol);
     url.searchParams.set("limit", String(limit));
 
     const response = await fetch(url, {
@@ -189,7 +369,7 @@ export const formatBinanceSummary = (
     closeTime,
   } = summary;
 
-  const baseAsset = symbol.replace(/USDT$/i, "");
+  const baseAsset = symbol.replace(/USDT$/i, "").replace(/USDC$/i, "").replace(/BUSD$/i, "");
 
   return [
     `${symbol} spot (Binance)`,
