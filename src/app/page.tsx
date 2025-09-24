@@ -20,6 +20,7 @@ type AgentResponse = {
   highlights: string[];
   nextSteps: string[];
   market: {
+    pair: string;
     chart: {
       interval: string;
       points: ChartPoint[];
@@ -57,8 +58,8 @@ const TIMEFRAME_OPTIONS = ["5m", "15m", "30m", "1h", "4h", "1d"] as const;
 
 type TimeframeOption = (typeof TIMEFRAME_OPTIONS)[number];
 
-const entryIcon = "➤" as const;
-const targetIcons = ["🥇", "🥈", "🏁", "🎯"] as const;
+const TARGET_LABELS = ["TP1", "TP2", "TP3", "TP4", "TP5"] as const;
+const DEFAULT_PAIR_SYMBOL = "BTCUSDT" as const;
 
 export default function Home() {
   const [objective, setObjective] = useState(
@@ -69,7 +70,7 @@ export default function Home() {
   const [uploadedName, setUploadedName] = useState<string | undefined>();
   const [datasetPreview, setDatasetPreview] = useState("");
   const [timeframe, setTimeframe] = useState<TimeframeOption>("5m");
-  const [dataMode, setDataMode] = useState<DataMode>("scrape");
+  const [dataMode, setDataMode] = useState<DataMode>("manual");
   const [isRunning, setIsRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [response, setResponse] = useState<AgentResponse | null>(null);
@@ -83,9 +84,7 @@ export default function Home() {
     [urlsInput]
   );
 
-  const canRunAgent =
-    objective.trim().length > 0 &&
-    (parsedUrls.length > 0 || datasetPreview || manualNotes.trim().length > 0);
+  const canRunAgent = objective.trim().length > 0;
 
   const priceFormatter = useMemo(
     () =>
@@ -150,11 +149,67 @@ export default function Home() {
       ? [response.tradePlan.entry]
       : [];
   }, [response]);
-  const tradeTargets = response?.tradePlan?.takeProfits ?? [];
+  const tradeTargets = useMemo(() => response?.tradePlan?.takeProfits ?? [], [response]);
+  const paddedTargets = useMemo(
+    () =>
+      Array.from({ length: TARGET_LABELS.length }, (_, index) =>
+        tradeTargets[index] !== undefined ? tradeTargets[index] : null
+      ),
+    [tradeTargets]
+  );
+  const entryZoneValues = useMemo(() => {
+    if (!tradeEntries.length) {
+      return [] as number[];
+    }
+    const sorted = [...tradeEntries].sort((a, b) => a - b);
+    return sorted;
+  }, [tradeEntries]);
   const tradeStopLoss = response?.tradePlan?.stopLoss ?? null;
   const tradeExecutionWindow = response?.tradePlan?.executionWindow ?? "-";
   const tradeSizingNotes = response?.tradePlan?.sizingNotes ?? "-";
   const tradeRationale = response?.tradePlan?.rationale ?? "-";
+
+  const rawPairSymbol = response?.market?.pair ?? DEFAULT_PAIR_SYMBOL;
+  const formattedPair = useMemo(() => {
+    if (!rawPairSymbol) {
+      return "BTC/USDT";
+    }
+    const upper = rawPairSymbol.toUpperCase();
+    if (upper.includes("/") || upper.includes("-")) {
+      return upper;
+    }
+    if (upper.endsWith("USDT")) {
+      const base = upper.slice(0, -4);
+      return `${base}/USDT`;
+    }
+    if (upper.length >= 6) {
+      return `${upper.slice(0, upper.length / 2)}/${upper.slice(upper.length / 2)}`;
+    }
+    return upper;
+  }, [rawPairSymbol]);
+
+  const tradingNarrative =
+    tradeRationale !== "-" && tradeRationale.trim().length > 0
+      ? tradeRationale
+      : response?.decision?.rationale ?? response?.summary ?? "";
+
+  const supportiveHighlights = useMemo(() => {
+    if (!response?.highlights) {
+      return [] as string[];
+    }
+    const blockedKeywords = [
+      "PAIR:",
+      "TYPE:",
+      "ENTRY ZONE:",
+      "TARGETS:",
+      "STOP LOSS:",
+      "PARSE_WARNING",
+    ];
+    return response.highlights.filter((item) => {
+      const normalized = item.trim().toUpperCase();
+      return !blockedKeywords.some((keyword) => normalized.startsWith(keyword));
+    });
+  }, [response]);
 
   const chartStart = chartPoints[0]?.time;
   const chartEnd = chartPoints.length > 0 ? chartPoints[chartPoints.length - 1].time : undefined;
@@ -180,7 +235,7 @@ export default function Home() {
 
   const handleRunAgent = async () => {
     if (!canRunAgent) {
-      setError("Lengkapi data dan objektif analisa sebelum menjalankan agent.");
+      setError("Isi objektif analisa sebelum menjalankan agent.");
       return;
     }
 
@@ -358,7 +413,7 @@ export default function Home() {
                 Manajemen data & scraping
               </h3>
               <p className="text-sm text-slate-400">
-                Pilih sumber data yang ingin dianalisa agent. Integrasi scraping dapat disesuaikan.
+                Pilih sumber data tambahan untuk agent bila diperlukan. Data harga dan pasar Binance sudah menjadi acuan default.
               </p>
             </div>
             <span className="rounded-full border border-slate-800 px-3 py-1 text-xs text-slate-400">
@@ -383,81 +438,96 @@ export default function Home() {
             ))}
           </div>
 
-          <div className="grid gap-6 md:grid-cols-2">
-            <div className="rounded-3xl border border-slate-800 bg-slate-900/40 p-6">
-              <h4 className="text-base font-semibold text-slate-100">
-                Daftar URL berita (scraping)
-              </h4>
-              <p className="mt-1 text-xs text-slate-400">
-                Masukkan satu URL per baris. Endpoint scraping backend dapat dihubungkan pada tahap deployment.
-              </p>
-              <textarea
-                className="mt-4 h-48 w-full resize-none rounded-2xl border border-slate-800 bg-slate-950/60 p-4 text-xs text-slate-200 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-500/40"
-                placeholder={`https://www.coindesk.com/... \nhttps://cointelegraph.com/...`}
-                value={urlsInput}
-                onChange={(event) => setUrlsInput(event.target.value)}
-              />
-              {parsedUrls.length > 0 && (
-                <div className="mt-4 space-y-2">
-                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                    URL terdeteksi
-                  </div>
-                  <ul className="space-y-1 text-xs text-slate-300">
-                    {parsedUrls.map((url) => (
-                      <li
-                        key={url}
-                        className="truncate rounded-lg bg-slate-950/50 px-3 py-2"
-                        title={url}
-                      >
-                        {url}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-
-            <div className="rounded-3xl border border-slate-800 bg-slate-900/40 p-6">
-              <h4 className="text-base font-semibold text-slate-100">
-                Dataset kustom & catatan manual
-              </h4>
-              <p className="mt-1 text-xs text-slate-400">
-                Unggah CSV/JSON atau tempel catatan analis, angka on-chain, ataupun sinyal teknikal.
-              </p>
-              <label className="mt-4 flex cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed border-slate-700 bg-slate-950/50 p-6 text-center text-sm text-slate-300 transition hover:border-sky-500 hover:text-sky-300">
-                <input
-                  type="file"
-                  accept=".csv,.json,.txt"
-                  className="hidden"
-                  onChange={handleFileUpload}
+          <div className="grid grid-cols-1 gap-6">
+            {dataMode === "scrape" && (
+              <div className="rounded-3xl border border-slate-800 bg-slate-900/40 p-6">
+                <h4 className="text-base font-semibold text-slate-100">
+                  Daftar URL berita (scraping)
+                </h4>
+                <p className="mt-1 text-xs text-slate-400">
+                  Masukkan satu URL per baris. Endpoint scraping backend dapat dihubungkan pada tahap deployment.
+                </p>
+                <textarea
+                  className="mt-4 h-48 w-full resize-none rounded-2xl border border-slate-800 bg-slate-950/60 p-4 text-xs text-slate-200 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-500/40"
+                  placeholder={`https://www.coindesk.com/... \nhttps://cointelegraph.com/...`}
+                  value={urlsInput}
+                  onChange={(event) => setUrlsInput(event.target.value)}
                 />
-                <span className="font-semibold">Upload dataset</span>
-                <span className="mt-1 text-xs text-slate-500">
-                  (.csv, .json, .txt sampai 4.000 karakter dibaca)
-                </span>
-                {uploadedName && (
-                  <span className="mt-2 inline-flex rounded-full border border-sky-500/40 bg-sky-500/10 px-3 py-1 text-xs text-sky-200">
-                    {uploadedName}
-                  </span>
-                )}
-              </label>
-              <textarea
-                className="mt-4 h-40 w-full resize-none rounded-2xl border border-slate-800 bg-slate-950/60 p-4 text-xs text-slate-200 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-500/40"
-                placeholder="Catatan manual, titik support/resistance, data inflow exchange..."
-                value={manualNotes}
-                onChange={(event) => setManualNotes(event.target.value)}
-              />
-              {datasetPreview && (
-                <div className="mt-4">
-                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                    Preview dataset
+                {parsedUrls.length > 0 && (
+                  <div className="mt-4 space-y-2">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                      URL terdeteksi
+                    </div>
+                    <ul className="space-y-1 text-xs text-slate-300">
+                      {parsedUrls.map((url) => (
+                        <li
+                          key={url}
+                          className="truncate rounded-lg bg-slate-950/50 px-3 py-2"
+                          title={url}
+                        >
+                          {url}
+                        </li>
+                      ))}
+                    </ul>
                   </div>
-                  <pre className="mt-2 max-h-40 overflow-y-auto rounded-2xl border border-slate-800 bg-slate-950/70 p-4 text-[11px] text-slate-300">
-                    {datasetPreview}
-                  </pre>
-                </div>
-              )}
-            </div>
+                )}
+              </div>
+            )}
+
+            {dataMode === "upload" && (
+              <div className="rounded-3xl border border-slate-800 bg-slate-900/40 p-6">
+                <h4 className="text-base font-semibold text-slate-100">
+                  Dataset kustom
+                </h4>
+                <p className="mt-1 text-xs text-slate-400">
+                  Unggah CSV/JSON atau file teks yang ingin dianalisa agent.
+                </p>
+                <label className="mt-4 flex cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed border-slate-700 bg-slate-950/50 p-6 text-center text-sm text-slate-300 transition hover:border-sky-500 hover:text-sky-300">
+                  <input
+                    type="file"
+                    accept=".csv,.json,.txt"
+                    className="hidden"
+                    onChange={handleFileUpload}
+                  />
+                  <span className="font-semibold">Upload dataset</span>
+                  <span className="mt-1 text-xs text-slate-500">
+                    (.csv, .json, .txt sampai 4.000 karakter dibaca)
+                  </span>
+                  {uploadedName && (
+                    <span className="mt-2 inline-flex rounded-full border border-sky-500/40 bg-sky-500/10 px-3 py-1 text-xs text-sky-200">
+                      {uploadedName}
+                    </span>
+                  )}
+                </label>
+                {datasetPreview && (
+                  <div className="mt-4">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                      Preview dataset
+                    </div>
+                    <pre className="mt-2 max-h-40 overflow-y-auto rounded-2xl border border-slate-800 bg-slate-950/70 p-4 text-[11px] text-slate-300">
+                      {datasetPreview}
+                    </pre>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {dataMode === "manual" && (
+              <div className="rounded-3xl border border-slate-800 bg-slate-900/40 p-6">
+                <h4 className="text-base font-semibold text-slate-100">
+                  Catatan manual analis
+                </h4>
+                <p className="mt-1 text-xs text-slate-400">
+                  Tempel insight makro, level teknikal, atau catatan tim untuk dikombinasikan dengan analisa agent.
+                </p>
+                <textarea
+                  className="mt-4 h-48 w-full resize-none rounded-2xl border border-slate-800 bg-slate-950/60 p-4 text-xs text-slate-200 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-500/40"
+                  placeholder="Catatan manual, titik support/resistance, data inflow exchange..."
+                  value={manualNotes}
+                  onChange={(event) => setManualNotes(event.target.value)}
+                />
+              </div>
+            )}
           </div>
         </section>
 
@@ -493,7 +563,7 @@ export default function Home() {
           )}
           {!canRunAgent && !error && (
             <div className="mt-6 rounded-2xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
-              Tambahkan minimal satu sumber data, internal dataset, atau catatan manual untuk menjalankan agent.
+              Isi objektif analisa untuk mengaktifkan agent.
             </div>
           )}
           {response && (
@@ -595,73 +665,100 @@ export default function Home() {
                     )}
                   </div>
                 </div>
-                <div className="mt-6 space-y-3">
-                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">Highlight temuan</div>
-                  <ul className="space-y-2 text-sm text-slate-300">
-                    {response.highlights.map((highlight) => (
-                      <li
-                        key={highlight}
-                        className="rounded-xl border border-slate-800 bg-slate-950/60 px-4 py-3"
-                      >
-                        {highlight}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+                {supportiveHighlights.length > 0 && (
+                  <div className="mt-6 space-y-3">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                      Catatan pendukung
+                    </div>
+                    <ul className="space-y-2 text-sm text-slate-300">
+                      {supportiveHighlights.map((highlight) => (
+                        <li
+                          key={highlight}
+                          className="rounded-xl border border-slate-800 bg-slate-950/60 px-4 py-3"
+                        >
+                          {highlight}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
               <div className="space-y-6">
                 <div className="rounded-3xl border border-slate-800 bg-slate-950/60 p-6">
                   <div className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">Trade plan</div>
-                  <div className="mt-4 space-y-4 text-sm text-slate-300">
-                    <div className="flex items-center justify-between">
-                      <span>Bias</span>
-                      <span className="uppercase text-slate-100">{response.tradePlan.bias.toUpperCase()}</span>
+                  <div className="mt-4 space-y-5 text-sm text-slate-300">
+                    <div className="grid gap-2 text-xs text-slate-400 sm:grid-cols-3">
+                      <div className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2">
+                        <span>Pair</span>
+                        <span className="text-sm font-semibold text-slate-100">{formattedPair}</span>
+                      </div>
+                      <div className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2">
+                        <span>Type</span>
+                        <span className="text-sm font-semibold capitalize text-slate-100">
+                          {response.decision.action}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2">
+                        <span>Bias</span>
+                        <span className="uppercase text-slate-100">{response.tradePlan.bias.toUpperCase()}</span>
+                      </div>
                     </div>
                     <div>
-                      <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">Entry levels</div>
-                      {tradeEntries.length ? (
+                      <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">Entry zone</div>
+                      {entryZoneValues.length ? (
                         <ul className="mt-2 space-y-1 text-xs text-slate-300">
-                          {tradeEntries.map((entry, index) => (
+                          {entryZoneValues.map((priceValue, index) => (
                             <li
-                              key={`entry-${entry}-${index}`}
-                              className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-2"
+                              key={`entry-zone-plan-${priceValue}-${index}`}
+                              className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2"
                             >
-                              <span>{entryIcon}</span>
-                              <span>{formatPrice(entry)}</span>
+                              {formatPrice(priceValue)}
                             </li>
                           ))}
                         </ul>
                       ) : (
-                        <p className="mt-2 text-xs text-slate-500">Entry belum tersedia.</p>
+                        <p className="mt-2 text-xs text-slate-500">Zona entry belum tersedia.</p>
                       )}
                     </div>
                     <div>
                       <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">Targets</div>
-                      {tradeTargets.length ? (
-                        <ul className="mt-2 space-y-1 text-xs text-slate-300">
-                          {tradeTargets.map((target, index) => (
-                            <li
-                              key={`target-${target}-${index}`}
-                              className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-2"
-                            >
-                              <span>{targetIcons[index] ?? "•"}</span>
-                              <span>{formatPrice(target)}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
+                      <ul className="mt-2 space-y-1 text-xs text-slate-300">
+                        {paddedTargets.map((target, index) => (
+                          <li
+                            key={`plan-target-${index}`}
+                            className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2"
+                          >
+                            <span>{TARGET_LABELS[index]}</span>
+                            <span>{target !== null ? formatPrice(target) : "-"}</span>
+                          </li>
+                        ))}
+                      </ul>
+                      {paddedTargets.every((target) => target === null) && (
                         <p className="mt-2 text-xs text-slate-500">Target profit belum tersedia.</p>
                       )}
                     </div>
                     <div className="flex items-center justify-between text-xs text-slate-400">
                       <span>Stop loss</span>
-                      <span>{formatPrice(tradeStopLoss)}</span>
+                      <span className="text-slate-200">{formatPrice(tradeStopLoss)}</span>
                     </div>
-                    <div className="text-xs text-slate-400">
-                      Execution window: <span className="text-slate-200">{tradeExecutionWindow}</span>
+                    <div className="grid gap-3 text-xs text-slate-400 sm:grid-cols-2">
+                      <div className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-3">
+                        <div className="font-semibold text-slate-300">Execution window</div>
+                        <div className="mt-1 text-[11px] text-slate-400">{tradeExecutionWindow}</div>
+                      </div>
+                      <div className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-3">
+                        <div className="font-semibold text-slate-300">Sizing notes</div>
+                        <div className="mt-1 text-[11px] text-slate-400">{tradeSizingNotes}</div>
+                      </div>
                     </div>
-                    <p className="text-xs text-slate-400">Sizing: {tradeSizingNotes}</p>
-                    <p className="text-xs text-slate-400">Catatan: {tradeRationale}</p>
+                    <div>
+                      <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                        Analisa pendukung
+                      </div>
+                      <p className="mt-2 whitespace-pre-line text-xs text-slate-300">
+                        {tradingNarrative || "Analisa pendukung belum tersedia."}
+                      </p>
+                    </div>
                   </div>
                 </div>
                 <div className="rounded-3xl border border-slate-800 bg-slate-950/60 p-6">
@@ -695,4 +792,3 @@ export default function Home() {
     </div>
   );
 }
-

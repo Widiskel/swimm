@@ -11,12 +11,14 @@ untuk pasangan BTC/USDT.
 - Highlight temuan, confidence, timeframe, dan next steps siap eksekusi.
 - Pemilihan timeframe forecasting (5m sampai 1D) untuk menyesuaikan horizon analisa dan proyeksi harga.
 - Snapshot harga Binance BTC/USDT otomatis masuk ke prompt agen.
+- Integrasi Tavily opsional untuk pencarian berita dan ekstraksi konten agar konteks analisa lebih variatif.
 - UI gelap responsif dengan fokus pada alur riset trader.
 
 ## Prasyarat
 - Node.js 18+ dan npm.
 - Akun Fireworks dengan API key aktif.
 - API key & secret Binance (direkomendasikan untuk header otorisasi, meski endpoint harga publik dapat berjalan tanpa keduanya).
+- Tavily API key (opsional, mengaktifkan pencarian & ekstraksi berita otomatis).
 
 ## Konfigurasi lingkungan
 Buat file `.env.local` di root proyek dan isi variabel berikut:
@@ -32,6 +34,9 @@ BINANCE_API_SECRET=your_binance_api_secret
 # Opsional: override simbol & URL
 # BINANCE_SYMBOL=BTCUSDT
 # BINANCE_API_URL=https://api.binance.com
+
+# Tavily
+TAVILY_API_KEY=your_tavily_api_key
 ```
 
 Semua variabel hanya dibaca di sisi server (`/api/agent`), sehingga kredensial tetap aman.
@@ -47,6 +52,7 @@ Buka `http://localhost:3000` lalu masukkan objective + sumber data untuk mencoba
 - Endpoint server (`src/app/api/agent/route.ts`) mengirim prompt terstruktur ke Fireworks Chat Completions API.
 - Sebelum ke Fireworks, server mengambil snapshot harga Binance BTC/USDT (`src/lib/binance.ts`) dan memasukkannya
   ke prompt sebagai konteks pasar real-time.
+- Jika `TAVILY_API_KEY` tersedia, server memanggil Tavily untuk mencari berita relevan sekaligus mengekstrak konten URL, lalu menyuntikkannya ke prompt.
 - Model diwajibkan merespon dalam format JSON sesuai skema aplikasi, lalu respons dipost-proses untuk memastikan
   action, confidence (0-1), dan daftar highlight/next steps valid.
 

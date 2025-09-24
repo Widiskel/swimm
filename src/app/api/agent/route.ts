@@ -5,6 +5,12 @@ import {
   formatBinanceSummary,
   type BinanceCandle,
 } from "@/lib/binance";
+import {
+  fetchTavilyExtract,
+  fetchTavilySearch,
+  type TavilyExtractedArticle,
+  type TavilySearchData,
+} from "@/lib/tavily";
 
 type DataMode = "scrape" | "upload" | "manual";
 
@@ -23,6 +29,14 @@ type AgentDecision = "buy" | "sell" | "hold";
 type ChartPoint = {
   time: string;
   close: number;
+};
+
+type MarketContext = {
+  symbol: string;
+  timeframe: Timeframe;
+  interval: string;
+  candles: BinanceCandle[];
+  lastPrice: number;
 };
 
 type TradePlan = {
@@ -47,6 +61,7 @@ type AgentPayload = {
   highlights: string[];
   nextSteps: string[];
   market: {
+    pair: string;
     chart: {
       interval: string;
       points: ChartPoint[];
@@ -365,33 +380,6 @@ const buildDefaultFundamentals = (summary: string, timeframe: Timeframe) => {
   return fundamentals;
 };
 
-const buildTradeHighlights = (tradePlan: TradePlan) => {
-  const price = (value: number | null) =>
-    typeof value === "number" && Number.isFinite(value) ? value.toFixed(2) : "-";
-
-  const entryLines = tradePlan.entries.length
-    ? tradePlan.entries.map((value) => `? ${price(value)}`)
-    : tradePlan.entry !== null
-    ? [`,? ${price(tradePlan.entry)}`]
-    : [];
-
-  const targetEmojis = ["??", "??", "??", "??"];
-  const targetLines = tradePlan.takeProfits.map((target, index) => {
-    const icon = targetEmojis[index] ?? "â€¢";
-    return `${icon} ${price(target)}`;
-  });
-
-  const highlights: string[] = [];
-  if (entryLines.length) {
-    highlights.push(["?? ENTRY:", ...entryLines].join("\n"));
-  }
-  if (targetLines.length) {
-    highlights.push(["?? TARGETS:", ...targetLines].join("\n"));
-  }
-  highlights.push(`? STOP LOSS: ${price(tradePlan.stopLoss)}`);
-  return highlights;
-};
-
 const buildUserMessage = (params: {
   objective: string;
   dataMode: DataMode;
@@ -407,7 +395,25 @@ const buildUserMessage = (params: {
     chartNarrative: string;
     chartForecast: string;
   };
+  tavilySearch: TavilySearchData | null;
+  tavilyArticles: TavilyExtractedArticle[];
+  pairSymbol: string;
 }) => {
+  const formattedPair = (() => {
+    const raw = params.pairSymbol.trim();
+    if (!raw) {
+      return "BTC/USDT";
+    }
+    if (raw.includes("/") || raw.includes("-")) {
+      return raw.toUpperCase();
+    }
+    if (raw.toUpperCase().endsWith("USDT")) {
+      const base = raw.slice(0, -4);
+      return `${base}/${"USDT"}`.toUpperCase();
+    }
+    return raw.toUpperCase();
+  })();
+
   const urlList = params.urls.length
     ? params.urls.map((url, index) => `${index + 1}. ${url}`).join("\n")
     : "(Tidak ada URL yang diberikan)";
@@ -427,6 +433,46 @@ const buildUserMessage = (params: {
     ? params.marketAnalytics.technical.map((item, index) => `${index + 1}. ${item}`).join("\n")
     : "(Tidak ada ringkasan teknikal)";
 
+  const tavilyAnswer = params.tavilySearch?.answer
+    ? excerpt(params.tavilySearch.answer, 800)
+    : "(Tidak ada ringkasan Tavily)";
+
+  const tavilyResultsBlock = params.tavilySearch?.results?.length
+    ? params.tavilySearch.results
+        .map((result, index) => {
+          const parts = [
+            `${index + 1}. ${result.title}${
+              typeof result.score === "number" && Number.isFinite(result.score)
+                ? ` (score: ${result.score.toFixed(2)})`
+                : ""
+            }`,
+            result.url ? `   URL: ${result.url}` : null,
+            result.publishedDate ? `   Tanggal: ${result.publishedDate}` : null,
+            result.content ? `   Ringkasan: ${excerpt(result.content, 320)}` : null,
+          ];
+          return parts.filter(Boolean).join("\n");
+        })
+        .join("\n\n")
+    : "(Tidak ada hasil pencarian Tavily)";
+
+  const tavilyArticlesBlock = params.tavilyArticles.length
+    ? params.tavilyArticles
+        .map((article, index) => {
+          const parts = [
+            `${index + 1}. ${article.title}`,
+            article.url ? `   URL: ${article.url}` : null,
+            article.publishedDate ? `   Tanggal: ${article.publishedDate}` : null,
+            article.content
+              ? `   Kutipan: ${excerpt(article.content, 320)}`
+              : article.rawContent
+              ? `   Kutipan (raw): ${excerpt(article.rawContent, 320)}`
+              : null,
+          ];
+          return parts.filter(Boolean).join("\n");
+        })
+        .join("\n\n")
+    : "(Tidak ada konten URL yang diekstrak Tavily)";
+
   return `Objective analisa: ${params.objective}
 
 Sumber data aktif: ${params.dataMode}
@@ -439,6 +485,9 @@ ${manualBlock}
 
 Dataset kustom:
 ${datasetBlock}
+
+Pasangan analisa:
+${formattedPair}
 
 Timeframe target analisa:
 ${params.timeframe.toUpperCase()}
@@ -457,6 +506,15 @@ ${params.marketAnalytics.promptSeries || "(Data candle tidak tersedia)"}
 
 Teknikal ringkas:
 ${technicalBlock}
+
+Ringkasan Tavily:
+${tavilyAnswer}
+
+Hasil pencarian Tavily:
+${tavilyResultsBlock}
+
+Konten URL (Tavily extract):
+${tavilyArticlesBlock}
 
 Tugas:
 - Lakukan analisa sentimen, highlight insight penting, dan berikan rekomendasi trading.
@@ -603,15 +661,15 @@ const buildTradePlan = (
   const takeProfitCandidate = ensureNumericArray(draft?.takeProfits);
   const fallbackTakeProfits = normalizedPrimary !== null
     ? action === "buy"
-      ? [normalizedPrimary * 1.02, normalizedPrimary * 1.05, normalizedPrimary * 1.08]
+      ? [1.02, 1.035, 1.05, 1.065, 1.08].map((multiplier) => normalizedPrimary * multiplier)
       : action === "sell"
-      ? [normalizedPrimary * 0.98, normalizedPrimary * 0.95, normalizedPrimary * 0.92]
+      ? [0.98, 0.965, 0.95, 0.935, 0.92].map((multiplier) => normalizedPrimary * multiplier)
       : []
     : [];
   const takeProfits = (takeProfitCandidate.length ? takeProfitCandidate : fallbackTakeProfits)
     .map((value) => Number(value.toFixed(2)))
     .filter((value, index, array) => Number.isFinite(value) && array.indexOf(value) === index)
-    .slice(0, 4);
+    .slice(0, 5);
 
   const executionWindow = ensureString(
     draft?.executionWindow,
@@ -695,10 +753,10 @@ const buildAgentPayload = (
   );
 
   const tradePlan = buildTradePlan(draft.tradePlan, action, marketSupport);
-  const tradeHighlights = buildTradeHighlights(tradePlan);
 
   const technical = ensureStringArray((marketDraft as Record<string, unknown>).technical);
   const fundamental = ensureStringArray((marketDraft as Record<string, unknown>).fundamental);
+  const supportiveHighlights = baseHighlights.slice(0, 12);
 
   return {
     summary,
@@ -708,7 +766,7 @@ const buildAgentPayload = (
       timeframe,
       rationale,
     },
-    highlights: [...tradeHighlights, ...baseHighlights].slice(0, 12),
+    highlights: supportiveHighlights,
     nextSteps: nextSteps.length
       ? nextSteps
       : [
@@ -716,6 +774,7 @@ const buildAgentPayload = (
           "Perbarui data berita / on-chain, lalu jalankan ulang agent bila perlu.",
         ],
     market: {
+      pair: marketSupport.context.symbol,
       chart: {
         interval: chartInterval,
         points: chartPoints.length ? chartPoints : marketSupport.analytics.chartPoints,
@@ -756,6 +815,8 @@ export async function POST(request: Request) {
     );
   }
 
+  const objective = body.objective.trim();
+
   const urls = Array.isArray(body.urls)
     ? body.urls.filter((url) => typeof url === "string" && url.trim().length > 0)
     : [];
@@ -763,6 +824,15 @@ export async function POST(request: Request) {
   const datasetPreview = body.datasetPreview?.trim() ?? "";
   const dataMode = body.dataMode ?? "scrape";
   const timeframe = normalizeTimeframe(body.timeframe);
+
+  const tavilySearchPromise: Promise<TavilySearchData | null> =
+    objective.length > 0
+      ? fetchTavilySearch(objective, { maxResults: 6 })
+      : Promise.resolve(null);
+  const tavilyExtractPromise: Promise<TavilyExtractedArticle[]> =
+    dataMode === "scrape" && urls.length > 0
+      ? fetchTavilyExtract(urls)
+      : Promise.resolve([] as TavilyExtractedArticle[]);
 
   const apiKey = process.env.FIREWORKS_API_KEY;
   if (!apiKey) {
@@ -772,10 +842,15 @@ export async function POST(request: Request) {
     );
   }
 
-  const [summaryData, candles] = await Promise.all([
-    fetchBinanceMarketSummary("BTCUSDT"),
-    fetchBinanceCandles("BTCUSDT", TIMEFRAME_TO_INTERVAL[timeframe], 120),
+  const [[summaryData, candles], tavilySearch, tavilyArticles] = await Promise.all([
+    Promise.all([
+      fetchBinanceMarketSummary("BTCUSDT"),
+      fetchBinanceCandles("BTCUSDT", TIMEFRAME_TO_INTERVAL[timeframe], 120),
+    ]),
+    tavilySearchPromise,
+    tavilyExtractPromise,
   ]);
+  const symbol = summaryData?.symbol ?? process.env.BINANCE_SYMBOL ?? "BTCUSDT";
   const marketSummary = formatBinanceSummary(summaryData);
   const marketAnalytics = buildMarketAnalytics(candles, timeframe);
   const resolvedLastPrice =
@@ -783,6 +858,7 @@ export async function POST(request: Request) {
       ? marketAnalytics.lastClose
       : undefined) ?? (summaryData?.lastPrice && summaryData.lastPrice > 0 ? summaryData.lastPrice : 0);
   const marketContext: MarketContext = {
+    symbol,
     timeframe,
     interval: TIMEFRAME_TO_INTERVAL[timeframe],
     candles,
@@ -817,7 +893,7 @@ export async function POST(request: Request) {
           {
             role: "user",
             content: buildUserMessage({
-              objective: body.objective,
+              objective,
               dataMode,
               urls,
               manualNotes,
@@ -831,6 +907,9 @@ export async function POST(request: Request) {
                 chartNarrative: marketAnalytics.chartNarrative,
                 chartForecast: marketAnalytics.chartForecast,
               },
+              tavilySearch,
+              tavilyArticles,
+              pairSymbol: marketSupport.context.symbol,
             }),
           },
         ],
@@ -855,7 +934,7 @@ export async function POST(request: Request) {
     }
 
     const draft = parseModelPayload(content);
-    const payload = buildAgentPayload(draft, body.objective, timeframe, marketSupport);
+    const payload = buildAgentPayload(draft, objective, timeframe, marketSupport);
 
     return NextResponse.json(payload);
   } catch (error) {
@@ -876,7 +955,3 @@ export async function POST(request: Request) {
     clearTimeout(timeout);
   }
 }
-
-
-
-
