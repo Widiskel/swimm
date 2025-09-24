@@ -37,6 +37,17 @@ export type BinanceCandle = {
   closeTime: number;
 };
 
+type BinanceDepthResponse = {
+  lastUpdateId: number;
+  bids: [string, string][];
+  asks: [string, string][];
+};
+
+export type BinanceOrderBookSide = {
+  price: number;
+  quantity: number;
+};
+
 const withHeaders = () => {
   const headers = new Headers({ "Content-Type": "application/json" });
   const apiKey = process.env.BINANCE_API_KEY;
@@ -120,6 +131,42 @@ export const fetchBinanceMarketSummary = async (
   } catch (error) {
     console.error("Failed to fetch Binance market summary", error);
     return null;
+  }
+};
+
+export const fetchBinanceOrderBook = async (
+  symbol: string = DEFAULT_SYMBOL,
+  limit = 20
+): Promise<{ bids: BinanceOrderBookSide[]; asks: BinanceOrderBookSide[] }> => {
+  try {
+    const url = new URL("/api/v3/depth", BINANCE_REST_URL);
+    url.searchParams.set("symbol", symbol.toUpperCase());
+    url.searchParams.set("limit", String(limit));
+
+    const response = await fetch(url, {
+      method: "GET",
+      headers: withHeaders(),
+      cache: "no-store",
+    });
+
+    if (!response.ok) {
+      throw new Error(`Binance depth API responded with ${response.status}`);
+    }
+
+    const payload = (await response.json()) as BinanceDepthResponse;
+    const mapSide = (side: [string, string][]) =>
+      side.map(([price, qty]) => ({
+        price: Number.parseFloat(price),
+        quantity: Number.parseFloat(qty),
+      }));
+
+    return {
+      bids: mapSide(payload.bids),
+      asks: mapSide(payload.asks),
+    };
+  } catch (error) {
+    console.error("Failed to fetch Binance order book", error);
+    return { bids: [], asks: [] };
   }
 };
 

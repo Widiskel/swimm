@@ -22,6 +22,7 @@ type AgentRequest = {
   datasetName?: string;
   datasetPreview?: string;
   timeframe?: string;
+  pairSymbol?: string;
 };
 
 type AgentDecision = "buy" | "sell" | "hold";
@@ -78,18 +79,20 @@ const FIREWORKS_API_URL = "https://api.fireworks.ai/inference/v1/chat/completion
 const DEFAULT_FIREWORKS_MODEL =
   "accounts/sentientfoundation/models/dobby-unhinged-llama-3-3-70b-new";
 
-const ALLOWED_TIMEFRAMES = ["5m", "15m", "30m", "1h", "4h", "1d"] as const;
+const ALLOWED_TIMEFRAMES = ["1m", "5m", "15m", "1h", "4h", "1d"] as const;
 type Timeframe = (typeof ALLOWED_TIMEFRAMES)[number];
 const DEFAULT_TIMEFRAME: Timeframe = "5m";
 
 const TIMEFRAME_TO_INTERVAL: Record<Timeframe, string> = {
+  "1m": "1m",
   "5m": "5m",
   "15m": "15m",
-  "30m": "30m",
   "1h": "1h",
   "4h": "4h",
   "1d": "1d",
 };
+
+const ALLOWED_SYMBOLS = new Set(["BTCUSDT", "ETHUSDT", "SOLUSDT", "HYPEUSDT"]);
 
 const pickFallbackTimeframe = (objective: string) => {
   const lower = objective.toLowerCase();
@@ -817,6 +820,15 @@ export async function POST(request: Request) {
 
   const objective = body.objective.trim();
 
+  const requestedSymbol = body.pairSymbol?.toUpperCase() ?? process.env.BINANCE_SYMBOL ?? "BTCUSDT";
+  if (!ALLOWED_SYMBOLS.has(requestedSymbol)) {
+    return NextResponse.json(
+      { error: "Pair tidak didukung. Pilih salah satu dari BTCUSDT, ETHUSDT, SOLUSDT, HYPEUSDT." },
+      { status: 400 }
+    );
+  }
+  const symbol = requestedSymbol;
+
   const urls = Array.isArray(body.urls)
     ? body.urls.filter((url) => typeof url === "string" && url.trim().length > 0)
     : [];
@@ -844,13 +856,13 @@ export async function POST(request: Request) {
 
   const [[summaryData, candles], tavilySearch, tavilyArticles] = await Promise.all([
     Promise.all([
-      fetchBinanceMarketSummary("BTCUSDT"),
-      fetchBinanceCandles("BTCUSDT", TIMEFRAME_TO_INTERVAL[timeframe], 120),
+      fetchBinanceMarketSummary(symbol),
+      fetchBinanceCandles(symbol, TIMEFRAME_TO_INTERVAL[timeframe], 500),
     ]),
     tavilySearchPromise,
     tavilyExtractPromise,
   ]);
-  const symbol = summaryData?.symbol ?? process.env.BINANCE_SYMBOL ?? "BTCUSDT";
+  const resolvedSymbol = summaryData?.symbol ?? symbol;
   const marketSummary = formatBinanceSummary(summaryData);
   const marketAnalytics = buildMarketAnalytics(candles, timeframe);
   const resolvedLastPrice =
@@ -858,7 +870,7 @@ export async function POST(request: Request) {
       ? marketAnalytics.lastClose
       : undefined) ?? (summaryData?.lastPrice && summaryData.lastPrice > 0 ? summaryData.lastPrice : 0);
   const marketContext: MarketContext = {
-    symbol,
+    symbol: resolvedSymbol,
     timeframe,
     interval: TIMEFRAME_TO_INTERVAL[timeframe],
     candles,

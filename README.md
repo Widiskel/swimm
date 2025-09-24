@@ -6,13 +6,11 @@ Aplikasi dibangun menggunakan Next.js (App Router) + Tailwind dan terintegrasi d
 untuk pasangan BTC/USDT.
 
 ## Fitur utama
-- Input objektif analisa, daftar URL scraping, dataset kustom, dan catatan manual.
-- Agen AI berbasis Fireworks yang merangkum sentimen dan memberikan keputusan trading terstruktur.
-- Highlight temuan, confidence, timeframe, dan next steps siap eksekusi.
-- Pemilihan timeframe forecasting (5m sampai 1D) untuk menyesuaikan horizon analisa dan proyeksi harga.
-- Snapshot harga Binance BTC/USDT otomatis masuk ke prompt agen.
-- Integrasi Tavily opsional untuk pencarian berita dan ekstraksi konten agar konteks analisa lebih variatif.
-- UI gelap responsif dengan fokus pada alur riset trader.
+- Pilih trading pair (BTC/USDT, ETH/USDT, SOL/USDT) dan timeframe langsung dari antarmuka.
+- Chart candlestick Binance streaming lengkap dengan order book 10 level dan refresh otomatis.
+- Agen AI berbasis Fireworks + Tavily yang merangkum sentimen, headline, dan kondisi teknikal secara real-time.
+- Rencana trading siap eksekusi: zona entry, 5 target TP, stop loss, execution window, sizing, dan catatan pendukung.
+- UI gelap responsif dengan fokus pada pemantauan pasar dan pengambilan keputusan cepat.
 
 ## Prasyarat
 - Node.js 18+ dan npm.
@@ -46,12 +44,11 @@ Semua variabel hanya dibaca di sisi server (`/api/agent`), sehingga kredensial t
 npm install
 npm run dev
 ```
-Buka `http://localhost:3000` lalu masukkan objective + sumber data untuk mencoba agen.
+Buka `http://localhost:3000`, pilih trading pair, tentukan timeframe, klik **Tampilkan chart**, lalu tekan **Analys** untuk menjalankan agen.
 
 ## Alur backend
-- Endpoint server (`src/app/api/agent/route.ts`) mengirim prompt terstruktur ke Fireworks Chat Completions API.
-- Sebelum ke Fireworks, server mengambil snapshot harga Binance BTC/USDT (`src/lib/binance.ts`) dan memasukkannya
-  ke prompt sebagai konteks pasar real-time.
+- Endpoint server (`src/app/api/agent/route.ts`) mengirim prompt terstruktur ke Fireworks Chat Completions API dengan pair & timeframe yang dipilih pengguna.
+- API market (`src/app/api/market/route.ts`) menyediakan candlestick + order book Binance via helper di `src/lib/binance.ts`, digunakan chart klien.
 - Jika `TAVILY_API_KEY` tersedia, server memanggil Tavily untuk mencari berita relevan sekaligus mengekstrak konten URL, lalu menyuntikkannya ke prompt.
 - Model diwajibkan merespon dalam format JSON sesuai skema aplikasi, lalu respons dipost-proses untuk memastikan
   action, confidence (0-1), dan daftar highlight/next steps valid.
