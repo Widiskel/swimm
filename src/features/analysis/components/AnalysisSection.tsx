@@ -1,6 +1,12 @@
-"use client";
+﻿"use client";
 
-import { useEffect, useRef, useState, type MutableRefObject, type RefObject } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type MutableRefObject,
+  type RefObject,
+} from "react";
 import { motion } from "framer-motion";
 import {
   createChart,
@@ -11,6 +17,7 @@ import {
 } from "lightweight-charts";
 
 import type { AgentResponse } from "../types";
+import type { HistoryVerdict } from "@/providers/history-provider";
 import { useLanguage } from "@/providers/language-provider";
 import {
   buildIndicatorData,
@@ -48,6 +55,16 @@ type AnalysisSectionProps = {
   formattedPair: string;
   chartStartLabel: string;
   chartEndLabel: string;
+  canSaveReport: boolean;
+  isSessionSyncing: boolean;
+  saveVerdict: HistoryVerdict | null;
+  onVerdictChange: (verdict: HistoryVerdict) => void;
+  saveFeedback: string;
+  onFeedbackChange: (value: string) => void;
+  onSaveReport: () => void;
+  isSavingReport: boolean;
+  saveStatus: "idle" | "success" | "error";
+  saveError: string | null;
   sectionRef?: RefObject<HTMLElement> | MutableRefObject<HTMLElement | null> | null;
 };
 
@@ -70,11 +87,24 @@ export function AnalysisSection({
   formattedPair,
   chartStartLabel,
   chartEndLabel,
+  canSaveReport,
+  isSessionSyncing,
+  saveVerdict,
+  onVerdictChange,
+  saveFeedback,
+  onFeedbackChange,
+  onSaveReport,
+  isSavingReport,
+  saveStatus,
+  saveError,
   sectionRef,
 }: AnalysisSectionProps) {
   const { messages, __ } = useLanguage();
   const analysisCopy = messages.analysis;
   const fallbackCopy = messages.analysisFallback;
+  const saveCopy = analysisCopy.savePanel;
+  const historyEntryCopy = messages.history.entryCard;
+  const historySummaryCopy = messages.history.summaryRow;
 
   const summaryText = response?.summary?.trim().length
     ? response.summary
@@ -210,15 +240,52 @@ export function AnalysisSection({
   }
 
   const actionLabel = response.decision.action?.toUpperCase() ?? "HOLD";
-  const confidenceValue = Math.round((response.decision.confidence ?? 0) * 100);
-  const technicalList =
-    technicalLines.length > 0 ? technicalLines : [analysisCopy.technical.empty];
-  const fundamentalList =
-    fundamentalLines.length > 0
-      ? fundamentalLines
-      : [analysisCopy.fundamental.empty];
-  const supportiveList = supportiveHighlights;
-  const nextStepsList = nextStepLines;
+  const actionKey = actionLabel.toLowerCase();
+  const isHoldSignal = actionKey === "hold";
+
+  const verdictOptions: { key: HistoryVerdict; label: string; description: string }[] = [
+    {
+      key: "accurate",
+      label: saveCopy.verdictOptions.accurate.label,
+      description: saveCopy.verdictOptions.accurate.description,
+    },
+    {
+      key: "inaccurate",
+      label: saveCopy.verdictOptions.inaccurate.label,
+      description: saveCopy.verdictOptions.inaccurate.description,
+    },
+    {
+      key: "unknown",
+      label: saveCopy.verdictOptions.unknown.label,
+      description: saveCopy.verdictOptions.unknown.description,
+    },
+  ];
+
+  const showSavePanel = canSaveReport && !isHoldSignal;
+  const disableVerdictControls = !canSaveReport || isSessionSyncing;
+  const disableSaveButton =
+    !canSaveReport || !saveVerdict || isSessionSyncing || isSavingReport;
+  const showSaveSuccess = canSaveReport && saveStatus === "success";
+  const showSaveError = canSaveReport && saveStatus === "error" && Boolean(saveError);
+  const sessionHint = !canSaveReport
+    ? saveCopy.loginPrompt
+    : isSessionSyncing
+    ? saveCopy.syncing
+    : saveCopy.hint;
+
+  const readonlyVerdictKey: HistoryVerdict = (saveVerdict ?? "unknown") as HistoryVerdict;
+  const readonlyVerdictLabel =
+    historyEntryCopy.verdict[readonlyVerdictKey] ?? historySummaryCopy.noVerdict;
+  const readonlyVerdictClass =
+    readonlyVerdictKey === "accurate"
+      ? "border-[var(--swimm-up)]/40 bg-[var(--swimm-up)]/10 text-[var(--swimm-up)]"
+      : readonlyVerdictKey === "inaccurate"
+      ? "border-[var(--swimm-down)]/40 bg-[var(--swimm-down)]/10 text-[var(--swimm-down)]"
+      : "border-[var(--swimm-warn)]/40 bg-[var(--swimm-warn)]/10 text-[var(--swimm-warn)]";
+  const trimmedFeedback = saveFeedback.trim();
+  const readonlyFeedback = trimmedFeedback.length
+    ? trimmedFeedback
+    : historyEntryCopy.feedbackBlock.empty;
 
   return (
     <MotionSection
@@ -229,12 +296,11 @@ export function AnalysisSection({
       }}
       id="insights"
       className="rounded-3xl border border-[var(--swimm-neutral-300)] bg-white p-8"
-      initial={{ opacity: 0, y: 48 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, amount: 0.3 }}
-      transition={{ duration: 0.7, ease: "easeOut" }}
+      initial={{ opacity: 0, y: 24 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.6, ease: "easeOut" }}
     >
-      <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h3 className="text-xl font-semibold text-[var(--swimm-navy-900)]">
             {__("analysis.heading", {
@@ -242,75 +308,109 @@ export function AnalysisSection({
               timeframe: timeframe.toUpperCase(),
             })}
           </h3>
-          <p className="mt-1 text-sm text-[var(--swimm-neutral-500)]">
+          <p className="text-sm text-[var(--swimm-neutral-500)]">
             {__("analysis.confidence", {
-              value: confidenceValue,
+              value: Math.round((response.decision.confidence ?? 0) * 100),
               action: actionLabel,
             })}
           </p>
         </div>
       </div>
 
-      <div className="mt-8 grid gap-6 lg:grid-cols-[1.2fr_1fr]">
+      <div className="mt-8 space-y-6">
         <div className="rounded-3xl border border-[var(--swimm-neutral-300)] bg-white p-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--swimm-neutral-300)]">
-              {analysisCopy.summaryTitle}
+              {analysisCopy.snapshot.title}
             </div>
-            <span
-              className={`rounded-full border px-3 py-1 text-xs font-semibold uppercase ${
-                actionLabel === "BUY"
-                  ? "border-[var(--swimm-up)]/40 bg-[var(--swimm-up)]/10 text-[var(--swimm-up)]"
-                  : actionLabel === "SELL"
-                  ? "border-[var(--swimm-down)]/40 bg-[var(--swimm-down)]/10 text-[var(--swimm-down)]"
-                  : "border-[var(--swimm-warn)]/40 bg-[var(--swimm-warn)]/10 text-[var(--swimm-warn)]"
-              }`}
-            >
-              {actionLabel}
+            <div className="text-[11px] uppercase tracking-wide text-[var(--swimm-neutral-300)]">
+              Timeframe {timeframe.toUpperCase()}
+            </div>
+          </div>
+          <p className="mt-3 text-xs text-[var(--swimm-neutral-500)]">
+            {analysisCopy.snapshot.description}
+          </p>
+          <div className="relative mt-4 h-64 w-full overflow-hidden rounded-2xl border border-[var(--swimm-neutral-300)] bg-white">
+            <div ref={chartContainerRef} className="pointer-events-none h-full w-full" />
+            {!snapshotReady && (
+              <div className="absolute inset-0 flex items-center justify-center text-xs text-[var(--swimm-neutral-300)]">
+                {analysisCopy.snapshot.placeholder}
+              </div>
+            )}
+          </div>
+          <div className="mt-3 flex flex-wrap items-center gap-3 text-[11px] text-[var(--swimm-neutral-300)]">
+            <span className="rounded-full border border-[var(--swimm-primary-500)]/40 px-2 py-1 text-[var(--swimm-primary-700)]">
+              {analysisCopy.snapshot.legendEntry}
+            </span>
+            <span className="rounded-full border border-[var(--swimm-up)]/30 px-2 py-1 text-[var(--swimm-up)]">
+              {analysisCopy.snapshot.legendTarget}
+            </span>
+            <span className="rounded-full border border-[var(--swimm-down)]/30 px-2 py-1 text-[var(--swimm-down)]">
+              {analysisCopy.snapshot.legendStop}
             </span>
           </div>
-          <p className="mt-4 text-sm text-[var(--swimm-neutral-500)]">{summaryText}</p>
-          <p className="mt-4 rounded-xl border border-[var(--swimm-neutral-300)] bg-white px-4 py-3 text-xs text-[var(--swimm-neutral-500)]">
-            {rationaleText}
-          </p>
+        </div>
+      </div>
 
-          <div className="mt-6 rounded-2xl border border-[var(--swimm-neutral-300)] bg-white p-4">
+      <div className="mt-8 grid gap-6 lg:grid-cols-[1.2fr_1fr]">
+        <div className="space-y-6">
+          <div className="rounded-3xl border border-[var(--swimm-neutral-300)] bg-white p-6">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--swimm-neutral-300)]">
-                {analysisCopy.snapshot.title}
+                {analysisCopy.summaryTitle}
               </div>
-              <div className="text-[11px] uppercase tracking-wide text-[var(--swimm-neutral-300)]">
-                Timeframe {timeframe.toUpperCase()}
-              </div>
+              <span
+                className={`rounded-full border px-3 py-1 text-xs font-semibold uppercase ${
+                  actionLabel === "BUY"
+                    ? "border-[var(--swimm-up)]/40 bg-[var(--swimm-up)]/10 text-[var(--swimm-up)]"
+                    : actionLabel === "SELL"
+                    ? "border-[var(--swimm-down)]/40 bg-[var(--swimm-down)]/10 text-[var(--swimm-down)]"
+                    : "border-[var(--swimm-warn)]/40 bg-[var(--swimm-warn)]/10 text-[var(--swimm-warn)]"
+                }`}
+              >
+                {actionLabel}
+              </span>
             </div>
-            <p className="mt-3 text-xs text-[var(--swimm-neutral-500)]">
-              {analysisCopy.snapshot.description}
+            <p className="mt-4 text-sm text-[var(--swimm-neutral-500)]">{summaryText}</p>
+            <p className="mt-4 rounded-2xl border border-[var(--swimm-neutral-300)] bg-white px-4 py-3 text-xs text-[var(--swimm-neutral-500)]">
+              {rationaleText}
             </p>
-            <div className="relative mt-4 h-64 w-full overflow-hidden rounded-xl border border-[var(--swimm-neutral-300)] bg-white">
-              <div
-                ref={chartContainerRef}
-                className="pointer-events-none h-full w-full"
-              />
-              {!snapshotReady && (
-                <div className="absolute inset-0 flex items-center justify-center text-xs text-[var(--swimm-neutral-300)]">
-                  {analysisCopy.snapshot.placeholder}
-                </div>
+            <div className="mt-6">
+              <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--swimm-neutral-300)]">
+                {canSaveReport ? saveCopy.feedbackLabel : historyEntryCopy.feedbackBlock.title}
+              </div>
+              {canSaveReport ? (
+                <>
+                  <textarea
+                    id="analysis-save-feedback"
+                    value={saveFeedback}
+                    onChange={(event) => onFeedbackChange(event.target.value)}
+                    disabled={!canSaveReport}
+                    className="mt-2 h-28 w-full rounded-2xl border border-[var(--swimm-neutral-300)] bg-white px-4 py-3 text-sm text-[var(--swimm-neutral-500)] outline-none transition focus:border-[var(--swimm-primary-500)] focus:ring-2 focus:ring-[var(--swimm-primary-500)]/30 disabled:cursor-not-allowed disabled:bg-[var(--swimm-neutral-100)]"
+                    placeholder={saveCopy.feedbackPlaceholder}
+                    maxLength={2000}
+                  />
+                  <div className="mt-1 text-[11px] text-[var(--swimm-neutral-300)]">{saveCopy.feedbackHint}</div>
+                </>
+              ) : (
+                <>
+                  <p className="mt-2 whitespace-pre-line rounded-2xl border border-[var(--swimm-neutral-300)] bg-white px-4 py-3 text-sm text-[var(--swimm-neutral-500)]">
+                    {readonlyFeedback}
+                  </p>
+                  <div className={`mt-3 inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold ${readonlyVerdictClass}`}>
+                    {readonlyVerdictLabel}
+                  </div>
+                </>
               )}
-            </div>
-            <div className="mt-3 flex flex-wrap items-center gap-3 text-[11px] text-[var(--swimm-neutral-300)]">
-              <span className="rounded-full border border-[var(--swimm-primary-500)]/40 px-2 py-1 text-[var(--swimm-primary-700)]">
-                {analysisCopy.snapshot.legendEntry}
-              </span>
-              <span className="rounded-full border border-[var(--swimm-up)]/30 px-2 py-1 text-[var(--swimm-up)]">
-                {analysisCopy.snapshot.legendTarget}
-              </span>
-              <span className="rounded-full border border-[var(--swimm-down)]/30 px-2 py-1 text-[var(--swimm-down)]">
-                {analysisCopy.snapshot.legendStop}
-              </span>
+              {!canSaveReport && !isHoldSignal && saveVerdict === null ? (
+                <div className="mt-3 rounded-2xl border border-dashed border-[var(--swimm-neutral-300)] bg-[var(--swimm-neutral-50)] px-4 py-3 text-xs text-[var(--swimm-neutral-500)]">
+                  {saveCopy.loginPrompt}
+                </div>
+              ) : null}
             </div>
           </div>
 
-          <div className="mt-6 rounded-2xl border border-[var(--swimm-neutral-300)] bg-white p-4">
+          <div className="rounded-2xl border border-[var(--swimm-neutral-300)] bg-white p-4">
             <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--swimm-neutral-300)]">
               {analysisCopy.chartInsight.title}
             </div>
@@ -328,13 +428,13 @@ export function AnalysisSection({
             </div>
           </div>
 
-          <div className="mt-6 grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4 md:grid-cols-2">
             <div className="rounded-2xl border border-[var(--swimm-neutral-300)] bg-white p-4">
               <div className="text-xs font-semibold uppercase tracking-wide text-[var(--swimm-neutral-500)]">
                 {analysisCopy.technical.title}
               </div>
               <ul className="mt-3 space-y-2 text-xs text-[var(--swimm-neutral-500)]">
-                {technicalList.map((item) => (
+                {(technicalLines.length ? technicalLines : [analysisCopy.technical.empty]).map((item) => (
                   <li
                     key={item}
                     className="rounded-xl border border-[var(--swimm-neutral-300)] bg-white px-3 py-2"
@@ -349,7 +449,7 @@ export function AnalysisSection({
                 {analysisCopy.fundamental.title}
               </div>
               <ul className="mt-3 space-y-2 text-xs text-[var(--swimm-neutral-500)]">
-                {fundamentalList.map((item) => (
+                {(fundamentalLines.length ? fundamentalLines : [analysisCopy.fundamental.empty]).map((item) => (
                   <li
                     key={item}
                     className="rounded-xl border border-[var(--swimm-neutral-300)] bg-white px-3 py-2"
@@ -361,13 +461,13 @@ export function AnalysisSection({
             </div>
           </div>
 
-          {supportiveList.length > 0 && (
-            <div className="mt-6 rounded-2xl border border-[var(--swimm-neutral-300)] bg-white p-4">
+          {supportiveHighlights.length > 0 && (
+            <div className="rounded-2xl border border-[var(--swimm-neutral-300)] bg-white p-4">
               <div className="text-xs font-semibold uppercase tracking-wide text-[var(--swimm-neutral-500)]">
                 {analysisCopy.highlights.title}
               </div>
               <ul className="mt-3 space-y-2 text-xs text-[var(--swimm-neutral-500)]">
-                {supportiveList.map((highlight) => (
+                {supportiveHighlights.map((highlight) => (
                   <li
                     key={highlight}
                     className="rounded-xl border border-[var(--swimm-neutral-300)] bg-white px-3 py-2"
@@ -398,9 +498,7 @@ export function AnalysisSection({
                         className="flex items-center justify-between rounded-lg border border-[var(--swimm-neutral-300)] bg-white px-3 py-2"
                       >
                         <span>
-                          {entryZoneValues.length > 1
-                            ? `ENTRY ${index + 1}`
-                            : "ENTRY"}
+                          {entryZoneValues.length > 1 ? `ENTRY ${index + 1}` : "ENTRY"}
                         </span>
                         <span>{formatPrice(entry)}</span>
                       </li>
@@ -471,7 +569,7 @@ export function AnalysisSection({
               {analysisCopy.nextSteps.title}
             </div>
             <ul className="mt-4 space-y-3 text-sm text-[var(--swimm-neutral-500)]">
-              {nextStepsList.map((step) => (
+              {nextStepLines.map((step) => (
                 <li
                   key={step}
                   className="flex items-start gap-3 rounded-xl border border-[var(--swimm-neutral-300)] bg-[var(--swimm-neutral-100)] px-4 py-3"
@@ -482,6 +580,65 @@ export function AnalysisSection({
               ))}
             </ul>
           </div>
+
+          {showSavePanel ? (
+            <div className="rounded-3xl border border-[var(--swimm-neutral-300)] bg-white p-6">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--swimm-neutral-300)]">
+                    {saveCopy.title}
+                  </div>
+                  <p className="mt-3 text-sm text-[var(--swimm-neutral-500)]">{saveCopy.description}</p>
+                </div>
+                {showSaveSuccess ? (
+                  <span className="rounded-full border border-[var(--swimm-up)]/40 bg-[var(--swimm-up)]/10 px-3 py-1 text-xs font-semibold text-[var(--swimm-up)]">
+                    {saveCopy.successMessage}
+                  </span>
+                ) : null}
+              </div>
+              <div className="mt-6 space-y-6">
+                <div>
+                  <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--swimm-neutral-300)]">
+                    {saveCopy.verdictLabel}
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-3">
+                    {verdictOptions.map((option) => {
+                      const isActive = saveVerdict === option.key;
+                      const verdictClass = isActive
+                        ? "flex min-w-[11rem] flex-1 flex-col gap-1 rounded-2xl border border-[var(--swimm-primary-700)] bg-[var(--swimm-primary-500)]/10 px-4 py-3 text-left text-sm text-[var(--swimm-primary-700)]"
+                        : "flex min-w-[11rem] flex-1 flex-col gap-1 rounded-2xl border border-[var(--swimm-neutral-300)] bg-white px-4 py-3 text-left text-sm text-[var(--swimm-neutral-500)] transition hover:border-[var(--swimm-primary-500)] hover:text-[var(--swimm-primary-700)]";
+                      return (
+                        <button
+                          key={option.key}
+                          type="button"
+                          onClick={() => onVerdictChange(option.key)}
+                          disabled={disableVerdictControls}
+                          className={`${verdictClass} disabled:cursor-not-allowed disabled:border-[var(--swimm-neutral-200)] disabled:text-[var(--swimm-neutral-300)]`}
+                        >
+                          <span className="font-semibold">{option.label}</span>
+                          <span className="text-[11px] text-[var(--swimm-neutral-400)]">{option.description}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div className={`text-xs ${showSaveError ? "text-[var(--swimm-down)]" : "text-[var(--swimm-neutral-400)]"}`}>
+                    {showSaveError ? saveError ?? saveCopy.genericError : sessionHint}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={onSaveReport}
+                    disabled={disableSaveButton}
+                    className="inline-flex items-center justify-center rounded-full border border-[var(--swimm-primary-700)] bg-[var(--swimm-primary-500)]/15 px-5 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-[var(--swimm-primary-700)] transition hover:bg-[var(--swimm-primary-500)]/25 disabled:cursor-not-allowed disabled:border-[var(--swimm-neutral-300)] disabled:bg-[var(--swimm-neutral-200)]/60 disabled:text-[var(--swimm-neutral-400)]"
+                  >
+                    {isSavingReport ? saveCopy.savingButton : saveCopy.saveButton}
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
           <div className="rounded-3xl border border-[var(--swimm-neutral-300)] bg-white p-6 text-sm text-[var(--swimm-neutral-500)]">
             <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--swimm-neutral-300)]">
               {analysisCopy.integration.title}

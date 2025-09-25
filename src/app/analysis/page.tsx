@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
@@ -30,8 +30,9 @@ import {
 } from "@/features/market/constants";
 import type { CexProvider } from "@/features/market/exchanges";
 import type { IndicatorKey, OverlayLevel } from "@/features/market/types";
-import { useHistory } from "@/providers/history-provider";
+import { useHistory, type HistoryVerdict } from "@/providers/history-provider";
 import { useLanguage } from "@/providers/language-provider";
+import { useSession } from "@/providers/session-provider";
 
 const MotionLink = motion(Link);
 
@@ -51,8 +52,10 @@ const buildInitialIndicatorVisibility = () => {
 export default function AnalysisPage() {
   const { messages, languageTag, __, locale } = useLanguage();
   const analysisCopy = messages.analysisPage;
+  const savePanelCopy = messages.analysis.savePanel;
   const { ready, authenticated, login } = usePrivy();
-  const { addEntry } = useHistory();
+  const { saveEntry } = useHistory();
+  const { status: sessionStatus, isSyncing: isSessionSyncing } = useSession();
 
   const [provider, setProvider] = useState<CexProvider>(DEFAULT_PROVIDER);
   const [availablePairs, setAvailablePairs] = useState<TradingPair[]>([]);
@@ -65,6 +68,11 @@ export default function AnalysisPage() {
   const [response, setResponse] = useState<AgentResponse | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [saveVerdict, setSaveVerdict] = useState<HistoryVerdict | null>(null);
+  const [saveFeedback, setSaveFeedback] = useState("");
+  const [isSavingReport, setIsSavingReport] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<"idle" | "success" | "error">("idle");
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const liveMarketRef = useRef<LiveMarketHandle | null>(null);
   const chartSectionRef = useRef<HTMLElement | null>(null);
@@ -73,6 +81,7 @@ export default function AnalysisPage() {
     binance: DEFAULT_PAIR_SYMBOL,
     bybit: "BTCUSDT",
   });
+  const canPersistHistory = sessionStatus === "authenticated";
 
   useEffect(() => {
     let cancelled = false;
@@ -110,6 +119,22 @@ export default function AnalysisPage() {
       cancelled = true;
     };
   }, [locale, provider]);
+
+  useEffect(() => {
+    const isSavableSignal = (response?.decision?.action ?? "").toLowerCase() === "buy" || (response?.decision?.action ?? "").toLowerCase() === "sell";
+    if (!canPersistHistory) {
+      setSaveVerdict(null);
+      setSaveFeedback("");
+      setSaveStatus("idle");
+      setSaveError(null);
+      return;
+    }
+    if (!isSavableSignal) {
+      setSaveVerdict(null);
+      setSaveStatus("idle");
+      setSaveError(null);
+    }
+  }, [canPersistHistory, response?.decision?.action]);
 
   const providerLabel = useMemo(() => __("pairSelection.providerOptions." + provider), [__, provider]);
 
@@ -154,6 +179,10 @@ export default function AnalysisPage() {
   );
 
   const supportiveHighlights = useMemo(() => buildSupportiveHighlights(response), [response]);
+
+  const decisionAction = response?.decision?.action?.toLowerCase() ?? null;
+  const isSavableSignal = decisionAction === "buy" || decisionAction === "sell";
+  const canSaveHistory = canPersistHistory && isSavableSignal;
 
   const [chartStartLabel, chartEndLabel] = useMemo(() => {
     const points = response?.market?.chart?.points ?? [];
@@ -208,6 +237,51 @@ export default function AnalysisPage() {
     }));
   };
 
+  const handleSaveReport = async () => {
+    if (!response) {
+      return;
+    }
+    if (!isSavableSignal) {
+      setSaveStatus("error");
+      setSaveError(savePanelCopy.holdNotAllowed);
+      return;
+    }
+    if (!canPersistHistory) {
+      setSaveStatus("error");
+      setSaveError(savePanelCopy.loginRequired);
+      return;
+    }
+    if (!saveVerdict) {
+      setSaveStatus("error");
+      setSaveError(savePanelCopy.verdictRequired);
+      return;
+    }
+
+    setIsSavingReport(true);
+    setSaveError(null);
+
+    try {
+      await saveEntry({
+        pair: selectedPair,
+        timeframe,
+        provider,
+        response,
+        verdict: saveVerdict,
+        feedback: saveFeedback.trim() || undefined,
+      });
+      setSaveStatus("success");
+    } catch (saveException) {
+      const message =
+        saveException instanceof Error && saveException.message
+          ? saveException.message
+          : savePanelCopy.genericError;
+      setSaveStatus("error");
+      setSaveError(message);
+    } finally {
+      setIsSavingReport(false);
+    }
+  };
+
   const handleAnalyze = async () => {
     if (!latestCandles.length || !ready || !authenticated) {
       return;
@@ -250,7 +324,10 @@ export default function AnalysisPage() {
       const payload: AgentResponse = await res.json();
       setResponse(payload);
       setAnalysisCandles(latestCandles.slice(-180));
-      addEntry({ pair: selectedPair, timeframe, provider, response: payload });
+      setSaveVerdict(null);
+      setSaveFeedback("");
+      setSaveStatus("idle");
+      setSaveError(null);
       if (typeof window !== "undefined") {
         window.requestAnimationFrame(() => {
           analysisSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -330,14 +407,14 @@ export default function AnalysisPage() {
         <motion.section
           className="grid gap-8 lg:grid-cols-[1.2fr_1fr]"
           initial={{ opacity: 0, y: 50 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, amount: 0.3 }}
+          animate={{ opacity: 1, y: 0 }}
+          
           transition={{ duration: 0.65, ease: "easeOut" }}
         >
           <motion.div
             initial={{ opacity: 0, x: -40 }}
-            whileInView={{ opacity: 1, x: 0 }}
-            viewport={{ once: true, amount: 0.3 }}
+            animate={{ opacity: 1, x: 0 }}
+            
             transition={{ duration: 0.6, ease: "easeOut" }}
           >
             <HeroSection />
@@ -387,6 +464,16 @@ export default function AnalysisPage() {
           chartStartLabel={chartStartLabel}
           chartEndLabel={chartEndLabel}
           sectionRef={analysisSectionRef}
+          canSaveReport={canSaveHistory}
+          isSessionSyncing={isSessionSyncing}
+          saveVerdict={saveVerdict}
+          onVerdictChange={setSaveVerdict}
+          saveFeedback={saveFeedback}
+          onFeedbackChange={setSaveFeedback}
+          onSaveReport={handleSaveReport}
+          isSavingReport={isSavingReport}
+          saveStatus={saveStatus}
+          saveError={saveError}
         />
       </main>
     </div>

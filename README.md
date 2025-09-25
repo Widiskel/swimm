@@ -49,6 +49,7 @@ Buka `http://localhost:3000`, pilih trading pair, tentukan timeframe, klik **Tam
 ## Alur backend
 - Endpoint server (`src/app/api/agent/route.ts`) mengirim prompt terstruktur ke Fireworks Chat Completions API dengan pair & timeframe yang dipilih pengguna.
 - API market (`src/app/api/market/route.ts`) menyediakan candlestick + order book Binance via helper di `src/lib/binance.ts`, digunakan chart klien.
+- Endpoint sesi (`src/app/api/session/route.ts`) menyiapkan cookie HttpOnly dan dokumen Mongo agar server mengenal pengguna; `/api/history` menangani simpan/ambil riwayat lengkap dengan verdict serta feedback.
 - Jika `TAVILY_API_KEY` tersedia, server memanggil Tavily untuk mencari berita relevan sekaligus mengekstrak konten URL, lalu menyuntikkannya ke prompt.
 - Model diwajibkan merespon dalam format JSON sesuai skema aplikasi, lalu respons dipost-proses untuk memastikan
   action, confidence (0-1), dan daftar highlight/next steps valid.

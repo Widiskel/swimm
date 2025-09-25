@@ -1,4 +1,4 @@
-const id = {
+﻿const id = {
   common: {
     close: "Tutup",
   },
@@ -122,7 +122,7 @@ const id = {
   },
   analysis: {
     heading: "Analisa agent untuk {pair} ({timeframe})",
-    confidence: "Confidence {value}% · Aksi {action}",
+    confidence: "Kepercayaan {value}% - Aksi {action}",
     summaryTitle: "Ringkasan Agent",
     snapshot: {
       title: "Chart snapshot",
@@ -172,6 +172,38 @@ const id = {
       body2:
         "Otomatiskan eksekusi order di exchange pilihan setelah rekomendasi tervalidasi.",
     },
+    savePanel: {
+      title: "Arsipkan analisa ini",
+      description: "Catat hasilnya dan simpan output agen ke riwayat akun Anda.",
+      verdictLabel: "Hasil prediksi",
+      verdictOptions: {
+        accurate: {
+          label: "Akurat",
+          description: "Harga mengikuti rencana dan level.",
+        },
+        inaccurate: {
+          label: "Melenceng",
+          description: "Harga menembus atau menolak skenario.",
+        },
+        unknown: {
+          label: "Belum pasti",
+          description: "Masih menunggu konfirmasi pergerakan harga.",
+        },
+      },
+      feedbackLabel: "Catatan feedback",
+      feedbackPlaceholder: "Tambahkan konteks mengapa trade berhasil atau tidak...",
+      holdNotAllowed: "Sinyal hold tidak dapat disimpan. Simpan hanya rencana buy atau sell.",
+      feedbackHint: "Feedback membantu memperkaya ringkasan berikutnya dan journaling Anda.",
+      saveButton: "Simpan ke riwayat",
+      savingButton: "Menyimpan...",
+      successMessage: "Laporan tersimpan di riwayat Anda.",
+      loginPrompt: "Masuk untuk menyimpan analisa ke akun SWIMM Anda.",
+      loginRequired: "Masuk untuk menyimpan analisa ke akun SWIMM Anda.",
+      syncing: "Menyiapkan sesi aman Anda...",
+      verdictRequired: "Pilih hasil prediksi sebelum menyimpan.",
+      genericError: "Gagal menyimpan laporan. Coba lagi.",
+      hint: "Riwayat tersimpan privat bersama verdict dan feedback Anda.",
+    },
   },
   analysisFallback: {
     summary:
@@ -208,33 +240,103 @@ const id = {
     protectedBadge: "Area Terproteksi",
     signInHeading: "Masuk untuk melihat riwayat analisa Anda",
     signInDescription:
-      "Simpan dan bandingkan setiap output agen untuk mengevaluasi konsistensi strategi. Riwayat tersimpan secara lokal di perangkat ini.",
+      "Simpan dan bandingkan setiap output agen di akun SWIMM Anda. Riwayat terhubung dengan sesi autentikasi.",
     signInButton: "Masuk",
     title: "Riwayat analisa",
     subtitle:
-      "Riwayat tersimpan di perangkat ini. Hapus saat ingin memulai dari awal.",
+      "Riwayat tersimpan di cloud bersama verdict dan feedback sehingga bisa ditinjau kapan saja.",
     clearButton: "Bersihkan riwayat",
+    loading: "Memuat riwayat analisa...",
     metrics: {
       totalAnalyses: "Total analisa",
       buySignals: "Sinyal buy",
-      sellHoldSignals: "Sinyal sell / hold",
+      sellSignals: "Sinyal sell",
+      holdSignals: "Sinyal hold",
     },
     empty: {
       title: "Belum ada analisa tersimpan",
       descriptionPrefix: "Jalankan agen di halaman ",
       linkText: "Analisis",
-      descriptionSuffix: " untuk menyimpan rekomendasi terbaru Anda.",
+      descriptionSuffix: " untuk menyimpan rekomendasi terbaru.",
     },
     entryCard: {
-      confidence: "Keyakinan",
+      confidence: "Kepercayaan",
       planTimeframe: "Timeframe rencana",
-      openInDashboard: "Buka di halaman analisa",
+      openInDashboard: "Buka di analisa",
       entries: "Entry",
       takeProfits: "Take profit",
       stopLoss: "Stop loss",
       sizingNotes: "Catatan sizing",
       noSizingNotes: "Tidak ada catatan sizing",
       provider: "Provider",
+      tradePlanTitle: "Rekap rencana trading",
+      noSignal: "TIDAK ADA SINYAL",
+      verdict: {
+        accurate: "Akurat",
+        inaccurate: "Melenceng",
+        unknown: "Menunggu",
+      },
+      decision: {
+        title: "Ringkasan keputusan",
+        action: "Aksi",
+        timeframe: "Timeframe rencana",
+        confidence: "Kepercayaan",
+        noConfidence: "Kepercayaan tidak tersedia",
+      },
+      agentSummary: {
+        title: "Narasi agen",
+        rationale: "Rasional",
+        forecast: "Prakiraan",
+        noRationale: "Tidak ada rasional yang dibagikan.",
+        noForecast: "Tidak ada prakiraan yang dibagikan.",
+        noSummary: "Tidak ada ringkasan narasi.",
+      },
+      highlights: {
+        title: "Highlight utama",
+        empty: "Tidak ada highlight yang tercatat.",
+        nextTitle: "Pengingat eksekusi",
+        nextEmpty: "Tidak ada langkah lanjutan.",
+      },
+      feedbackBlock: {
+        title: "Feedback user",
+        empty: "Belum ada feedback untuk laporan ini.",
+      },
+    },
+    dayGroup: {
+      title: "Analisa tanggal {date}",
+      totals: {
+        analyses: "Analisa",
+        buy: "Buy",
+        sell: "Sell",
+        hold: "Hold",
+      },
+      toggle: {
+        show: "Tampilkan detail",
+        hide: "Sembunyikan detail",
+      },
+    },
+    filters: {
+      searchPlaceholder: "Cari pair, timeframe, atau ringkasan...",
+      decisionLabel: "Keputusan",
+      verdictLabel: "Verdict",
+      pairLabel: "Pair",
+      allOption: "Semua",
+      decisionOptions: {
+        buy: "Buy",
+        sell: "Sell",
+        hold: "Hold",
+      },
+      verdictOptions: {
+        accurate: "Akurat",
+        inaccurate: "Melenceng",
+        unknown: "Menunggu",
+      },
+    },
+    summaryRow: {
+      entry: "{pair} � {timeframe}",
+      format: "{decision} -> {verdict}",
+      noDecision: "Tidak ada keputusan",
+      noVerdict: "Tidak ada verdict",
     },
   },
   language: {

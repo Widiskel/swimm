@@ -4,6 +4,7 @@ import "./globals.css";
 import { PrivyAuthProvider } from "@/providers/privy-provider";
 import { LanguageProvider } from "@/providers/language-provider";
 import { HistoryProvider } from "@/providers/history-provider";
+import { SessionProvider } from "@/providers/session-provider";
 import { AOSInitializer } from "@/components/AOSInitializer";
 
 const geistSans = Geist({
@@ -32,11 +33,14 @@ export default function RootLayout({
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         <AOSInitializer />
         <PrivyAuthProvider>
-          <LanguageProvider>
-            <HistoryProvider>{children}</HistoryProvider>
-          </LanguageProvider>
+          <SessionProvider>
+            <LanguageProvider>
+              <HistoryProvider>{children}</HistoryProvider>
+            </LanguageProvider>
+          </SessionProvider>
         </PrivyAuthProvider>
       </body>
     </html>
   );
 }
+

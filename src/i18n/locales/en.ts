@@ -1,4 +1,4 @@
-const en = {
+﻿const en = {
   common: {
     close: "Close",
   },
@@ -119,7 +119,7 @@ const en = {
   },
   analysis: {
     heading: "Agent analysis for {pair} ({timeframe})",
-    confidence: "Confidence {value}% · Action {action}",
+    confidence: "Confidence {value}% - Action {action}",
     summaryTitle: "Agent Summary",
     snapshot: {
       title: "Chart snapshot",
@@ -168,7 +168,69 @@ const en = {
         "Connect your own scraping endpoints, on-chain feeds, or favorite LLM providers (OpenAI, Claude, etc.) through the /api/agent route.",
       body2: "Automate order execution on your preferred exchange once you validate the recommendations.",
     },
-  },
+     savePanel: {
+
+      title: "Archive this analysis",
+
+      description: "Log the outcome and store the full agent output in your history.",
+
+      verdictLabel: "Prediction outcome",
+
+      verdictOptions: {
+
+        accurate: {
+
+          label: "Accurate",
+
+          description: "Price respected the plan and levels.",
+
+        },
+
+        inaccurate: {
+
+          label: "Missed",
+
+          description: "Price invalidated the thesis or levels.",
+
+        },
+
+        unknown: {
+
+          label: "Too early",
+
+          description: "Still waiting on price action to confirm.",
+
+        },
+
+      },
+
+      feedbackLabel: "Feedback notes",
+
+      feedbackPlaceholder: "Add context on why the trade worked or what you observed...",
+
+      holdNotAllowed: "Hold signals cannot be saved. Save only actionable buy or sell plans.",
+
+      feedbackHint: "Feedback helps refine future summaries and keeps your journal detailed.",
+
+      saveButton: "Save to history",
+
+      savingButton: "Saving...",
+
+      successMessage: "Report stored in your history.",
+
+      loginPrompt: "Sign in to save analyses to your SWIMM account.",
+
+      syncing: "Preparing your secure session...",
+
+      verdictRequired: "Select how the prediction performed before saving.",
+
+      genericError: "Unable to save the report. Try again.",
+
+      hint: "Entries are stored privately with your verdict and feedback.",
+
+    },
+
+ },
   analysisFallback: {
     summary: "Analysis could not be generated. Please rerun the agent with richer data.",
     rationale: "The model did not provide a rationale. Add more objective details for the next attempt.",
@@ -201,16 +263,18 @@ const en = {
     protectedBadge: "Protected Area",
     signInHeading: "Sign in to view your analysis history",
     signInDescription:
-      "Store and compare every agent output to evaluate strategy consistency. History is saved locally on this device.",
+      "Store and compare every agent output in your SWIMM account. History is tied to your authenticated session.",
     signInButton: "Sign in",
     title: "Analysis history",
     subtitle:
-      "History lives locally on this device. Clear it whenever you want to start fresh.",
+      "Saved analyses live in the cloud with your verdict and feedback so you can review them anywhere.",
     clearButton: "Clear history",
+    loading: "Loading saved analyses...",
     metrics: {
       totalAnalyses: "Total analyses",
       buySignals: "Buy signals",
-      sellHoldSignals: "Sell / hold signals",
+      sellSignals: "Sell signals",
+      holdSignals: "Hold signals",
     },
     empty: {
       title: "No analyses saved yet",
@@ -228,6 +292,74 @@ const en = {
       sizingNotes: "Sizing notes",
       noSizingNotes: "No sizing notes",
       provider: "Provider",
+      tradePlanTitle: "Trade plan recap",
+      noSignal: "NO SIGNAL",
+      verdict: {
+        accurate: "Accurate",
+        inaccurate: "Missed",
+        unknown: "Pending",
+      },
+      decision: {
+        title: "Decision snapshot",
+        action: "Action",
+        timeframe: "Plan timeframe",
+        confidence: "Confidence",
+        noConfidence: "Confidence unavailable",
+      },
+      agentSummary: {
+        title: "Agent narrative",
+        rationale: "Rationale",
+        forecast: "Forecast",
+        noRationale: "No rationale shared.",
+        noForecast: "No forecast provided.",
+        noSummary: "No narrative summary provided.",
+      },
+      highlights: {
+        title: "Key highlights",
+        empty: "No highlights captured.",
+        nextTitle: "Execution reminders",
+        nextEmpty: "No next steps recorded.",
+      },
+      feedbackBlock: {
+        title: "User feedback",
+        empty: "No feedback left for this report.",
+      },
+    },
+    dayGroup: {
+      title: "Analyses on {date}",
+      totals: {
+        analyses: "Analyses",
+        buy: "Buy",
+        sell: "Sell",
+        hold: "Hold",
+      },
+      toggle: {
+        show: "Show details",
+        hide: "Hide details",
+      },
+    },
+    filters: {
+      searchPlaceholder: "Search pair, timeframe, summary...",
+      decisionLabel: "Decision",
+      verdictLabel: "Verdict",
+      pairLabel: "Pair",
+      allOption: "All",
+      decisionOptions: {
+        buy: "Buy",
+        sell: "Sell",
+        hold: "Hold",
+      },
+      verdictOptions: {
+        accurate: "Accurate",
+        inaccurate: "Missed",
+        unknown: "Pending",
+      },
+    },
+    summaryRow: {
+      entry: "{pair} � {timeframe}",
+      format: "{decision} -> {verdict}",
+      noDecision: "No decision",
+      noVerdict: "No verdict",
     },
   },
   language: {

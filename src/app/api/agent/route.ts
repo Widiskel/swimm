@@ -4,6 +4,7 @@ import {
   fetchBinanceCandles,
   fetchBinanceMarketSummary,
   formatBinanceSummary,
+  isPairTradable,
   type BinanceCandle,
 } from "@/features/market/exchanges/binance";
 import {
@@ -19,6 +20,8 @@ import {
   type TavilyExtractedArticle,
   type TavilySearchData,
 } from "@/lib/tavily";
+import { getMongoDb } from "@/lib/mongodb";
+import { getSessionFromCookie } from "@/lib/session";
 import { isLocale, type Locale } from "@/i18n/messages";
 
 type DataMode = "scrape" | "upload" | "manual";
@@ -198,6 +201,122 @@ const calculateVolatility = (values: number[]) => {
     values.reduce((acc, value) => acc + (value - mean) ** 2, 0) / (values.length - 1);
   return Math.sqrt(variance);
 };
+
+const HISTORY_COLLECTION = "agent_history";
+const HISTORY_SAMPLE_LIMIT = 8;
+type HistoryVerdict = "accurate" | "inaccurate" | "unknown";
+type HistoryDocument = {
+  userId: string;
+  pair: string;
+  timeframe: string;
+  provider: string;
+  decision: AgentResponse["decision"] | null;
+  summary: string;
+  response: AgentResponse;
+  verdict: HistoryVerdict;
+  feedback?: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+const buildHistoryInsightsForPrompt = async (
+  userId: string,
+  pair: string,
+  timeframe: Timeframe,
+  locale: Locale
+) => {
+  try {
+    const db = await getMongoDb();
+    const collection = db.collection<HistoryDocument>(HISTORY_COLLECTION);
+    const match = {
+      userId,
+      pair,
+      $or: [
+        { "decision.action": "buy" },
+        { "decision.action": "sell" },
+        { "response.decision.action": "buy" },
+        { "response.decision.action": "sell" },
+      ],
+    } as const;
+
+    const docs = await collection
+      .find(match)
+      .sort({ createdAt: -1 })
+      .limit(HISTORY_SAMPLE_LIMIT)
+      .toArray();
+
+    if (!docs.length) {
+      return null;
+    }
+
+    const normalizedPair = formatPairLabel(pair);
+    const isId = locale === "id";
+    const dateFormatter = new Intl.DateTimeFormat(locale === "id" ? "id-ID" : "en-US", {
+      year: "numeric",
+      month: "short",
+      day: "2-digit",
+    });
+
+    const buyCount = docs.filter((doc) => doc.decision?.action?.toLowerCase() === "buy" || doc.response.decision?.action?.toLowerCase() === "buy").length;
+    const sellCount = docs.filter((doc) => doc.decision?.action?.toLowerCase() === "sell" || doc.response.decision?.action?.toLowerCase() === "sell").length;
+    const verdictCounts = docs.reduce(
+      (acc, doc) => {
+        acc[doc.verdict] += 1;
+        return acc;
+      },
+      { accurate: 0, inaccurate: 0, unknown: 0 } as Record<HistoryVerdict, number>
+    );
+    const observed = verdictCounts.accurate + verdictCounts.inaccurate;
+    const successRate = observed > 0 ? Math.round((verdictCounts.accurate / observed) * 100) : null;
+
+    const summaryLines = [
+      isId
+        ? `Total riwayat tersimpan: ${docs.length} (Buy: ${buyCount} | Sell: ${sellCount})`
+        : `Saved plans: ${docs.length} (Buy: ${buyCount} | Sell: ${sellCount})`,
+      isId
+        ? `Verdict ? Akurat: ${verdictCounts.accurate}, Missed: ${verdictCounts.inaccurate}, Pending: ${verdictCounts.unknown}`
+        : `Verdicts ? Accurate: ${verdictCounts.accurate}, Missed: ${verdictCounts.inaccurate}, Pending: ${verdictCounts.unknown}`,
+      isId
+        ? `Rasio keberhasilan: ${successRate !== null ? `${successRate}%` : "Belum cukup data"}`
+        : `Success rate: ${successRate !== null ? `${successRate}%` : "Not enough data"}`,
+    ];
+
+    const verdictLabel = (value: HistoryVerdict) => {
+      switch (value) {
+        case "accurate":
+          return isId ? "Akurat" : "Accurate";
+        case "inaccurate":
+          return isId ? "Missed" : "Missed";
+        default:
+          return isId ? "Pending" : "Pending";
+      }
+    };
+
+    const entryLines = docs.map((doc) => {
+      const action = (doc.decision?.action ?? doc.response.decision?.action ?? "").toUpperCase() || "-";
+      const createdAt = doc.createdAt instanceof Date ? doc.createdAt : new Date(doc.createdAt);
+      const dateLabel = Number.isNaN(createdAt.getTime()) ? "-" : dateFormatter.format(createdAt);
+      const tf = doc.timeframe?.toUpperCase() ?? "-";
+      const verdict = verdictLabel(doc.verdict);
+      const feedbackSnippet = doc.feedback?.trim()
+        ? excerpt(doc.feedback.trim(), 140)
+        : isId
+        ? "(tanpa catatan)"
+        : "(no feedback)";
+      return `- ${dateLabel} | ${action} | TF ${tf} | ${verdict} | ${feedbackSnippet}`;
+    });
+
+    const header = isId
+      ? `Riwayat personal (${normalizedPair}, ${timeframe.toUpperCase()})`
+      : `Personal history (${normalizedPair}, ${timeframe.toUpperCase()})`;
+
+    return [header, ...summaryLines, "", ...(entryLines.slice(0, HISTORY_SAMPLE_LIMIT))].join("\n");
+  } catch (error) {
+    console.error("Failed to build history insights", error);
+    return null;
+  }
+};
+
 
 const sanitizeChartPoints = (value: unknown): ChartPoint[] => {
   if (!Array.isArray(value)) {
@@ -622,6 +741,7 @@ const buildUserMessage = (
     datasetPreview: string;
     marketSummary: string;
     timeframe: Timeframe;
+    historyInsights?: string | null;
     marketAnalytics: {
       promptSeries: string;
       technical: string[];
@@ -646,6 +766,7 @@ const buildUserMessage = (
     tavilyResults: isId ? "(Tidak ada hasil pencarian Tavily)" : "(No Tavily search results)",
     tavilyArticles: isId ? "(Tidak ada konten Tavily yang diekstrak)" : "(No Tavily article extracts)",
     promptSeries: isId ? "(Data candle tidak tersedia)" : "(No candle data)",
+    history: isId ? "(Belum ada riwayat pengguna untuk pair ini)" : "(No personal history saved for this pair)",
     unknownDataset: isId ? "Tidak diketahui" : "Unknown",
     datasetPreviewLabel: isId ? "Isi (dipangkas)" : "Content (truncated)",
   } as const;
@@ -665,6 +786,10 @@ const buildUserMessage = (
         params.datasetName ?? placeholders.unknownDataset
       }\n${placeholders.datasetPreviewLabel}:\n${excerpt(params.datasetPreview, 2000)}`
     : placeholders.dataset;
+
+  const historyBlock = params.historyInsights?.trim().length
+    ? params.historyInsights
+    : placeholders.history;
 
   const manualBlock = params.manualNotes
     ? excerpt(params.manualNotes, 1600)
@@ -726,6 +851,7 @@ const buildUserMessage = (
     urls: isId ? "Daftar URL berita" : "News URLs",
     manual: isId ? "Catatan manual" : "Manual notes",
     dataset: isId ? "Dataset kustom" : "Custom dataset",
+    history: isId ? "Riwayat pengguna" : "User history",
     pair: isId ? "Pair yang dianalisis" : "Pair under analysis",
     timeframe: isId ? "Timeframe target" : "Target timeframe",
     summary: isId
@@ -770,6 +896,9 @@ const buildUserMessage = (
     "",
     `${labels.dataset}:`,
     datasetBlock,
+    "",
+    `${labels.history}:`,
+    historyBlock,
     "",
     `${labels.pair}: ${formattedPair} (${params.pairSymbol})`,
     `${labels.timeframe}: ${params.timeframe.toUpperCase()}`,
@@ -1258,9 +1387,21 @@ export async function POST(request: Request) {
     typeof body.locale === "string" && isLocale(body.locale) ? body.locale : "en";
   const objective = body.objective.trim();
 
+  const session = await getSessionFromCookie();
+
   const requestedSymbol = body.pairSymbol?.toUpperCase() ?? process.env.BINANCE_SYMBOL ?? "BTCUSDT";
   const providerParam = typeof body.provider === "string" ? body.provider.toLowerCase() : DEFAULT_PROVIDER;
   const provider: CexProvider = isCexProvider(providerParam) ? providerParam : DEFAULT_PROVIDER;
+
+  const isSupportedSymbol = await isPairTradable(requestedSymbol);
+  if (!isSupportedSymbol) {
+    return NextResponse.json(
+      {
+        error: "Symbol tidak didukung oleh sumber data Binance.",
+      },
+      { status: 400 }
+    );
+  }
 
   const symbol = requestedSymbol;
 
@@ -1271,6 +1412,10 @@ export async function POST(request: Request) {
   const datasetPreview = body.datasetPreview?.trim() ?? "";
   const dataMode = body.dataMode ?? "scrape";
   const timeframe = normalizeTimeframe(body.timeframe);
+
+  const historyInsightsPromise = session
+    ? buildHistoryInsightsForPrompt(session.userId, symbol, timeframe, locale)
+    : Promise.resolve(null);
 
   const tavilySearchPromise: Promise<TavilySearchData | null> =
     objective.length > 0
@@ -1289,7 +1434,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const [[summaryData, candles], tavilySearch, tavilyArticles] = await Promise.all([
+  const [[summaryData, candles], tavilySearch, tavilyArticles, historyInsights] = await Promise.all([
     (provider === "bybit"
       ? Promise.all([
           fetchBybitMarketSummary(symbol),
@@ -1301,6 +1446,7 @@ export async function POST(request: Request) {
         ])),
     tavilySearchPromise,
     tavilyExtractPromise,
+    historyInsightsPromise,
   ]);
   const resolvedSymbol = summaryData?.symbol ?? symbol;
   const marketSummary =
@@ -1359,6 +1505,7 @@ export async function POST(request: Request) {
               datasetPreview,
               marketSummary,
               timeframe,
+              historyInsights,
               marketAnalytics: {
                 promptSeries: marketAnalytics.promptSeries,
                 technical: marketAnalytics.technical,
@@ -1413,3 +1560,5 @@ export async function POST(request: Request) {
     clearTimeout(timeout);
   }
 }
+
+

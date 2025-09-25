@@ -1,45 +1,153 @@
-"use client";
+﻿"use client";
 
-import Image from "next/image";
 import Link from "next/link";
-import { useMemo } from "react";
-import { motion } from "framer-motion";
+import { useEffect, useMemo, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 
 import { SiteHeader } from "@/components/SiteHeader";
-import { useHistory } from "@/providers/history-provider";
+import { useHistory, type HistoryEntry, type HistoryVerdict } from "@/providers/history-provider";
 import { useLanguage } from "@/providers/language-provider";
-import { PROVIDER_ICON_MAP } from "@/features/market/constants";
+import { HistoryEntryAnalysis } from "@/features/history/components/HistoryEntryAnalysis";
 
-const formatDate = (value: string, languageTag: string) => {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-  return new Intl.DateTimeFormat(languageTag, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(date);
+type DayGroup = {
+  key: string;
+  label: string;
+  entries: HistoryEntry[];
+  totals: {
+    total: number;
+    buy: number;
+    sell: number;
+  };
 };
 
 export default function HistoryPage() {
   const { ready, authenticated, login } = usePrivy();
-  const { entries, clearEntries } = useHistory();
-  const { messages, languageTag, __ } = useLanguage();
+  const { entries, clearEntries, isLoading, error } = useHistory();
+  const { messages, languageTag } = useLanguage();
   const historyCopy = messages.history;
 
+  type DecisionFilter = "all" | "buy" | "sell";
+  type VerdictFilter = "all" | HistoryVerdict;
+
+  const [searchQuery, setSearchQuery] = useState("");
+  const [decisionFilter, setDecisionFilter] = useState<DecisionFilter>("all");
+  const [verdictFilter, setVerdictFilter] = useState<VerdictFilter>("all");
+  const [pairFilter, setPairFilter] = useState<string>("all");
+  const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
+
+  const pairOptions = useMemo(() => {
+    const unique = new Set<string>();
+    entries.forEach((entry) => {
+      if (entry.pair) {
+        unique.add(entry.pair);
+      }
+    });
+    return Array.from(unique).sort();
+  }, [entries]);
+
+  const filteredEntries = useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLowerCase();
+    return entries.filter((entry) => {
+      if (pairFilter !== "all" && entry.pair !== pairFilter) {
+        return false;
+      }
+      if (decisionFilter !== "all") {
+        const action = (entry.decision?.action ?? entry.response.decision?.action ?? "").toLowerCase();
+        if (action !== decisionFilter) {
+          return false;
+        }
+      }
+      if (verdictFilter !== "all") {
+        const verdict = entry.verdict ?? "unknown";
+        if (verdict !== verdictFilter) {
+          return false;
+        }
+      }
+      if (!normalizedQuery) {
+        return true;
+      }
+      const haystack = [
+        entry.pair,
+        entry.timeframe,
+        entry.summary,
+        entry.feedback,
+        entry.response.tradePlan.rationale,
+        entry.response.market?.chart?.forecast,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(normalizedQuery);
+    });
+  }, [entries, searchQuery, decisionFilter, verdictFilter, pairFilter]);
+
+  useEffect(() => {
+    if (selectedEntryId && !filteredEntries.some((entry) => entry.id === selectedEntryId)) {
+      setSelectedEntryId(null);
+    }
+  }, [filteredEntries, selectedEntryId]);
+
   const totalBuy = useMemo(
-    () => entries.filter((item) => item.decision?.action === "buy").length,
-    [entries]
+    () => filteredEntries.filter((item) => item.decision?.action === "buy").length,
+    [filteredEntries]
   );
   const totalSell = useMemo(
-    () => entries.filter((item) => item.decision?.action === "sell").length,
-    [entries]
+    () => filteredEntries.filter((item) => item.decision?.action === "sell").length,
+    [filteredEntries]
   );
-  const totalHold = useMemo(
-    () => entries.filter((item) => item.decision?.action === "hold").length,
-    [entries]
-  );
+  const groupedDays = useMemo(() => {
+    const keyFormatter = new Intl.DateTimeFormat("en-CA", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    });
+    const labelFormatter = new Intl.DateTimeFormat(languageTag, {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    });
+
+    const map = new Map<string, DayGroup>();
+
+    for (const entry of filteredEntries) {
+      const created = new Date(entry.createdAt);
+      if (Number.isNaN(created.getTime())) {
+        continue;
+      }
+      const key = keyFormatter.format(created);
+      const label = labelFormatter.format(created);
+      if (!map.has(key)) {
+        map.set(key, {
+          key,
+          label,
+          entries: [],
+          totals: { total: 0, buy: 0, sell: 0 },
+        });
+      }
+      const group = map.get(key)!;
+      group.entries.push(entry);
+      group.totals.total += 1;
+      const action = entry.decision?.action ?? entry.response.decision?.action ?? null;
+      if (action === "buy") {
+        group.totals.buy += 1;
+      } else if (action === "sell") {
+        group.totals.sell += 1;
+      }
+    }
+
+    const result = Array.from(map.values()).sort((a, b) => (a.key < b.key ? 1 : -1));
+    result.forEach((group) => {
+      group.entries.sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+    });
+    return result;
+  }, [filteredEntries, languageTag]);
+
+  const handleSelectEntry = (entryId: string) => {
+    setSelectedEntryId((prev) => (prev === entryId ? null : entryId));
+  };
 
   if (!ready) {
     return (
@@ -66,16 +174,13 @@ export default function HistoryPage() {
           <p className="max-w-2xl text-base text-[var(--swimm-neutral-500)]">
             {historyCopy.signInDescription}
           </p>
-          <motion.button
+          <button
             type="button"
             onClick={() => login?.()}
-            className="rounded-full border border-[var(--swimm-primary-500)] bg-[var(--swimm-primary-500)] px-6 py-2 text-sm font-semibold text-[var(--swimm-navy-900)] shadow-[var(--swimm-glow)]"
-            whileHover={{ y: -3 }}
-            whileTap={{ scale: 0.97 }}
-            transition={{ type: "spring", stiffness: 240, damping: 18 }}
+            className="rounded-full border border-[var(--swimm-primary-500)] bg-[var(--swimm-primary-500)] px-6 py-2 text-sm font-semibold text-[var(--swimm-navy-900)] shadow-[var(--swimm-glow)] transition hover:-translate-y-0.5"
           >
             {historyCopy.signInButton}
-          </motion.button>
+          </button>
         </main>
       </div>
     );
@@ -84,7 +189,7 @@ export default function HistoryPage() {
   const metrics = [
     {
       label: historyCopy.metrics.totalAnalyses,
-      value: entries.length,
+      value: filteredEntries.length,
       className: "text-[var(--swimm-navy-900)]",
     },
     {
@@ -93,61 +198,186 @@ export default function HistoryPage() {
       className: "text-[var(--swimm-up)]",
     },
     {
-      label: historyCopy.metrics.sellHoldSignals,
-      value: totalSell + totalHold,
-      className: "text-[var(--swimm-warn)]",
+      label: historyCopy.metrics.sellSignals,
+      value: totalSell,
+      className: "text-[var(--swimm-down)]",
     },
   ];
+
+  const renderMetricValue = (value: number) =>
+    value.toLocaleString(languageTag, { maximumFractionDigits: 0 });
+
+  const decisionOptions = [
+    { value: "all" as DecisionFilter, label: historyCopy.filters.allOption },
+    { value: "buy" as DecisionFilter, label: historyCopy.filters.decisionOptions.buy },
+    { value: "sell" as DecisionFilter, label: historyCopy.filters.decisionOptions.sell },
+  ];
+
+  const verdictOptions = [
+    { value: "all" as VerdictFilter, label: historyCopy.filters.allOption },
+    { value: "accurate" as VerdictFilter, label: historyCopy.filters.verdictOptions.accurate },
+    { value: "inaccurate" as VerdictFilter, label: historyCopy.filters.verdictOptions.inaccurate },
+    { value: "unknown" as VerdictFilter, label: historyCopy.filters.verdictOptions.unknown },
+  ];
+
+  const renderSummaryRow = (entry: HistoryEntry) => {
+    const decision = entry.decision?.action ?? entry.response.decision?.action ?? "";
+    const decisionKey = decision.toLowerCase();
+    const decisionLabel = decision ? decision.toUpperCase() : historyCopy.summaryRow.noDecision;
+    const verdictKey = (entry.verdict ?? "unknown") as keyof typeof historyCopy.entryCard.verdict;
+    const verdictLabel = historyCopy.entryCard.verdict[verdictKey] ?? historyCopy.summaryRow.noVerdict;
+    const summaryText = historyCopy.summaryRow.format
+      .replace("{decision}", decisionLabel)
+      .replace("{verdict}", verdictLabel);
+    const entryLabel = historyCopy.summaryRow.entry
+      .replace("{pair}", entry.pair)
+      .replace("{timeframe}", entry.timeframe.toUpperCase());
+    const isActive = selectedEntryId === entry.id;
+
+    const decisionBadgeClass: Record<string, string> = {
+      buy: "border-[var(--swimm-up)] bg-[var(--swimm-up)]/10 text-[var(--swimm-up)]",
+      sell: "border-[var(--swimm-down)] bg-[var(--swimm-down)]/10 text-[var(--swimm-down)]",
+    };
+
+    const verdictBadgeClass: Record<string, string> = {
+      accurate: "border-[var(--swimm-up)] bg-[var(--swimm-up)]/10 text-[var(--swimm-up)]",
+      inaccurate: "border-[var(--swimm-down)] bg-[var(--swimm-down)]/10 text-[var(--swimm-down)]",
+      unknown: "border-[var(--swimm-neutral-300)] bg-[var(--swimm-neutral-100)] text-[var(--swimm-neutral-500)]",
+    };
+
+    return (
+      <li key={entry.id} className="rounded-2xl border border-[var(--swimm-neutral-300)] bg-[var(--swimm-neutral-100)]">
+        <button
+          type="button"
+          onClick={() => handleSelectEntry(entry.id)}
+          className={`flex w-full flex-col gap-3 px-4 py-4 text-left transition hover:bg-white ${
+            isActive ? "border-l-4 border-[var(--swimm-primary-500)] bg-white" : ""
+          }`}
+        >
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <span
+              className={`inline-flex items-center justify-center rounded-2xl border px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] ${
+                decisionBadgeClass[decisionKey] ?? "border-[var(--swimm-neutral-300)] bg-white text-[var(--swimm-neutral-500)]"
+              }`}
+            >
+              {decisionLabel}
+            </span>
+            <span
+              className={`inline-flex min-w-[8rem] items-center justify-center rounded-2xl border px-5 py-2 text-sm font-semibold uppercase tracking-[0.25em] ${
+                verdictBadgeClass[verdictKey] ?? verdictBadgeClass.unknown
+              }`}
+            >
+              {verdictLabel}
+            </span>
+          </div>
+          <div className="flex flex-col gap-1">
+            <span className="text-sm font-semibold text-[var(--swimm-navy-900)]">{entryLabel}</span>
+            <span className="text-xs text-[var(--swimm-neutral-500)]">{summaryText}</span>
+          </div>
+        </button>
+        {isActive ? (
+          <div className="border-t border-[var(--swimm-neutral-200)] bg-white px-4 py-4">
+            <HistoryEntryAnalysis entry={entry} languageTag={languageTag} />
+          </div>
+        ) : null}
+      </li>
+    );
+  };
 
   return (
     <div className="min-h-screen bg-[var(--swimm-bg)] text-[var(--swimm-text)]">
       <SiteHeader />
 
-      <main className="mx-auto max-w-6xl px-6 py-12">
-        <motion.div
-          className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"
-          initial={{ opacity: 0, y: 30 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, amount: 0.3 }}
-          transition={{ duration: 0.6, ease: "easeOut" }}
-        >
+      <main className="mx-auto max-w-6xl px-6 py-12 space-y-8">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h2 className="text-3xl font-semibold text-[var(--swimm-navy-900)]">
               {historyCopy.title}
             </h2>
             <p className="mt-2 text-sm text-[var(--swimm-neutral-500)]">{historyCopy.subtitle}</p>
           </div>
-          <motion.button
+          <button
             type="button"
             onClick={clearEntries}
-            disabled={entries.length === 0}
-            className="self-start rounded-full border border-[var(--swimm-down)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-[var(--swimm-down)]"
-            whileHover={{ y: -3 }}
-            whileTap={{ scale: 0.97 }}
-            transition={{ type: "spring", stiffness: 240, damping: 18 }}
+            disabled={entries.length === 0 || isLoading}
+            className="self-start rounded-full border border-[var(--swimm-down)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-[var(--swimm-down)] transition hover:-translate-y-0.5 disabled:opacity-40"
           >
             {historyCopy.clearButton}
-          </motion.button>
-        </motion.div>
+          </button>
+        </div>
 
-        <div className="mt-10 grid gap-6 lg:grid-cols-3">
-          {metrics.map((metric, index) => (
+        {error ? (
+          <div className="rounded-2xl border border-[var(--swimm-down)] bg-[var(--swimm-down)]/10 px-4 py-3 text-sm text-[var(--swimm-down)]">
+            {error}
+          </div>
+        ) : null}
+
+        <div className="grid gap-4 lg:grid-cols-[1.5fr_repeat(3,minmax(0,1fr))]">
+          <input
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            type="search"
+            placeholder={historyCopy.filters.searchPlaceholder}
+            className="h-10 rounded-full border border-[var(--swimm-neutral-300)] bg-white px-4 text-sm text-[var(--swimm-neutral-600)] outline-none transition focus:border-[var(--swimm-primary-500)] focus:ring-2 focus:ring-[var(--swimm-primary-500)]/30"
+          />
+          <select
+            value={pairFilter}
+            onChange={(event) => setPairFilter(event.target.value)}
+            className="h-10 rounded-full border border-[var(--swimm-neutral-300)] bg-white px-4 text-sm text-[var(--swimm-neutral-600)] outline-none transition focus:border-[var(--swimm-primary-500)] focus:ring-2 focus:ring-[var(--swimm-primary-500)]/30"
+          >
+            <option value="all">{historyCopy.filters.allOption}</option>
+            {pairOptions.map((pair) => (
+              <option key={pair} value={pair}>
+                {pair}
+              </option>
+            ))}
+          </select>
+          <select
+            value={decisionFilter}
+            onChange={(event) => setDecisionFilter(event.target.value as DecisionFilter)}
+            className="h-10 rounded-full border border-[var(--swimm-neutral-300)] bg-white px-4 text-sm text-[var(--swimm-neutral-600)] outline-none transition focus:border-[var(--swimm-primary-500)] focus:ring-2 focus:ring-[var(--swimm-primary-500)]/30"
+          >
+            {decisionOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <select
+            value={verdictFilter}
+            onChange={(event) => setVerdictFilter(event.target.value as VerdictFilter)}
+            className="h-10 rounded-full border border-[var(--swimm-neutral-300)] bg-white px-4 text-sm text-[var(--swimm-neutral-600)] outline-none transition focus:border-[var(--swimm-primary-500)] focus:ring-2 focus:ring-[var(--swimm-primary-500)]/30"
+          >
+            {verdictOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+          {metrics.map((metric) => (
             <div
               key={metric.label}
-              className="rounded-2xl border border-[var(--swimm-neutral-300)] bg-white p-6 shadow-sm"
-              data-aos="fade-up"
-              data-aos-delay={index * 120}
+              className="rounded-3xl border border-[var(--swimm-neutral-300)] bg-white p-6 shadow-sm shadow-[var(--swimm-neutral-300)]/40"
             >
-              <p className="text-sm text-[var(--swimm-neutral-500)]">{metric.label}</p>
-              <p className={`mt-2 text-3xl font-semibold ${metric.className}`}>
-                {metric.value}
+              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--swimm-neutral-300)]">
+                {metric.label}
+              </p>
+              <p className={`mt-3 text-3xl font-semibold ${metric.className}`}>
+                {renderMetricValue(metric.value)}
               </p>
             </div>
           ))}
         </div>
 
-        {entries.length === 0 ? (
-          <div className="mt-12 rounded-2xl border border-dashed border-[var(--swimm-neutral-300)] bg-[var(--swimm-neutral-100)] p-10 text-center">
+        {isLoading && entries.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-[var(--swimm-neutral-300)] bg-[var(--swimm-neutral-100)] p-10 text-center text-sm text-[var(--swimm-neutral-500)]">
+            {historyCopy.loading}
+          </div>
+        ) : groupedDays.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-[var(--swimm-neutral-300)] bg-[var(--swimm-neutral-100)] p-10 text-center">
             <h3 className="text-xl font-semibold text-[var(--swimm-navy-900)]">
               {historyCopy.empty.title}
             </h3>
@@ -163,121 +393,47 @@ export default function HistoryPage() {
             </p>
           </div>
         ) : (
-          <div className="mt-12 space-y-6">
-            {entries.map((entry) => {
-              const providerLabel = __("pairSelection.providerOptions." + entry.provider);
-              const entryValues = (entry.response.tradePlan.entries ?? []).length
-                ? entry.response.tradePlan.entries ?? []
-                : [entry.response.tradePlan.entry];
-              const takeProfits = entry.response.tradePlan.takeProfits ?? [];
-
-              return (
-                <motion.article
-                  key={entry.id}
-                  className="rounded-3xl border border-[var(--swimm-neutral-300)] bg-white p-6 shadow-lg shadow-[var(--swimm-glow)]"
-                  initial={{ opacity: 0, y: 40 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true, amount: 0.2 }}
-                  transition={{ duration: 0.55, ease: "easeOut" }}
-                >
-                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <p className="flex items-center gap-2 text-xs uppercase tracking-[0.3em] text-[var(--swimm-neutral-300)]">
-                        <span>{entry.pair} · {entry.timeframe}</span>
-                        <span className="flex items-center gap-1 rounded-full border border-[var(--swimm-neutral-300)] bg-white px-2 py-1">
-                          <Image
-                            src={PROVIDER_ICON_MAP[entry.provider]}
-                            alt={providerLabel}
-                            width={16}
-                            height={16}
-                            className="h-4 w-4"
-                          />
-                          <span className="sr-only">{providerLabel}</span>
+          <div className="space-y-6">
+            {groupedDays.map((day) => (
+              <section
+                key={day.key}
+                className="rounded-3xl border border-[var(--swimm-neutral-300)] bg-white p-6 shadow-sm shadow-[var(--swimm-neutral-300)]/30"
+              >
+                <header className="flex flex-col gap-3 border-b border-[var(--swimm-neutral-200)] pb-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--swimm-neutral-300)]">
+                      {historyCopy.dayGroup.title.replace("{date}", day.label)}
+                    </p>
+                    <div className="mt-2 grid gap-2 text-sm text-[var(--swimm-neutral-500)] sm:grid-cols-2 lg:grid-cols-4">
+                      <span>
+                        <span className="font-semibold text-[var(--swimm-navy-900)]">
+                          {renderMetricValue(day.totals.total)}
                         </span>
-                      </p>
-                      <h4 className="mt-1 text-lg font-semibold text-[var(--swimm-navy-900)]">
-                        {entry.decision?.action?.toUpperCase() ?? "NO SIGNAL"} -
                         {" "}
-                        {formatDate(entry.createdAt, languageTag)}
-                      </h4>
-                      <p className="mt-2 text-sm text-[var(--swimm-neutral-500)] line-clamp-3">
-                        {entry.summary}
-                      </p>
-                    </div>
-                    <div className="flex flex-col items-start gap-2 text-sm text-[var(--swimm-neutral-500)] sm:items-end">
-                      <span>
-                        {historyCopy.entryCard.confidence}: {(entry.decision?.confidence ?? 0).toLocaleString(
-                          languageTag,
-                          {
-                            style: "percent",
-                            minimumFractionDigits: 0,
-                            maximumFractionDigits: 0,
-                          }
-                        )}
-                      </span>
-                      <span className="flex items-center gap-2">
-                        <Image
-                          src={PROVIDER_ICON_MAP[entry.provider]}
-                          alt={providerLabel}
-                          width={16}
-                          height={16}
-                          className="h-4 w-4"
-                        />
-                        <span className="sr-only">{providerLabel}</span>
+                        {historyCopy.dayGroup.totals.analyses}
                       </span>
                       <span>
-                        {historyCopy.entryCard.planTimeframe}: {entry.decision?.timeframe ?? entry.timeframe}
+                        <span className="font-semibold text-[var(--swimm-up)]">
+                          {renderMetricValue(day.totals.buy)}
+                        </span>
+                        {" "}
+                        {historyCopy.dayGroup.totals.buy}
                       </span>
-                      <Link
-                        href={{ pathname: "/analysis", query: { fromHistory: entry.id } }}
-                        className="rounded-full border border-[var(--swimm-primary-700)] px-4 py-1.5 text-xs font-medium text-[var(--swimm-primary-700)] transition hover:bg-[var(--swimm-primary-700)] hover:text-white"
-                      >
-                        {historyCopy.entryCard.openInDashboard}
-                      </Link>
+                      <span>
+                        <span className="font-semibold text-[var(--swimm-down)]">
+                          {renderMetricValue(day.totals.sell)}
+                        </span>
+                        {" "}
+                        {historyCopy.dayGroup.totals.sell}
+                      </span>
                     </div>
                   </div>
-                  <div className="mt-4 grid gap-4 rounded-2xl border border-[var(--swimm-neutral-300)] bg-[var(--swimm-neutral-100)] p-4 text-xs text-[var(--swimm-neutral-500)] sm:grid-cols-2">
-                    <div>
-                      <h5 className="text-[10px] font-semibold uppercase tracking-[0.3em] text-[var(--swimm-neutral-300)]">
-                        {historyCopy.entryCard.entries}
-                      </h5>
-                      <p className="mt-1 text-sm text-[var(--swimm-navy-900)]">
-                        {entryValues
-                          .filter((value): value is number => typeof value === "number")
-                          .map((value) => value.toFixed(2))
-                          .join(" | ") || "-"}
-                      </p>
-                    </div>
-                    <div>
-                      <h5 className="text-[10px] font-semibold uppercase tracking-[0.3em] text-[var(--swimm-neutral-300)]">
-                        {historyCopy.entryCard.takeProfits}
-                      </h5>
-                      <p className="mt-1 text-sm text-[var(--swimm-navy-900)]">
-                        {takeProfits.map((value) => value.toFixed(2)).join(" | ") || "-"}
-                      </p>
-                    </div>
-                    <div>
-                      <h5 className="text-[10px] font-semibold uppercase tracking-[0.3em] text-[var(--swimm-neutral-300)]">
-                        {historyCopy.entryCard.stopLoss}
-                      </h5>
-                      <p className="mt-1 text-sm text-[var(--swimm-navy-900)]">
-                        {typeof entry.response.tradePlan.stopLoss === "number"
-                          ? entry.response.tradePlan.stopLoss.toFixed(2)
-                          : "-"}
-                      </p>
-                    </div>
-                    <div>
-                      <h5 className="text-[10px] font-semibold uppercase tracking-[0.3em] text-[var(--swimm-neutral-300)]">
-                        {historyCopy.entryCard.sizingNotes}
-                      </h5>
-                      <p className="mt-1 text-sm text-[var(--swimm-neutral-500)]">
-                        {entry.response.tradePlan.sizingNotes || historyCopy.entryCard.noSizingNotes}
-                      </p>
-                    </div>
-                  </div>
-                </motion.article>
-              );
-            })}
+                </header>
+                <ul className="mt-4 space-y-3">
+                  {day.entries.map((entry) => renderSummaryRow(entry))}
+                </ul>
+              </section>
+            ))}
           </div>
         )}
       </main>
