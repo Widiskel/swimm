@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useMemo } from "react";
 import { motion } from "framer-motion";
@@ -8,6 +9,7 @@ import { usePrivy } from "@privy-io/react-auth";
 import { SiteHeader } from "@/components/SiteHeader";
 import { useHistory } from "@/providers/history-provider";
 import { useLanguage } from "@/providers/language-provider";
+import { PROVIDER_ICON_MAP } from "@/features/market/constants";
 
 const formatDate = (value: string, languageTag: string) => {
   const date = new Date(value);
@@ -23,7 +25,7 @@ const formatDate = (value: string, languageTag: string) => {
 export default function HistoryPage() {
   const { ready, authenticated, login } = usePrivy();
   const { entries, clearEntries } = useHistory();
-  const { messages, languageTag } = useLanguage();
+  const { messages, languageTag, __ } = useLanguage();
   const historyCopy = messages.history;
 
   const totalBuy = useMemo(
@@ -163,6 +165,7 @@ export default function HistoryPage() {
         ) : (
           <div className="mt-12 space-y-6">
             {entries.map((entry) => {
+              const providerLabel = __("pairSelection.providerOptions." + entry.provider);
               const entryValues = (entry.response.tradePlan.entries ?? []).length
                 ? entry.response.tradePlan.entries ?? []
                 : [entry.response.tradePlan.entry];
@@ -179,8 +182,18 @@ export default function HistoryPage() {
                 >
                   <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div>
-                      <p className="text-xs uppercase tracking-[0.3em] text-[var(--swimm-neutral-300)]">
-                        {entry.pair} - {entry.timeframe}
+                      <p className="flex items-center gap-2 text-xs uppercase tracking-[0.3em] text-[var(--swimm-neutral-300)]">
+                        <span>{entry.pair} · {entry.timeframe}</span>
+                        <span className="flex items-center gap-1 rounded-full border border-[var(--swimm-neutral-300)] bg-white px-2 py-1">
+                          <Image
+                            src={PROVIDER_ICON_MAP[entry.provider]}
+                            alt={providerLabel}
+                            width={16}
+                            height={16}
+                            className="h-4 w-4"
+                          />
+                          <span className="sr-only">{providerLabel}</span>
+                        </span>
                       </p>
                       <h4 className="mt-1 text-lg font-semibold text-[var(--swimm-navy-900)]">
                         {entry.decision?.action?.toUpperCase() ?? "NO SIGNAL"} -
@@ -201,6 +214,16 @@ export default function HistoryPage() {
                             maximumFractionDigits: 0,
                           }
                         )}
+                      </span>
+                      <span className="flex items-center gap-2">
+                        <Image
+                          src={PROVIDER_ICON_MAP[entry.provider]}
+                          alt={providerLabel}
+                          width={16}
+                          height={16}
+                          className="h-4 w-4"
+                        />
+                        <span className="sr-only">{providerLabel}</span>
                       </span>
                       <span>
                         {historyCopy.entryCard.planTimeframe}: {entry.decision?.timeframe ?? entry.timeframe}

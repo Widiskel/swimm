@@ -5,7 +5,14 @@ import {
   fetchBinanceMarketSummary,
   formatBinanceSummary,
   type BinanceCandle,
-} from "@/lib/binance";
+} from "@/features/market/exchanges/binance";
+import {
+  fetchBybitCandles,
+  fetchBybitMarketSummary,
+  formatBybitSummary,
+  mapTimeframeToBybitIntervalSymbol,
+} from "@/features/market/exchanges/bybit";
+import { DEFAULT_PROVIDER, isCexProvider, type CexProvider } from "@/features/market/exchanges";
 import {
   fetchTavilyExtract,
   fetchTavilySearch,
@@ -24,6 +31,7 @@ type AgentRequest = {
   datasetPreview?: string;
   timeframe?: string;
   pairSymbol?: string;
+  provider?: string;
 };
 
 type AgentDecision = "buy" | "sell" | "hold";
@@ -84,7 +92,7 @@ const ALLOWED_TIMEFRAMES = ["1m", "5m", "15m", "1h", "4h", "1d"] as const;
 type Timeframe = (typeof ALLOWED_TIMEFRAMES)[number];
 const DEFAULT_TIMEFRAME: Timeframe = "5m";
 
-const TIMEFRAME_TO_INTERVAL: Record<Timeframe, string> = {
+const BINANCE_INTERVAL_MAP: Record<Timeframe, string> = {
   "1m": "1m",
   "5m": "5m",
   "15m": "15m",
@@ -1080,6 +1088,9 @@ export async function POST(request: Request) {
       { status: 400 }
     );
   }
+  const providerParam = typeof body.provider === "string" ? body.provider.toLowerCase() : DEFAULT_PROVIDER;
+  const provider: CexProvider = isCexProvider(providerParam) ? providerParam : DEFAULT_PROVIDER;
+
   const symbol = requestedSymbol;
 
   const urls = Array.isArray(body.urls)
@@ -1108,15 +1119,20 @@ export async function POST(request: Request) {
   }
 
   const [[summaryData, candles], tavilySearch, tavilyArticles] = await Promise.all([
-    Promise.all([
-      fetchBinanceMarketSummary(symbol),
-      fetchBinanceCandles(symbol, TIMEFRAME_TO_INTERVAL[timeframe], 500),
-    ]),
+    (provider === "bybit"
+      ? Promise.all([
+          fetchBybitMarketSummary(symbol),
+          fetchBybitCandles(symbol, timeframe, 500),
+        ])
+      : Promise.all([
+          fetchBinanceMarketSummary(symbol),
+          fetchBinanceCandles(symbol, BINANCE_INTERVAL_MAP[timeframe], 500),
+        ])),
     tavilySearchPromise,
     tavilyExtractPromise,
   ]);
   const resolvedSymbol = summaryData?.symbol ?? symbol;
-  const marketSummary = formatBinanceSummary(summaryData);
+  const marketSummary = provider === "bybit" ? formatBybitSummary(summaryData) : formatBinanceSummary(summaryData);
   const marketAnalytics = buildMarketAnalytics(candles, timeframe);
   const resolvedLastPrice =
     (typeof marketAnalytics.lastClose === "number" && marketAnalytics.lastClose > 0
@@ -1125,7 +1141,10 @@ export async function POST(request: Request) {
   const marketContext: MarketContext = {
     symbol: resolvedSymbol,
     timeframe,
-    interval: TIMEFRAME_TO_INTERVAL[timeframe],
+    interval:
+      provider === "bybit"
+        ? mapTimeframeToBybitIntervalSymbol(timeframe)
+        : BINANCE_INTERVAL_MAP[timeframe],
     candles,
     lastPrice: resolvedLastPrice,
   };

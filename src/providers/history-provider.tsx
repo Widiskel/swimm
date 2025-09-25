@@ -2,12 +2,14 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type { AgentResponse } from "@/features/analysis/types";
+import { DEFAULT_PROVIDER, type CexProvider } from "@/features/market/exchanges";
 
 type HistoryEntry = {
   id: string;
   createdAt: string;
   pair: string;
   timeframe: string;
+  provider: CexProvider;
   decision: AgentResponse["decision"] | null;
   summary: string;
   response: AgentResponse;
@@ -15,7 +17,12 @@ type HistoryEntry = {
 
 type HistoryContextValue = {
   entries: HistoryEntry[];
-  addEntry: (payload: { pair: string; timeframe: string; response: AgentResponse }) => void;
+  addEntry: (payload: {
+    pair: string;
+    timeframe: string;
+    provider: CexProvider;
+    response: AgentResponse;
+  }) => void;
   clearEntries: () => void;
 };
 
@@ -36,7 +43,10 @@ const loadInitialHistory = (): HistoryEntry[] => {
     if (!Array.isArray(parsed)) {
       return [];
     }
-    return parsed;
+    return parsed.map((entry) => ({
+      ...entry,
+      provider: entry.provider ?? DEFAULT_PROVIDER,
+    }));
   } catch (error) {
     console.warn("Gagal membaca riwayat analisa", error);
     return [];
@@ -51,13 +61,24 @@ export function HistoryProvider({ children }: { children: React.ReactNode }) {
   }, [entries]);
 
   const addEntry = useCallback(
-    ({ pair, timeframe, response }: { pair: string; timeframe: string; response: AgentResponse }) => {
+    ({
+      pair,
+      timeframe,
+      provider,
+      response,
+    }: {
+      pair: string;
+      timeframe: string;
+      provider: CexProvider;
+      response: AgentResponse;
+    }) => {
       setEntries((prev) => {
         const entry: HistoryEntry = {
           id: crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`,
           createdAt: new Date().toISOString(),
           pair,
           timeframe,
+          provider,
           decision: response.decision ?? null,
           summary: response.summary,
           response,

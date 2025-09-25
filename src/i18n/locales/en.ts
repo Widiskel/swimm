@@ -48,6 +48,12 @@ const en = {
     description:
       "Pick a pair, then click \"Show chart\" to stream candlesticks. Timeframe can be adjusted inside the chart card.",
     selectLabel: "Trading pair",
+    providerLabel: "CEX provider",
+    providerHint: "Choose the exchange to source prices and order data",
+    providerOptions: {
+      binance: "Binance",
+      bybit: "Bybit",
+    },
     button: "Show chart",
     loading: "Loading pairs...",
     empty: "No pairs available",
@@ -60,6 +66,7 @@ const en = {
   live: {
     card: {
       title: "Live chart",
+      providerBadge: "Sourced from {provider}",
       indicatorsTitle: "Indicators",
       indicatorHint: "Indicator overlays are visible on the chart",
       hoverPrompt: "Hover over a candlestick",
@@ -80,7 +87,7 @@ const en = {
       bids: "Bids",
       asks: "Asks",
     },
-    analysisNote: "Analysis will use {pair} with timeframe {timeframe}.",
+    analysisNote: "Analysis will use {pair} from {provider} with timeframe {timeframe}.",
     analyzeButton: "Analyze",
     analyzingButton: "Analyzing...",
   },
@@ -194,6 +201,7 @@ const en = {
       stopLoss: "Stop loss",
       sizingNotes: "Sizing notes",
       noSizingNotes: "No sizing notes",
+      provider: "Provider",
     },
   },
   language: {

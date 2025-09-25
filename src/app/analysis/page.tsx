@@ -22,7 +22,13 @@ import type { AgentResponse, DataMode } from "@/features/analysis/types";
 import { HeroSection } from "@/features/market/components/HeroSection";
 import { LiveMarketSection, type LiveMarketHandle } from "@/features/market/components/LiveMarketSection";
 import { PairSelectionCard } from "@/features/market/components/PairSelectionCard";
-import { DEFAULT_PAIR_SYMBOL, INDICATOR_CONFIG, TIMEFRAME_OPTIONS } from "@/features/market/constants";
+import {
+  DEFAULT_PAIR_SYMBOL,
+  INDICATOR_CONFIG,
+  TIMEFRAME_OPTIONS,
+  DEFAULT_PROVIDER,
+} from "@/features/market/constants";
+import type { CexProvider } from "@/features/market/exchanges";
 import type { IndicatorKey, OverlayLevel } from "@/features/market/types";
 import { useHistory } from "@/providers/history-provider";
 import { useLanguage } from "@/providers/language-provider";
@@ -43,11 +49,12 @@ const buildInitialIndicatorVisibility = () => {
 };
 
 export default function AnalysisPage() {
-  const { messages, languageTag } = useLanguage();
+  const { messages, languageTag, __ } = useLanguage();
   const analysisCopy = messages.analysisPage;
   const { ready, authenticated, login } = usePrivy();
   const { addEntry } = useHistory();
 
+  const [provider, setProvider] = useState<CexProvider>(DEFAULT_PROVIDER);
   const [availablePairs, setAvailablePairs] = useState<TradingPair[]>([]);
   const [isLoadingPairs, setIsLoadingPairs] = useState(false);
   const [selectedPair, setSelectedPair] = useState<string>(DEFAULT_PAIR_SYMBOL);
@@ -62,13 +69,17 @@ export default function AnalysisPage() {
   const liveMarketRef = useRef<LiveMarketHandle | null>(null);
   const chartSectionRef = useRef<HTMLElement | null>(null);
   const analysisSectionRef = useRef<HTMLElement | null>(null);
+  const lastPairByProviderRef = useRef<Record<CexProvider, string>>({
+    binance: DEFAULT_PAIR_SYMBOL,
+    bybit: "BTCUSDT",
+  });
 
   useEffect(() => {
     let cancelled = false;
     const loadPairs = async () => {
       setIsLoadingPairs(true);
       try {
-        const res = await fetch("/api/symbols");
+        const res = await fetch(`/api/symbols?provider=${provider}`);
         if (!res.ok) {
           throw new Error(`Failed to load symbols: ${res.status}`);
         }
@@ -77,11 +88,16 @@ export default function AnalysisPage() {
         if (!cancelled) {
           setAvailablePairs(pairs);
           if (pairs.length > 0) {
-            setSelectedPair((prev) => (pairs.some((item) => item.symbol === prev) ? prev : pairs[0].symbol));
+            const preferred = lastPairByProviderRef.current[provider];
+            const nextSymbol = pairs.some((item) => item.symbol === preferred)
+              ? preferred
+              : pairs[0].symbol;
+            lastPairByProviderRef.current[provider] = nextSymbol;
+            setSelectedPair(nextSymbol);
           }
         }
       } catch (error) {
-        console.error("Failed to fetch Binance pairs", error);
+        console.error("Failed to fetch tradable pairs", error);
       } finally {
         if (!cancelled) {
           setIsLoadingPairs(false);
@@ -93,7 +109,9 @@ export default function AnalysisPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [provider]);
+
+  const providerLabel = useMemo(() => __("pairSelection.providerOptions." + provider), [__, provider]);
 
   const priceFormatter = useMemo(
     () =>
@@ -144,8 +162,21 @@ export default function AnalysisPage() {
 
   const canRunAnalysis = ready && authenticated && latestCandles.length > 0 && !isRunning;
 
+  const handleProviderChange = (nextProvider: CexProvider) => {
+    if (nextProvider === provider) {
+      return;
+    }
+    setProvider(nextProvider);
+    setResponse(null);
+    setAnalysisCandles([]);
+    setLatestCandles([]);
+    setAnalysisError(null);
+    liveMarketRef.current?.reset();
+  };
+
   const handlePairChange = (symbol: string) => {
     setSelectedPair(symbol);
+    lastPairByProviderRef.current[provider] = symbol;
     setResponse(null);
     setAnalysisCandles([]);
     setLatestCandles([]);
@@ -181,7 +212,7 @@ export default function AnalysisPage() {
     if (!latestCandles.length || !ready || !authenticated) {
       return;
     }
-    const objective = `Analyse trading pair ${formattedPair} on timeframe ${timeframe}`;
+    const objective = `Analyse trading pair ${formattedPair} on timeframe ${timeframe} using ${providerLabel}`;
 
     setIsRunning(true);
     setAnalysisError(null);
@@ -198,6 +229,7 @@ export default function AnalysisPage() {
           urls: [],
           manualNotes: "",
           datasetPreview: "",
+          provider,
         }),
       });
 
@@ -217,7 +249,7 @@ export default function AnalysisPage() {
       const payload: AgentResponse = await res.json();
       setResponse(payload);
       setAnalysisCandles(latestCandles.slice(-180));
-      addEntry({ pair: selectedPair, timeframe, response: payload });
+      addEntry({ pair: selectedPair, timeframe, provider, response: payload });
       if (typeof window !== "undefined") {
         window.requestAnimationFrame(() => {
           analysisSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -310,6 +342,8 @@ export default function AnalysisPage() {
             <HeroSection />
           </motion.div>
           <PairSelectionCard
+            provider={provider}
+            onProviderChange={handleProviderChange}
             selectedPair={selectedPair}
             onPairChange={handlePairChange}
             onShowChart={handleShowChart}
@@ -320,6 +354,7 @@ export default function AnalysisPage() {
 
         <LiveMarketSection
           ref={liveMarketRef}
+          provider={provider}
           selectedPair={selectedPair}
           timeframe={timeframe}
           onTimeframeChange={handleTimeframeChange}

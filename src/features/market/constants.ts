@@ -1,4 +1,10 @@
 import type { IndicatorConfigItem } from "./types";
+import type { CexProvider } from "@/features/market/exchanges";
+export { CEX_PROVIDERS, DEFAULT_PROVIDER } from "@/features/market/exchanges";
+export const PROVIDER_ICON_MAP: Record<CexProvider, string> = {
+  binance: "/cex/binance.png",
+  bybit: "/cex/bybit.webp",
+};
 
 export const TIMEFRAME_OPTIONS = ["1m", "5m", "15m", "1h", "4h", "1d"] as const;
 

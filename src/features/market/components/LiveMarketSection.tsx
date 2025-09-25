@@ -1,3 +1,4 @@
+import Image from "next/image";
 import {
   forwardRef,
   useCallback,
@@ -30,7 +31,8 @@ import {
   type IndicatorSeriesMap,
   type MarketSnapshot,
 } from "../types";
-import { INDICATOR_CONFIG, TIMEFRAME_OPTIONS } from "../constants";
+import { INDICATOR_CONFIG, PROVIDER_ICON_MAP, TIMEFRAME_OPTIONS } from "../constants";
+import type { CexProvider } from "../exchanges";
 import { useLanguage } from "@/providers/language-provider";
 
 const REFRESH_INTERVAL = 30_000;
@@ -42,6 +44,7 @@ export type LiveMarketHandle = {
 };
 
 export type LiveMarketSectionProps = {
+  provider: CexProvider;
   selectedPair: string;
   timeframe: (typeof TIMEFRAME_OPTIONS)[number];
   onTimeframeChange: (timeframe: (typeof TIMEFRAME_OPTIONS)[number]) => void;
@@ -60,6 +63,7 @@ export const LiveMarketSection = forwardRef<
   LiveMarketSectionProps
 >(function LiveMarketSection(
   {
+    provider,
     selectedPair,
     timeframe,
     onTimeframeChange,
@@ -76,6 +80,7 @@ export const LiveMarketSection = forwardRef<
 ) {
   const { messages, languageTag, __ } = useLanguage();
   const liveCopy = messages.live;
+  const providerLabel = useMemo(() => __("pairSelection.providerOptions." + provider), [__, provider]);
 
   const handleSectionRef = useCallback(
     (node: HTMLElement | null) => {
@@ -174,6 +179,7 @@ export const LiveMarketSection = forwardRef<
         silent?: boolean;
         symbol?: string;
         interval?: (typeof TIMEFRAME_OPTIONS)[number];
+        provider?: CexProvider;
       } = {}
     ) => {
       if (!options.silent) {
@@ -182,15 +188,17 @@ export const LiveMarketSection = forwardRef<
       try {
         const symbol = options.symbol ?? selectedPair;
         const interval = options.interval ?? timeframe;
+        const providerValue = options.provider ?? provider;
 
         const params = new URLSearchParams({
           symbol,
           interval,
           limit: "500",
+          provider: providerValue,
         });
         const res = await fetch(`/api/market?${params.toString()}`);
         if (!res.ok) {
-          throw new Error("Gagal mengambil data pasar Binance");
+          throw new Error("Gagal mengambil data pasar dari provider.");
         }
         const payload = (await res.json()) as MarketSnapshot;
         setChartData(payload);
@@ -206,13 +214,14 @@ export const LiveMarketSection = forwardRef<
         setIsChartLoading(false);
       }
     },
-    [selectedPair, timeframe]
+    [provider, selectedPair, timeframe]
   );
 
   const startChartPolling = useCallback(
     (options?: {
       symbol?: string;
       interval?: (typeof TIMEFRAME_OPTIONS)[number];
+      provider?: CexProvider;
     }) => {
       if (refreshTimerRef.current) {
         clearInterval(refreshTimerRef.current);
@@ -226,6 +235,7 @@ export const LiveMarketSection = forwardRef<
       fetchMarketSnapshot({
         symbol: options?.symbol,
         interval: options?.interval,
+        provider,
       })
         .catch(() => undefined)
         .finally(() => {
@@ -238,17 +248,18 @@ export const LiveMarketSection = forwardRef<
               silent: true,
               symbol: options?.symbol,
               interval: options?.interval,
+              provider,
             }).catch(() => undefined);
           }, REFRESH_INTERVAL);
         });
     },
-    [fetchMarketSnapshot, setHoverState]
+    [fetchMarketSnapshot, provider, setHoverState]
   );
 
   useImperativeHandle(
     ref,
     () => ({
-      startChart: () => startChartPolling(),
+      startChart: () => startChartPolling({ provider }),
       reset: () => {
         if (refreshTimerRef.current) {
           clearInterval(refreshTimerRef.current);
@@ -261,7 +272,7 @@ export const LiveMarketSection = forwardRef<
         resetChart();
       },
     }),
-    [resetChart, setHoverState, startChartPolling]
+    [provider, resetChart, setHoverState, startChartPolling]
   );
 
   useEffect(
@@ -478,6 +489,18 @@ export const LiveMarketSection = forwardRef<
                   <span className="rounded-full border border-[var(--swimm-primary-700)]/40 bg-[var(--swimm-primary-500)]/15 px-3 py-1 text-xs font-semibold uppercase text-[var(--swimm-primary-700)]">
                     {timeframe.toUpperCase()}
                   </span>
+                  <span className="flex items-center gap-2 rounded-full border border-[var(--swimm-neutral-300)] bg-white px-3 py-1">
+                    <Image
+                      src={PROVIDER_ICON_MAP[provider]}
+                      alt={providerLabel}
+                      width={18}
+                      height={18}
+                      className="h-4 w-4"
+                    />
+                    <span className="sr-only">
+                      {__("live.card.providerBadge", { provider: providerLabel })}
+                    </span>
+                  </span>
                 </div>
                 <div className="flex flex-wrap items-center gap-3 text-sm text-[var(--swimm-neutral-500)]">
                   <span className="text-lg font-semibold text-[var(--swimm-navy-900)]">
@@ -653,9 +676,9 @@ export const LiveMarketSection = forwardRef<
                     : "pointer-events-none opacity-0 -translate-y-4"
                 }`}
               >
-                <div className="text-xs font-semibold uppercase tracking-wide text-[var(--swimm-neutral-500)]">
-                  {liveCopy.orderBook.title}
-                </div>
+            <div className="text-xs font-semibold uppercase tracking-wide text-[var(--swimm-neutral-500)]">
+              {liveCopy.orderBook.title}
+            </div>
                 <div className="mt-3 grid flex-1 grid-cols-2 gap-3 overflow-hidden text-xs text-[var(--swimm-neutral-500)]">
                   <div className="flex flex-col overflow-hidden">
                     <div>{liveCopy.orderBook.bids}</div>
@@ -707,6 +730,7 @@ export const LiveMarketSection = forwardRef<
               {__("live.analysisNote", {
                 pair: formatPairLabel(selectedPair),
                 timeframe: timeframe.toUpperCase(),
+                provider: providerLabel,
               })}
             </div>
             <button

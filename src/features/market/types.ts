@@ -7,7 +7,8 @@ import type {
   LineStyle,
   LineWidth,
 } from "lightweight-charts";
-import type { BinanceMarketSummary } from "@/lib/binance";
+import type { CexProvider } from "@/features/market/exchanges";
+import type { BinanceMarketSummary } from "@/features/market/exchanges/binance";
 
 export type IndicatorKey =
   | "sma20"
@@ -74,6 +75,7 @@ export type OrderBookEntry = {
 export type MarketSnapshot = {
   symbol: string;
   interval: string;
+  provider?: CexProvider;
   candles: MarketCandle[];
   orderBook: {
     bids: OrderBookEntry[];

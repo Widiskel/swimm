@@ -49,6 +49,12 @@ const id = {
     description:
       'Tentukan pair lalu klik "Tampilkan chart" untuk menampilkan candlestick. Timeframe bisa diganti langsung di kartu chart.',
     selectLabel: "Trading pair",
+    providerLabel: "CEX provider",
+    providerHint: "Pilih bursa sumber harga dan data pasar",
+    providerOptions: {
+      binance: "Binance",
+      bybit: "Bybit",
+    },
     button: "Tampilkan chart",
     loading: "Memuat daftar pair...",
     empty: "Tidak ada pair tersedia",
@@ -61,6 +67,7 @@ const id = {
   live: {
     card: {
       title: "Chart live",
+      providerBadge: "Data dari {provider}",
       indicatorsTitle: "Indikator",
       indicatorHint: "Overlay indikator terlihat pada chart",
       hoverPrompt: "Arahkan kursor ke candlestick",
@@ -83,7 +90,7 @@ const id = {
       asks: "Asks",
     },
     analysisNote:
-      "Analisa akan menggunakan pair {pair} dengan timeframe {timeframe}.",
+      "Analisa akan menggunakan pair {pair} dari {provider} dengan timeframe {timeframe}.",
     analyzeButton: "Analisa",
     analyzingButton: "Analisa berjalan...",
   },
@@ -201,6 +208,7 @@ const id = {
       stopLoss: "Stop loss",
       sizingNotes: "Catatan sizing",
       noSizingNotes: "Tidak ada catatan sizing",
+      provider: "Provider",
     },
   },
   language: {

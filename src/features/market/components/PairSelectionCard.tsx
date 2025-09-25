@@ -1,11 +1,14 @@
 "use client";
 
+import Image from "next/image";
 import { Fragment, useCallback, useMemo, useState } from "react";
 import { Dialog, Transition } from "@headlessui/react";
 import Fuse from "fuse.js";
 import { motion } from "framer-motion";
 
 import { useLanguage } from "@/providers/language-provider";
+import { CEX_PROVIDERS, PROVIDER_ICON_MAP } from "@/features/market/constants";
+import type { CexProvider } from "@/features/market/exchanges";
 
 type TradingPair = {
   symbol: string;
@@ -13,6 +16,8 @@ type TradingPair = {
 };
 
 type PairSelectionCardProps = {
+  provider: CexProvider;
+  onProviderChange: (provider: CexProvider) => void;
   selectedPair: string;
   onPairChange: (symbol: string) => void;
   onShowChart: () => void;
@@ -23,6 +28,8 @@ type PairSelectionCardProps = {
 const MotionDiv = motion.div;
 
 export function PairSelectionCard({
+  provider,
+  onProviderChange,
   selectedPair,
   onPairChange,
   onShowChart,
@@ -33,6 +40,16 @@ export function PairSelectionCard({
   const hasPairs = pairs.length > 0;
   const [query, setQuery] = useState("");
   const [isSelectorOpen, setIsSelectorOpen] = useState(false);
+
+  const providerOptions = useMemo(
+    () =>
+      CEX_PROVIDERS.map((value) => ({
+        value,
+        label: __("pairSelection.providerOptions." + value),
+        icon: PROVIDER_ICON_MAP[value],
+      })),
+    [__]
+  );
 
   const fuse = useMemo(
     () =>
@@ -127,6 +144,43 @@ export function PairSelectionCard({
               </svg>
             </span>
           </button>
+        </div>
+        <div>
+          <label className="text-xs font-semibold uppercase tracking-wide text-[var(--swimm-neutral-500)]">
+            {__("pairSelection.providerLabel")}
+          </label>
+          <p className="mt-1 text-xs text-[var(--swimm-neutral-500)]">
+            {__("pairSelection.providerHint")}
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {providerOptions.map((option) => {
+              const isActive = option.value === provider;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => onProviderChange(option.value)}
+                  disabled={isLoadingPairs && option.value !== provider}
+                  title={option.label}
+                  className={`flex items-center gap-2 rounded-full border px-4 py-2 transition ${
+                    isActive
+                      ? "border-[var(--swimm-primary-500)] bg-[var(--swimm-primary-500)]/10"
+                      : "border-[var(--swimm-neutral-300)] bg-white hover:border-[var(--swimm-primary-500)]"
+                  } disabled:cursor-not-allowed disabled:opacity-60`}
+                >
+                  <span className="flex h-5 w-5 items-center justify-center">
+                    <Image
+                      src={option.icon}
+                      alt={option.label}
+                      width={20}
+                      height={20}
+                    />
+                  </span>
+                  <span className="sr-only">{option.label}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
         <button
           type="button"
