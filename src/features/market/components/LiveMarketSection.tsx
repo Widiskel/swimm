@@ -28,10 +28,7 @@ import {
   type IndicatorSeriesMap,
   type MarketSnapshot,
 } from "../types";
-import {
-  INDICATOR_CONFIG,
-  TIMEFRAME_OPTIONS,
-} from "../constants";
+import { INDICATOR_CONFIG, TIMEFRAME_OPTIONS } from "../constants";
 import { useLanguage } from "@/providers/language-provider";
 
 const REFRESH_INTERVAL = 30_000;
@@ -188,7 +185,9 @@ export const LiveMarketSection = forwardRef<
         setIsChartActive(true);
       } catch (error) {
         setChartError(
-          error instanceof Error ? error.message : "Gagal menampilkan chart. Coba lagi."
+          error instanceof Error
+            ? error.message
+            : "Gagal menampilkan chart. Coba lagi."
         );
       } finally {
         setIsChartLoading(false);
@@ -198,12 +197,10 @@ export const LiveMarketSection = forwardRef<
   );
 
   const startChartPolling = useCallback(
-    (
-      options?: {
-        symbol?: string;
-        interval?: (typeof TIMEFRAME_OPTIONS)[number];
-      }
-    ) => {
+    (options?: {
+      symbol?: string;
+      interval?: (typeof TIMEFRAME_OPTIONS)[number];
+    }) => {
       if (refreshTimerRef.current) {
         clearInterval(refreshTimerRef.current);
         refreshTimerRef.current = null;
@@ -254,13 +251,16 @@ export const LiveMarketSection = forwardRef<
     [resetChart, setHoverState, startChartPolling]
   );
 
-  useEffect(() => () => {
-    if (refreshTimerRef.current) {
-      clearInterval(refreshTimerRef.current);
-      refreshTimerRef.current = null;
-    }
-    resetChart();
-  }, [resetChart]);
+  useEffect(
+    () => () => {
+      if (refreshTimerRef.current) {
+        clearInterval(refreshTimerRef.current);
+        refreshTimerRef.current = null;
+      }
+      resetChart();
+    },
+    [resetChart]
+  );
 
   useEffect(() => {
     if (!isChartActive || !chartContainerRef.current) {
@@ -481,7 +481,9 @@ export const LiveMarketSection = forwardRef<
                   <div className="ml-auto flex flex-wrap items-center gap-2 text-xs text-[var(--swimm-neutral-500)]">
                     <span>
                       {liveCopy.stats.volumeBase}:
-                      <span className="ml-1 text-[var(--swimm-navy-900)]">{volumeLabelBase}</span>
+                      <span className="ml-1 text-[var(--swimm-navy-900)]">
+                        {volumeLabelBase}
+                      </span>
                     </span>
                     {summaryStats && (
                       <span className="ml-2 text-[var(--swimm-neutral-300)]">
@@ -492,11 +494,15 @@ export const LiveMarketSection = forwardRef<
                 </div>
                 <div>
                   {liveCopy.stats.highLow}:
-                  <span className="ml-1 text-[var(--swimm-navy-900)]">{highLowLabel}</span>
+                  <span className="ml-1 text-[var(--swimm-navy-900)]">
+                    {highLowLabel}
+                  </span>
                 </div>
                 <div>
                   {liveCopy.stats.lastUpdate}:
-                  <span className="ml-1 text-[var(--swimm-navy-900)]">{formattedUpdatedAt}</span>
+                  <span className="ml-1 text-[var(--swimm-navy-900)]">
+                    {formattedUpdatedAt}
+                  </span>
                 </div>
               </div>
             </div>
@@ -558,16 +564,20 @@ export const LiveMarketSection = forwardRef<
                     {hoverData.timeLabel}
                   </div>
                   <div className="text-right">
-                    {liveCopy.card.hoverClose}: {priceFormatter.format(hoverData.close)}
+                    {liveCopy.card.hoverClose}:{" "}
+                    {priceFormatter.format(hoverData.close)}
                   </div>
                   <div>
-                    {liveCopy.card.hoverOpen}: {priceFormatter.format(hoverData.open)}
+                    {liveCopy.card.hoverOpen}:{" "}
+                    {priceFormatter.format(hoverData.open)}
                   </div>
                   <div className="text-right">
-                    {liveCopy.card.hoverHigh}: {priceFormatter.format(hoverData.high)}
+                    {liveCopy.card.hoverHigh}:{" "}
+                    {priceFormatter.format(hoverData.high)}
                   </div>
                   <div>
-                    {liveCopy.card.hoverLow}: {priceFormatter.format(hoverData.low)}
+                    {liveCopy.card.hoverLow}:{" "}
+                    {priceFormatter.format(hoverData.low)}
                   </div>
                   <div className="text-right text-[var(--swimm-neutral-300)]">
                     {liveCopy.card.indicatorHint}
@@ -599,82 +609,86 @@ export const LiveMarketSection = forwardRef<
           )}
 
       <div className="mt-4 grid gap-6 lg:grid-cols-[2fr_1fr] lg:items-stretch">
-        <div className="flex flex-col rounded-2xl border border-[var(--swimm-neutral-300)] bg-white p-4">
+        <div className="relative h-full min-h-[20rem] md:min-h-[26rem]">
           <div
-            className={`relative flex-1 min-h-[24rem] w-full overflow-hidden rounded-xl border border-[var(--swimm-neutral-300)] bg-white transition-all duration-500 ${
+            className={`absolute inset-0 overflow-hidden rounded-3xl border border-[var(--swimm-neutral-300)] bg-white transition-all duration-500 ${
               isChartVisible
                 ? "opacity-100 translate-y-0"
                 : "pointer-events-none opacity-0 -translate-y-4"
             }`}
           >
-                <div ref={chartContainerRef} className="h-full w-full" />
-                {isChartLoading && (
-                  <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-[var(--swimm-neutral-100)]/80 text-sm text-[var(--swimm-neutral-500)]">
-                    {liveCopy.card.loading}
-                  </div>
-                )}
+            <div ref={chartContainerRef} className="h-full w-full" />
+            {isChartLoading && (
+              <div className="absolute inset-0 flex items-center justify-center rounded-3xl bg-[var(--swimm-neutral-100)]/80 text-sm text-[var(--swimm-neutral-500)]">
+                {liveCopy.card.loading}
               </div>
+            )}
+          </div>
           {!isChartVisible && !isChartLoading && (
-            <div className="flex min-h-[24rem] items-center justify-center rounded-xl border border-dashed border-[var(--swimm-neutral-300)] bg-white text-sm text-[var(--swimm-neutral-500)]">
+            <div className="absolute inset-0 flex items-center justify-center rounded-3xl border border-dashed border-[var(--swimm-neutral-300)] bg-white text-sm text-[var(--swimm-neutral-500)]">
               {liveCopy.card.emptyState}
             </div>
           )}
         </div>
 
         <div className="space-y-4 lg:flex lg:h-full lg:flex-col">
-          <div
-            className={`flex h-full min-h-[24rem] flex-col overflow-hidden rounded-2xl border border-[var(--swimm-neutral-300)] bg-white p-4 transition-all duration-500 ${
-              isChartVisible
-                ? "opacity-100 translate-y-0"
-                : "pointer-events-none opacity-0 -translate-y-4"
-            }`}
-          >
-            <div className="text-xs font-semibold uppercase tracking-wide text-[var(--swimm-neutral-500)]">
-              {liveCopy.orderBook.title}
-            </div>
-            <div className="mt-3 grid flex-1 grid-cols-2 gap-3 overflow-hidden text-xs text-[var(--swimm-neutral-500)]">
-              <div className="flex flex-col overflow-hidden">
-                <div>{liveCopy.orderBook.bids}</div>
-                <ul className="mt-2 flex-1 space-y-1 overflow-y-auto pr-1">
-                  {(chartData?.orderBook?.bids ?? [])
-                    .slice(0, ORDERBOOK_LIMIT)
-                    .map((bid, index) => (
+              <div
+                className={`flex h-full min-h-[20rem] md:h-[26rem] flex-col overflow-hidden rounded-2xl border border-[var(--swimm-neutral-300)] bg-white p-4 transition-all duration-500 ${
+                  isChartVisible
+                    ? "opacity-100 translate-y-0"
+                    : "pointer-events-none opacity-0 -translate-y-4"
+                }`}
+              >
+                <div className="text-xs font-semibold uppercase tracking-wide text-[var(--swimm-neutral-500)]">
+                  {liveCopy.orderBook.title}
+                </div>
+                <div className="mt-3 grid flex-1 grid-cols-2 gap-3 overflow-hidden text-xs text-[var(--swimm-neutral-500)]">
+                  <div className="flex flex-col overflow-hidden">
+                    <div>{liveCopy.orderBook.bids}</div>
+                    <ul className="mt-2 flex-1 space-y-1 overflow-y-auto pr-1">
+                      {(chartData?.orderBook?.bids ?? [])
+                        .slice(0, ORDERBOOK_LIMIT)
+                        .map((bid, index) => (
                           <li
                             key={`bid-${bid.price}-${index}`}
-                            className="flex items-center justify-between rounded-lg border border-[var(--swimm-up)]/30 bg-[var(--swimm-up)]/10 px-3 py-2"
+                            className="flex items-center justify-between gap-3 rounded-lg border border-[var(--swimm-up)]/30 bg-[var(--swimm-up)]/10 px-3 py-2"
                           >
-                            <span>{simpleNumberFormatter.format(bid.price)}</span>
-                            <span className="text-[var(--swimm-up)]">
+                            <span className="min-w-0 flex-1 truncate font-mono text-[0.75rem] tabular-nums text-[var(--swimm-navy-900)]">
+                              {simpleNumberFormatter.format(bid.price)}
+                            </span>
+                            <span className="flex-shrink-0 font-mono text-[0.75rem] tabular-nums text-[var(--swimm-up)]">
                               {bid.quantity.toFixed(4)}
                             </span>
-                      </li>
-                    ))}
-                </ul>
-              </div>
-              <div className="flex flex-col overflow-hidden">
-                <div>{liveCopy.orderBook.asks}</div>
-                <ul className="mt-2 flex-1 space-y-1 overflow-y-auto pl-1">
-                  {(chartData?.orderBook?.asks ?? [])
-                    .slice(0, ORDERBOOK_LIMIT)
-                    .map((ask, index) => (
+                          </li>
+                        ))}
+                    </ul>
+                  </div>
+                  <div className="flex flex-col overflow-hidden">
+                    <div>{liveCopy.orderBook.asks}</div>
+                    <ul className="mt-2 flex-1 space-y-1 overflow-y-auto pl-1">
+                      {(chartData?.orderBook?.asks ?? [])
+                        .slice(0, ORDERBOOK_LIMIT)
+                        .map((ask, index) => (
                           <li
                             key={`ask-${ask.price}-${index}`}
-                            className="flex items-center justify-between rounded-lg border border-[var(--swimm-down)]/30 bg-[var(--swimm-down)]/10 px-3 py-2"
+                            className="flex items-center justify-between gap-3 rounded-lg border border-[var(--swimm-down)]/30 bg-[var(--swimm-down)]/10 px-3 py-2"
                           >
-                            <span>{simpleNumberFormatter.format(ask.price)}</span>
-                            <span className="text-[var(--swimm-down)]">
+                            <span className="min-w-0 flex-1 truncate font-mono text-[0.75rem] tabular-nums text-[var(--swimm-navy-900)]">
+                              {simpleNumberFormatter.format(ask.price)}
+                            </span>
+                            <span className="flex-shrink-0 font-mono text-[0.75rem] tabular-nums text-[var(--swimm-down)]">
                               {ask.quantity.toFixed(4)}
                             </span>
                           </li>
                         ))}
                     </ul>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      </div>
 
-      <div className="mt-6 flex flex-col gap-3 border-t border-[var(--swimm-neutral-300)] pt-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="mt-6 flex flex-col gap-3 border-t border-[var(--swimm-neutral-300)] pt-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="text-xs text-[var(--swimm-neutral-500)]">
               {__("live.analysisNote", {
                 pair: formatPairLabel(selectedPair),
