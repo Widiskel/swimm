@@ -145,8 +145,16 @@ export const fetchBybitTradablePairs = async (): Promise<TradingPair[]> => {
 };
 
 export const isBybitPairTradable = async (symbol: string) => {
+  const normalized = resolveSymbol(symbol);
   const pairs = await fetchBybitTradablePairs();
-  return pairs.some((pair) => pair.symbol === resolveSymbol(symbol));
+  if (pairs.some((pair) => pair.symbol === normalized)) {
+    return true;
+  }
+  // If we only have a fallback/default list, allow querying the API directly.
+  if (pairs.length <= 1) {
+    return true;
+  }
+  return false;
 };
 
 type BybitKlineResponse = {

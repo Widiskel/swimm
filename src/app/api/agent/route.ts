@@ -19,6 +19,7 @@ import {
   type TavilyExtractedArticle,
   type TavilySearchData,
 } from "@/lib/tavily";
+import { isLocale, type Locale } from "@/i18n/messages";
 
 type DataMode = "scrape" | "upload" | "manual";
 
@@ -32,6 +33,7 @@ type AgentRequest = {
   timeframe?: string;
   pairSymbol?: string;
   provider?: string;
+  locale?: string;
 };
 
 type AgentDecision = "buy" | "sell" | "hold";
@@ -92,7 +94,7 @@ const ALLOWED_TIMEFRAMES = ["1m", "5m", "15m", "1h", "4h", "1d"] as const;
 type Timeframe = (typeof ALLOWED_TIMEFRAMES)[number];
 const DEFAULT_TIMEFRAME: Timeframe = "5m";
 
-const BINANCE_INTERVAL_MAP: Record<Timeframe, string> = {
+const CEX_INTERVAL_MAP: Record<Timeframe, string> = {
   "1m": "1m",
   "5m": "5m",
   "15m": "15m",
@@ -100,8 +102,6 @@ const BINANCE_INTERVAL_MAP: Record<Timeframe, string> = {
   "4h": "4h",
   "1d": "1d",
 };
-
-const ALLOWED_SYMBOLS = new Set(["BTCUSDT", "ETHUSDT", "SOLUSDT", "HYPEUSDT"]);
 
 const pickFallbackTimeframe = (objective: string) => {
   const lower = objective.toLowerCase();
@@ -375,6 +375,76 @@ const stripTrailingCommas = (input: string) => {
   return output;
 };
 
+const replaceLooseUndefined = (input: string) =>
+  input
+    .replace(/"([^"\\]*)"\s+undefined/gi, '"$1",')
+    .replace(/:\s*undefined/gi, ": null");
+
+const repairTruncatedFields = (input: string) =>
+  input.replace(/":\s*"([^"\n]*?)\s+undefined/g, '": "$1"');
+
+const autoCloseJson = (input: string) => {
+  let output = input.trimEnd();
+
+  while (output.endsWith(",")) {
+    output = output.slice(0, -1).trimEnd();
+  }
+
+  let inString = false;
+  let escapeNext = false;
+  const stack: string[] = [];
+
+  for (let i = 0; i < output.length; i += 1) {
+    const char = output[i];
+
+    if (escapeNext) {
+      escapeNext = false;
+      continue;
+    }
+
+    if (char === '\\' && inString) {
+      escapeNext = true;
+      continue;
+    }
+
+    if (char === '"') {
+      inString = !inString;
+      continue;
+    }
+
+    if (inString) {
+      continue;
+    }
+
+    if (char === '{') {
+      stack.push('}');
+      continue;
+    }
+
+    if (char === '[') {
+      stack.push(']');
+      continue;
+    }
+
+    if ((char === '}' || char === ']') && stack.length > 0) {
+      const expected = stack[stack.length - 1];
+      if (expected === char) {
+        stack.pop();
+      }
+    }
+  }
+
+  if (inString) {
+    output += '"';
+  }
+
+  if (stack.length === 0) {
+    return output;
+  }
+
+  return `${output}${stack.reverse().join('')}`;
+};
+
 const ensureStringArray = (value: unknown): string[] => {
   if (Array.isArray(value)) {
     return value
@@ -392,13 +462,21 @@ const ensureStringArray = (value: unknown): string[] => {
   return [];
 };
 
-const buildMarketAnalytics = (candles: BinanceCandle[], timeframe: Timeframe) => {
+const buildMarketAnalytics = (
+  candles: BinanceCandle[],
+  timeframe: Timeframe,
+  locale: Locale
+) => {
+  const isId = locale === "id";
+
   if (candles.length === 0) {
     return {
       chartPoints: [] as ChartPoint[],
       technical: [] as string[],
-      chartNarrative: "Data candle tidak tersedia.",
-      chartForecast: "Tidak dapat melakukan forecasting tanpa data harga.",
+      chartNarrative: isId ? "Data candle tidak tersedia." : "No candle data available.",
+      chartForecast: isId
+        ? "Tidak dapat melakukan forecasting tanpa data harga."
+        : "Unable to build a forecast without price history.",
       promptSeries: "",
       changePct: null as number | null,
       volatilityPct: null as number | null,
@@ -433,28 +511,52 @@ const buildMarketAnalytics = (candles: BinanceCandle[], timeframe: Timeframe) =>
       `SMA${smaShortPeriod}: ${smaShort.toFixed(2)} | SMA${smaLongPeriod}: ${smaLong.toFixed(2)}`
     );
     if (smaShort > smaLong) {
-      technical.push("Sinyal bullish: SMA cepat di atas SMA lambat.");
+      technical.push(
+        isId
+          ? "Sinyal bullish: SMA cepat berada di atas SMA lambat."
+          : "Bullish signal: fast SMA is above slow SMA."
+      );
     } else if (smaShort < smaLong) {
-      technical.push("Sinyal bearish: SMA cepat di bawah SMA lambat.");
+      technical.push(
+        isId
+          ? "Sinyal bearish: SMA cepat berada di bawah SMA lambat."
+          : "Bearish signal: fast SMA is below slow SMA."
+      );
     }
   }
   if (typeof rsi === "number") {
     technical.push(`RSI ${rsi.toFixed(1)}`);
   }
   if (typeof volatilityPct === "number") {
-    technical.push(`Volatilitas ${timeframe.toUpperCase()}: ${volatilityPct.toFixed(2)}%`);
+    technical.push(
+      `${isId ? "Volatilitas" : "Volatility"} ${timeframe.toUpperCase()}: ${volatilityPct.toFixed(2)}%`
+    );
   }
-  technical.push(`Rentang harga: ${low.toFixed(2)} - ${high.toFixed(2)}`);
-  technical.push(`Perubahan sejak awal sesi: ${changePct.toFixed(2)}%`);
+  technical.push(
+    `${isId ? "Rentang harga" : "Price range"}: ${low.toFixed(2)} - ${high.toFixed(2)}`
+  );
+  technical.push(
+    `${
+      isId ? "Perubahan sejak awal sesi" : "Change since session start"
+    }: ${changePct.toFixed(2)}%`
+  );
 
-  const momentumLabel = changePct > 0 ? "bullish" : changePct < 0 ? "bearish" : "netral";
-  const chartNarrative = `Harga ${timeframe.toUpperCase()} bergerak ${momentumLabel} dengan close terakhir ${last.close.toFixed(2)} USDT.`;
-  const chartForecast =
-    changePct > 0
+  const momentumLabel =
+    changePct > 0 ? "bullish" : changePct < 0 ? "bearish" : isId ? "netral" : "neutral";
+  const chartNarrative = isId
+    ? `Harga timeframe ${timeframe.toUpperCase()} bergerak ${momentumLabel} dengan penutupan terakhir ${last.close.toFixed(2)} USDT.`
+    : `Price on the ${timeframe.toUpperCase()} timeframe is ${momentumLabel} with the latest close at ${last.close.toFixed(2)} USDT.`;
+  const chartForecast = isId
+    ? changePct > 0
       ? "Momentum positif mendominasi; waspadai konsolidasi sebelum kelanjutan tren."
       : changePct < 0
       ? "Tekanan jual masih terasa; butuh katalis positif untuk reversal."
-      : "Pergerakan datar; tunggu breakout untuk konfirmasi arah berikutnya.";
+      : "Pergerakan datar; tunggu breakout untuk konfirmasi arah berikutnya."
+    : changePct > 0
+    ? "Positive momentum dominates; watch for consolidation before trend continuation."
+    : changePct < 0
+    ? "Selling pressure remains; a bullish catalyst is needed for reversal."
+    : "Sideways movement; wait for a breakout to confirm the next direction.";
 
   const promptSeries = trimmed
     .slice(-60)
@@ -478,15 +580,22 @@ const buildMarketAnalytics = (candles: BinanceCandle[], timeframe: Timeframe) =>
   };
 };
 
-const buildDefaultFundamentals = (summary: string, timeframe: Timeframe) => {
+const buildDefaultFundamentals = (summary: string, timeframe: Timeframe, locale: Locale) => {
+  const isId = locale === "id";
   const lines = summary.split("\n").map((line) => line.trim()).filter(Boolean);
-  const priceLine = lines.find((line) => line.toLowerCase().includes("harga terakhir"));
-  const changeLine = lines.find((line) => line.toLowerCase().includes("perubahan"));
+  const priceLine = lines.find((line) => {
+    const lower = line.toLowerCase();
+    return lower.includes("harga terakhir") || lower.includes("last price");
+  });
+  const changeLine = lines.find((line) => {
+    const lower = line.toLowerCase();
+    return lower.includes("perubahan") || lower.includes("change");
+  });
   const volumeLine = lines.find((line) => line.toLowerCase().includes("volume"));
 
   const fundamentals = [
-    priceLine ?? "Harga terakhir dari Binance tidak tersedia.",
-    changeLine ?? "Perubahan 24 jam belum terhitung.",
+    priceLine ?? (isId ? "Harga terakhir Binance tidak tersedia." : "Latest price information is unavailable."),
+    changeLine ?? (isId ? "Perubahan harga 24 jam belum dihitung." : "24h price change has not been calculated."),
   ];
 
   if (volumeLine) {
@@ -494,55 +603,80 @@ const buildDefaultFundamentals = (summary: string, timeframe: Timeframe) => {
   }
 
   fundamentals.push(
-    `Sinkronkan strategi ${timeframe.toUpperCase()} dengan agenda makro & on-chain terbaru sebelum eksekusi.`
+    isId
+      ? `Selaraskan strategi ${timeframe.toUpperCase()} dengan konteks makro dan on-chain sebelum eksekusi.`
+      : `Align the ${timeframe.toUpperCase()} strategy with current macro and on-chain context before execution.`
   );
 
   return fundamentals;
 };
 
-const buildUserMessage = (params: {
-  objective: string;
-  dataMode: DataMode;
-  urls: string[];
-  manualNotes: string;
-  datasetName?: string;
-  datasetPreview: string;
-  marketSummary: string;
-  timeframe: Timeframe;
-  marketAnalytics: {
-    promptSeries: string;
-    technical: string[];
-    chartNarrative: string;
-    chartForecast: string;
-  };
-  tavilySearch: TavilySearchData | null;
-  tavilyArticles: TavilyExtractedArticle[];
-  pairSymbol: string;
-}) => {
+
+const buildUserMessage = (
+  params: {
+    objective: string;
+    dataMode: DataMode;
+    urls: string[];
+    manualNotes: string;
+    datasetName?: string;
+    datasetPreview: string;
+    marketSummary: string;
+    timeframe: Timeframe;
+    marketAnalytics: {
+      promptSeries: string;
+      technical: string[];
+      chartNarrative: string;
+      chartForecast: string;
+    };
+    tavilySearch: TavilySearchData | null;
+    tavilyArticles: TavilyExtractedArticle[];
+    pairSymbol: string;
+  },
+  locale: Locale
+) => {
   const formattedPair = formatPairLabel(params.pairSymbol);
+  const isId = locale === "id";
+
+  const placeholders = {
+    urls: isId ? "(Tidak ada URL yang diberikan)" : "(No URLs provided)",
+    dataset: isId ? "(Tidak ada dataset yang diunggah)" : "(No dataset uploaded)",
+    manual: isId ? "(Tidak ada catatan manual)" : "(No manual notes)",
+    technical: isId ? "(Tidak ada ringkasan teknikal)" : "(No technical summary)",
+    tavilySummary: isId ? "(Tidak ada ringkasan Tavily)" : "(No Tavily summary)",
+    tavilyResults: isId ? "(Tidak ada hasil pencarian Tavily)" : "(No Tavily search results)",
+    tavilyArticles: isId ? "(Tidak ada konten Tavily yang diekstrak)" : "(No Tavily article extracts)",
+    promptSeries: isId ? "(Data candle tidak tersedia)" : "(No candle data)",
+    unknownDataset: isId ? "Tidak diketahui" : "Unknown",
+    datasetPreviewLabel: isId ? "Isi (dipangkas)" : "Content (truncated)",
+  } as const;
+
+  const dataModeMap: Record<DataMode, string> = {
+    scrape: isId ? "Scrape URL berita" : "Scrape news URLs",
+    upload: isId ? "Unggah dataset" : "Upload dataset",
+    manual: isId ? "Catatan manual" : "Manual notes",
+  };
 
   const urlList = params.urls.length
     ? params.urls.map((url, index) => `${index + 1}. ${url}`).join("\n")
-    : "(Tidak ada URL yang diberikan)";
+    : placeholders.urls;
 
   const datasetBlock = params.datasetPreview
-    ? `Nama Dataset: ${params.datasetName ?? "Tidak diketahui"}\nIsi (dipangkas):\n${excerpt(
-        params.datasetPreview,
-        2000
-      )}`
-    : "(Tidak ada dataset yang diunggah)";
+    ? `${isId ? "Nama dataset" : "Dataset name"}: ${
+        params.datasetName ?? placeholders.unknownDataset
+      }\n${placeholders.datasetPreviewLabel}:\n${excerpt(params.datasetPreview, 2000)}`
+    : placeholders.dataset;
 
   const manualBlock = params.manualNotes
     ? excerpt(params.manualNotes, 1600)
-    : "(Tidak ada catatan manual)";
+    : placeholders.manual;
 
   const technicalBlock = params.marketAnalytics.technical.length
     ? params.marketAnalytics.technical.map((item, index) => `${index + 1}. ${item}`).join("\n")
-    : "(Tidak ada ringkasan teknikal)";
+    : placeholders.technical;
 
   const tavilyAnswer = params.tavilySearch?.answer
     ? excerpt(params.tavilySearch.answer, 800)
-    : "(Tidak ada ringkasan Tavily)";
+    : placeholders.tavilySummary;
 
   const tavilyResultsBlock = params.tavilySearch?.results?.length
     ? params.tavilySearch.results
@@ -554,13 +688,17 @@ const buildUserMessage = (params: {
                 : ""
             }`,
             result.url ? `   URL: ${result.url}` : null,
-            result.publishedDate ? `   Tanggal: ${result.publishedDate}` : null,
-            result.content ? `   Ringkasan: ${excerpt(result.content, 320)}` : null,
+            result.publishedDate
+              ? `   ${isId ? "Tanggal" : "Published"}: ${result.publishedDate}`
+              : null,
+            result.content
+              ? `   ${isId ? "Ringkasan" : "Summary"}: ${excerpt(result.content, 320)}`
+              : null,
           ];
           return parts.filter(Boolean).join("\n");
         })
         .join("\n\n")
-    : "(Tidak ada hasil pencarian Tavily)";
+    : placeholders.tavilyResults;
 
   const tavilyArticlesBlock = params.tavilyArticles.length
     ? params.tavilyArticles
@@ -568,105 +706,113 @@ const buildUserMessage = (params: {
           const parts = [
             `${index + 1}. ${article.title}`,
             article.url ? `   URL: ${article.url}` : null,
-            article.publishedDate ? `   Tanggal: ${article.publishedDate}` : null,
+            article.publishedDate
+              ? `   ${isId ? "Tanggal" : "Published"}: ${article.publishedDate}`
+              : null,
             article.content
-              ? `   Kutipan: ${excerpt(article.content, 320)}`
+              ? `   ${isId ? "Kutipan" : "Excerpt"}: ${excerpt(article.content, 320)}`
               : article.rawContent
-              ? `   Kutipan (raw): ${excerpt(article.rawContent, 320)}`
+              ? `   ${isId ? "Kutipan (raw)" : "Excerpt (raw)"}: ${excerpt(article.rawContent, 320)}`
               : null,
           ];
           return parts.filter(Boolean).join("\n");
         })
         .join("\n\n")
-    : "(Tidak ada konten URL yang diekstrak Tavily)";
+    : placeholders.tavilyArticles;
 
-    return `Analysis objective (EN): ${params.objective}
-Tujuan analisa (ID): ${params.objective}
+  const labels = {
+    objective: isId ? "Tujuan analisa" : "Analysis objective",
+    dataMode: isId ? "Mode sumber data aktif" : "Active data mode",
+    urls: isId ? "Daftar URL berita" : "News URLs",
+    manual: isId ? "Catatan manual" : "Manual notes",
+    dataset: isId ? "Dataset kustom" : "Custom dataset",
+    pair: isId ? "Pair yang dianalisis" : "Pair under analysis",
+    timeframe: isId ? "Timeframe target" : "Target timeframe",
+    summary: isId
+      ? `Ringkasan pasar Binance untuk ${formattedPair}`
+      : `Binance market data for ${formattedPair}`,
+    narrative: isId ? "Narasi harga" : "Price narrative",
+    forecast: isId ? "Forecast internal" : "Internal forecast",
+    promptSeries: isId
+      ? "Data candle (ISO|O/H/L/C/V)"
+      : "Candle data (ISO|O/H/L/C/V)",
+    technical: isId ? "Ringkasan teknikal" : "Technical snapshot",
+    tavilySummary: isId ? "Ringkasan Tavily" : "Tavily summary",
+    tavilyResults: isId ? "Hasil pencarian Tavily" : "Tavily search results",
+    tavilyArticles: isId ? "Konten Tavily" : "Tavily article extracts",
+    instructions: isId ? "Instruksi" : "Instructions",
+  } as const;
 
-Active data mode (EN): ${params.dataMode}
-Mode sumber data (ID): ${params.dataMode}
+  const instructions = isId
+    ? [
+        `Lakukan analisa sentimen, berita, dan pasar untuk ${formattedPair}; tampilkan insight yang dapat dieksekusi.`,
+        `Sajikan skenario harga dasar, bullish, dan bearish untuk ${formattedPair} pada timeframe ${params.timeframe.toUpperCase()}.`,
+        "Lengkapi catatan teknikal & fundamental serta rencana eksekusi yang memperhatikan risiko (entry, target, stop, sizing).",
+        "Balas hanya dalam format JSON menggunakan Bahasa Indonesia yang alami.",
+      ]
+    : [
+        `Perform sentiment, news, and market analysis for ${formattedPair}; surface tradable insights.`,
+        `Produce base, bullish, and bearish price scenarios for ${formattedPair} on the ${params.timeframe.toUpperCase()} timeframe.`,
+        "Provide supporting technical & fundamental notes plus a risk-aware execution plan (entries, targets, stop, sizing).",
+        "Respond in JSON only, using natural English throughout all strings.",
+      ];
 
-News URLs (EN):
-${urlList}
-Daftar URL berita (ID):
-${urlList}
+  const lines = [
+    `${labels.objective}: ${params.objective}`,
+    "",
+    `${labels.dataMode}: ${dataModeMap[params.dataMode] ?? params.dataMode}`,
+    "",
+    `${labels.urls}:`,
+    urlList,
+    "",
+    `${labels.manual}:`,
+    manualBlock,
+    "",
+    `${labels.dataset}:`,
+    datasetBlock,
+    "",
+    `${labels.pair}: ${formattedPair} (${params.pairSymbol})`,
+    `${labels.timeframe}: ${params.timeframe.toUpperCase()}`,
+    "",
+    `${labels.summary}:`,
+    params.marketSummary,
+    "",
+    `${labels.narrative}:`,
+    params.marketAnalytics.chartNarrative,
+    "",
+    `${labels.forecast}:`,
+    params.marketAnalytics.chartForecast,
+    "",
+    `${labels.promptSeries}:`,
+    params.marketAnalytics.promptSeries || placeholders.promptSeries,
+    "",
+    `${labels.technical}:`,
+    technicalBlock,
+    "",
+    `${labels.tavilySummary}:`,
+    tavilyAnswer,
+    "",
+    `${labels.tavilyResults}:`,
+    tavilyResultsBlock,
+    "",
+    `${labels.tavilyArticles}:`,
+    tavilyArticlesBlock,
+    "",
+    `${labels.instructions}:`,
+    ...instructions.map((item) => `- ${item}`),
+  ];
 
-Manual notes (EN):
-${manualBlock}
-Catatan manual (ID):
-${manualBlock}
-
-Custom dataset (EN):
-${datasetBlock}
-Dataset kustom (ID):
-${datasetBlock}
-
-Pair under analysis (EN):
-${formattedPair} (${params.pairSymbol})
-Pair yang dianalisis (ID):
-${formattedPair} (${params.pairSymbol})
-
-Target timeframe (EN):
-${params.timeframe.toUpperCase()}
-Timeframe target (ID):
-${params.timeframe.toUpperCase()}
-
-Binance market data for ${formattedPair} (EN):
-${params.marketSummary}
-Data pasar Binance untuk ${formattedPair} (ID):
-${params.marketSummary}
-
-Price narrative (EN):
-${params.marketAnalytics.chartNarrative}
-Narasi harga (ID):
-${params.marketAnalytics.chartNarrative}
-
-Internal forecast (EN):
-${params.marketAnalytics.chartForecast}
-Forecast internal (ID):
-${params.marketAnalytics.chartForecast}
-
-Candle data (ISO|O/H/L/C/V) (EN):
-${params.marketAnalytics.promptSeries || "(No candle data)"}
-Data candle (ISO|O/H/L/C/V) (ID):
-${params.marketAnalytics.promptSeries || "(Data candle tidak tersedia)"}
-
-Technical snapshot (EN):
-${technicalBlock}
-Ringkasan teknikal (ID):
-${technicalBlock}
-
-Tavily summary (EN):
-${tavilyAnswer}
-Ringkasan Tavily (ID):
-${tavilyAnswer}
-
-Tavily search results (EN):
-${tavilyResultsBlock}
-Hasil pencarian Tavily (ID):
-${tavilyResultsBlock}
-
-Tavily article extracts (EN):
-${tavilyArticlesBlock}
-Konten URL Tavily (ID):
-${tavilyArticlesBlock}
-
-Instructions (EN):
-- Perform sentiment, news, and market analysis for ${formattedPair}; surface tradable insights.
-- Produce base / bullish / bearish price scenarios for ${formattedPair} on timeframe ${params.timeframe.toUpperCase()}.
-- Supply supporting technical & fundamental notes plus a risk-aware execution plan (entries, targets, stop, sizing).
-- Respond with JSON only, English text first followed by Indonesian translation in each field.
-
-Instruksi (ID):
-- Lakukan analisa sentimen, berita, dan pasar untuk ${formattedPair}; tampilkan insight yang dapat dieksekusi.
-- Sajikan skenario harga dasar / bullish / bearish untuk ${formattedPair} pada timeframe ${params.timeframe.toUpperCase()}.
-- Lengkapi catatan teknikal & fundamental serta rencana eksekusi yang memperhatikan risiko (entry, target, stop, sizing).
-- Jawab dalam JSON saja dengan teks Bahasa Inggris terlebih dahulu lalu terjemahan Bahasa Indonesia pada setiap field.`;
+  return lines.join("\n");
 };
 
-const buildSystemPrompt = () => `You are SWIMM (Soon You Will Make Money), a bilingual crypto markets analyst.
-Always reply with valid JSON only.
-Each string must contain English text first, followed by the Indonesian translation separated by " // ".
+const buildSystemPrompt = (locale: Locale) => {
+  const languageReminder =
+    locale === "id"
+      ? "All strings must be written in natural Indonesian."
+      : "All strings must be written in natural English.";
+
+  return `You are SWIMM (Soon You Will Make Money), a crypto markets analyst.
+Always reply with valid JSON only. ${languageReminder}
 Schema:
 {
   "summary": string,
@@ -700,6 +846,7 @@ Schema:
   "highlights": string[],
   "nextSteps": string[]
 }`;
+};
 
 const stripCodeFences = (content: string) => {
   const trimmed = content.trim();
@@ -793,7 +940,11 @@ const parseModelPayload = (content: string) => {
 
   const originalJsonString = cleaned.slice(start, end + 1);
   const normalizedJsonString = repairJsonString(originalJsonString);
-  const sanitizedSource = stripTrailingCommas(stripJsonComments(normalizedJsonString));
+  const withoutComments = stripJsonComments(normalizedJsonString);
+  const withoutTrailingCommas = stripTrailingCommas(withoutComments);
+  const withoutLooseUndefined = replaceLooseUndefined(withoutTrailingCommas);
+  const repairedFields = repairTruncatedFields(withoutLooseUndefined);
+  const sanitizedSource = autoCloseJson(repairedFields);
   const jsonString = sanitizedSource;
   try {
     return JSON5.parse(jsonString) as Partial<AgentPayload>;
@@ -853,8 +1004,10 @@ const buildTradePlan = (
   marketSupport: {
     context: MarketContext;
     analytics: ReturnType<typeof buildMarketAnalytics>;
-  }
+  },
+  locale: Locale
 ): TradePlan => {
+  const isId = locale === "id";
   const biasDraft = typeof draft?.bias === "string" ? draft.bias.toLowerCase() : null;
   const bias: "long" | "short" | "neutral" =
     biasDraft === "long" || biasDraft === "short" || biasDraft === "neutral"
@@ -865,8 +1018,9 @@ const buildTradePlan = (
       ? "short"
       : "neutral";
 
-  const sizingNotesDefaultHold =
-    "Tidak ada rencana eksekusi. Tunggu konfirmasi tambahan sebelum membuka posisi.";
+  const sizingNotesDefaultHold = isId
+    ? "Tidak ada rencana eksekusi. Tunggu konfirmasi tambahan sebelum membuka posisi."
+    : "No execution plan provided. Wait for additional confirmation before opening a position.";
 
   if (action === "hold") {
     return {
@@ -879,7 +1033,9 @@ const buildTradePlan = (
       sizingNotes: ensureString(draft?.sizingNotes, sizingNotesDefaultHold),
       rationale: ensureString(
         draft?.rationale,
-        "Momentum belum jelas. Evaluasi ulang setelah harga menembus area kunci."
+        isId
+          ? "Momentum belum jelas. Evaluasi ulang setelah harga menembus area kunci."
+          : "Momentum is unclear. Reassess once price breaks a key area."
       ),
     };
   }
@@ -940,10 +1096,16 @@ const buildTradePlan = (
 
   const sizingNotesDefault =
     bias === "long"
-      ? "Risiko per posisi disarankan <= 2% dari ekuitas; gunakan position sizing bertahap."
+      ? isId
+        ? "Risiko per posisi disarankan <= 2% dari ekuitas; gunakan position sizing bertahap."
+        : "Risk per position should stay ≤ 2% of equity; scale into the trade gradually."
       : bias === "short"
-      ? "Pastikan modal siap untuk short dan lindungi dengan ukuran posisi konservatif."
-      : "Tahan eksekusi sampai sinyal tambahan mengkonfirmasi arah.";
+      ? isId
+        ? "Pastikan modal siap untuk short dan lindungi dengan ukuran posisi konservatif."
+        : "Confirm borrow availability for shorts and keep position sizing conservative."
+      : isId
+      ? "Tahan eksekusi sampai sinyal tambahan mengkonfirmasi arah."
+      : "Hold execution until additional signals confirm direction.";
 
   return {
     bias,
@@ -955,7 +1117,9 @@ const buildTradePlan = (
     sizingNotes: ensureString(draft?.sizingNotes, sizingNotesDefault),
     rationale: ensureString(
       draft?.rationale,
-      "Validasi trade setup dengan order flow dan berita makro sebelum eksekusi."
+      isId
+        ? "Validasi setup trading dengan order flow dan berita makro sebelum eksekusi."
+        : "Validate the trade setup with order flow and macro headlines before execution."
     ),
   };
 };
@@ -968,8 +1132,10 @@ const buildAgentPayload = (
     context: MarketContext;
     analytics: ReturnType<typeof buildMarketAnalytics>;
     summary: string;
-  }
+  },
+  locale: Locale
 ): AgentPayload => {
+  const isId = locale === "id";
   const decision: Partial<AgentPayload["decision"]> = draft.decision ?? {};
 
   const action = ((): AgentDecision => {
@@ -996,12 +1162,16 @@ const buildAgentPayload = (
       : pickFallbackTimeframe(objective);
   const rationale = ensureString(
     decision.rationale,
-    "Model tidak memberikan rasionalisasi. Tambahkan detail objektif untuk analisa lanjutan."
+    isId
+      ? "Model tidak memberikan rasionalisasi. Tambahkan detail objektif untuk analisa lanjutan."
+      : "The model did not supply a rationale. Add more objective detail for a follow-up analysis run."
   );
 
   const summary = ensureString(
     draft.summary,
-    "Analisa tidak berhasil dibuat. Coba jalankan ulang agent dengan data yang lebih lengkap."
+    isId
+      ? "Analisa tidak berhasil dibuat. Coba jalankan ulang agent dengan data yang lebih lengkap."
+      : "Analysis could not be generated. Rerun the agent with richer context."
   );
 
   const baseHighlights = ensureStringArray(draft.highlights);
@@ -1016,7 +1186,7 @@ const buildAgentPayload = (
     marketSupport.context.interval
   );
 
-  const tradePlan = buildTradePlan(draft.tradePlan, action, marketSupport);
+  const tradePlan = buildTradePlan(draft.tradePlan, action, marketSupport, locale);
 
   const technical = ensureStringArray((marketDraft as Record<string, unknown>).technical);
   const fundamental = ensureStringArray((marketDraft as Record<string, unknown>).fundamental);
@@ -1033,9 +1203,14 @@ const buildAgentPayload = (
     highlights: supportiveHighlights,
     nextSteps: nextSteps.length
       ? nextSteps
-      : [
+      : isId
+      ? [
           "Validasi rencana trading dengan chart real-time dan order book.",
-          "Perbarui data berita / on-chain, lalu jalankan ulang agent bila perlu.",
+          "Perbarui data berita atau on-chain, lalu jalankan ulang agent bila perlu.",
+        ]
+      : [
+          "Validate the trading plan against live charts and order-book data.",
+          "Refresh macro/news context and rerun the agent if needed.",
         ],
     market: {
       pair: marketSupport.context.symbol,
@@ -1054,7 +1229,7 @@ const buildAgentPayload = (
       technical: technical.length ? technical : marketSupport.analytics.technical,
       fundamental: fundamental.length
         ? fundamental
-        : buildDefaultFundamentals(marketSupport.summary, preferredTimeframe),
+        : buildDefaultFundamentals(marketSupport.summary, preferredTimeframe, locale),
     },
     tradePlan,
   };
@@ -1079,15 +1254,11 @@ export async function POST(request: Request) {
     );
   }
 
+  const locale: Locale =
+    typeof body.locale === "string" && isLocale(body.locale) ? body.locale : "en";
   const objective = body.objective.trim();
 
   const requestedSymbol = body.pairSymbol?.toUpperCase() ?? process.env.BINANCE_SYMBOL ?? "BTCUSDT";
-  if (!ALLOWED_SYMBOLS.has(requestedSymbol)) {
-    return NextResponse.json(
-      { error: "Pair tidak didukung. Pilih salah satu dari BTCUSDT, ETHUSDT, SOLUSDT, HYPEUSDT." },
-      { status: 400 }
-    );
-  }
   const providerParam = typeof body.provider === "string" ? body.provider.toLowerCase() : DEFAULT_PROVIDER;
   const provider: CexProvider = isCexProvider(providerParam) ? providerParam : DEFAULT_PROVIDER;
 
@@ -1126,14 +1297,14 @@ export async function POST(request: Request) {
         ])
       : Promise.all([
           fetchBinanceMarketSummary(symbol),
-          fetchBinanceCandles(symbol, BINANCE_INTERVAL_MAP[timeframe], 500),
+          fetchBinanceCandles(symbol, CEX_INTERVAL_MAP[timeframe], 500),
         ])),
     tavilySearchPromise,
     tavilyExtractPromise,
   ]);
   const resolvedSymbol = summaryData?.symbol ?? symbol;
   const marketSummary = provider === "bybit" ? formatBybitSummary(summaryData) : formatBinanceSummary(summaryData);
-  const marketAnalytics = buildMarketAnalytics(candles, timeframe);
+  const marketAnalytics = buildMarketAnalytics(candles, timeframe, locale);
   const resolvedLastPrice =
     (typeof marketAnalytics.lastClose === "number" && marketAnalytics.lastClose > 0
       ? marketAnalytics.lastClose
@@ -1144,7 +1315,7 @@ export async function POST(request: Request) {
     interval:
       provider === "bybit"
         ? mapTimeframeToBybitIntervalSymbol(timeframe)
-        : BINANCE_INTERVAL_MAP[timeframe],
+        : CEX_INTERVAL_MAP[timeframe],
     candles,
     lastPrice: resolvedLastPrice,
   };
@@ -1172,7 +1343,7 @@ export async function POST(request: Request) {
         messages: [
           {
             role: "system",
-            content: buildSystemPrompt(),
+            content: buildSystemPrompt(locale),
           },
           {
             role: "user",
@@ -1194,7 +1365,7 @@ export async function POST(request: Request) {
               tavilySearch,
               tavilyArticles,
               pairSymbol: marketSupport.context.symbol,
-            }),
+            }, locale),
           },
         ],
       }),
@@ -1218,7 +1389,7 @@ export async function POST(request: Request) {
     }
 
     const draft = parseModelPayload(content);
-    const payload = buildAgentPayload(draft, objective, timeframe, marketSupport);
+    const payload = buildAgentPayload(draft, objective, timeframe, marketSupport, locale);
 
     return NextResponse.json(payload);
   } catch (error) {

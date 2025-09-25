@@ -11,9 +11,7 @@ import {
   fetchBybitCandles,
   fetchBybitMarketSummary,
   fetchBybitOrderBook,
-  fetchBybitTradablePairs,
   formatBybitSummary,
-  isBybitPairTradable,
 } from "@/features/market/exchanges/bybit";
 import { DEFAULT_PROVIDER, isCexProvider } from "@/features/market/exchanges";
 
@@ -32,18 +30,16 @@ export async function GET(request: NextRequest) {
   const intervalParam = searchParams.get("interval")?.toLowerCase() ?? "15m";
   const limitParam = Number.parseInt(searchParams.get("limit") ?? "500", 10);
 
-  const isSupported =
-    provider === "bybit"
-      ? await isBybitPairTradable(symbolParam)
-      : await isPairTradable(symbolParam);
-  if (!isSupported) {
-    const pairs =
-      provider === "bybit" ? await fetchBybitTradablePairs() : await fetchBinanceTradablePairs();
-    const topSamples = pairs.slice(0, 20).map((item) => item.label).join(", ");
-    return NextResponse.json(
-      { error: `Pair tidak didukung. Contoh pair: ${topSamples}` },
-      { status: 400 }
-    );
+  if (provider === "binance") {
+    const isSupported = await isPairTradable(symbolParam);
+    if (!isSupported) {
+      const pairs = await fetchBinanceTradablePairs();
+      const topSamples = pairs.slice(0, 20).map((item) => item.label).join(", ");
+      return NextResponse.json(
+        { error: `Pair tidak didukung. Contoh pair: ${topSamples}` },
+        { status: 400 }
+      );
+    }
   }
 
   if (!ALLOWED_INTERVALS.has(intervalParam)) {

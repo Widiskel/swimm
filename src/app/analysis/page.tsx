@@ -49,7 +49,7 @@ const buildInitialIndicatorVisibility = () => {
 };
 
 export default function AnalysisPage() {
-  const { messages, languageTag, __ } = useLanguage();
+  const { messages, languageTag, __, locale } = useLanguage();
   const analysisCopy = messages.analysisPage;
   const { ready, authenticated, login } = usePrivy();
   const { addEntry } = useHistory();
@@ -230,6 +230,7 @@ export default function AnalysisPage() {
           manualNotes: "",
           datasetPreview: "",
           provider,
+          locale,
         }),
       });
 
