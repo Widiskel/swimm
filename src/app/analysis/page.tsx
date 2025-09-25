@@ -267,7 +267,7 @@ export default function AnalysisPage() {
             <motion.button
               type="button"
               onClick={() => login?.()}
-              className="rounded-full border border-[var(--swimm-primary-500)] bg-[var(--swimm-primary-500)] px-6 py-2 text-sm font-semibold text-[var(--swimm-navy-900)] shadow-sm shadow-[var(--swimm-glow)]"
+              className="rounded-full border border-[var(--swimm-primary-500)] bg-[var(--swimm-primary-500)] px-6 py-2 text-sm font-semibold text-[var(--swimm-navy-900)] shadow-[var(--swimm-glow)]"
               whileHover={{ y: -3 }}
               whileTap={{ scale: 0.97 }}
               transition={{ type: "spring", stiffness: 240, damping: 18 }}
