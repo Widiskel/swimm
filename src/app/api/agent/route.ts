@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import JSON5 from "json5";
 import {
   fetchBinanceCandles,
   fetchBinanceMarketSummary,
@@ -277,6 +278,93 @@ const repairJsonString = (input: string) => {
   }
 
   return result;
+};
+
+const stripJsonComments = (input: string) => {
+  let inString = false;
+  let inSingleLineComment = false;
+  let inMultiLineComment = false;
+  let output = "";
+
+  for (let i = 0; i < input.length; i += 1) {
+    const char = input[i];
+    const next = input[i + 1];
+    const prev = input[i - 1];
+
+    if (inSingleLineComment) {
+      if (char === "\n") {
+        inSingleLineComment = false;
+        output += char;
+      }
+      continue;
+    }
+
+    if (inMultiLineComment) {
+      if (char === "*" && next === "/") {
+        inMultiLineComment = false;
+        i += 1;
+      }
+      continue;
+    }
+
+    if (!inString && char === "/" && next === "/") {
+      inSingleLineComment = true;
+      i += 1;
+      continue;
+    }
+
+    if (!inString && char === "/" && next === "*") {
+      inMultiLineComment = true;
+      i += 1;
+      continue;
+    }
+
+    if (char === '"' && prev !== '\\') {
+      inString = !inString;
+    }
+
+    output += char;
+  }
+
+  return output;
+};
+
+const stripTrailingCommas = (input: string) => {
+  let inString = false;
+  let output = "";
+
+  for (let i = 0; i < input.length; i += 1) {
+    const char = input[i];
+    const prev = input[i - 1];
+
+    if (char === '"' && prev !== '\\') {
+      inString = !inString;
+      output += char;
+      continue;
+    }
+
+    if (!inString && char === ',') {
+      let j = i + 1;
+      while (j < input.length) {
+        const lookahead = input[j];
+        if (lookahead === ' ' || lookahead === '\n' || lookahead === '\r' || lookahead === '\t') {
+          j += 1;
+          continue;
+        }
+        break;
+      }
+
+      const next = input[j];
+      if (next === '}' || next === ']') {
+        i = j - 1;
+        continue;
+      }
+    }
+
+    output += char;
+  }
+
+  return output;
 };
 
 const ensureStringArray = (value: unknown): string[] => {
@@ -695,14 +783,17 @@ const parseModelPayload = (content: string) => {
     throw new Error("Response does not contain JSON object");
   }
 
-  const jsonString = cleaned.slice(start, end + 1);
+  const originalJsonString = cleaned.slice(start, end + 1);
+  const normalizedJsonString = repairJsonString(originalJsonString);
+  const sanitizedSource = stripTrailingCommas(stripJsonComments(normalizedJsonString));
+  const jsonString = sanitizedSource;
   try {
-    return JSON.parse(jsonString) as Partial<AgentPayload>;
+    return JSON5.parse(jsonString) as Partial<AgentPayload>;
   } catch (error) {
     const repaired = repairJsonString(jsonString);
     if (repaired !== jsonString) {
       try {
-        return JSON.parse(repaired) as Partial<AgentPayload>;
+        return JSON5.parse(repaired) as Partial<AgentPayload>;
       } catch (secondaryError) {
         const secondaryMessage =
           secondaryError instanceof Error
@@ -712,7 +803,7 @@ const parseModelPayload = (content: string) => {
         const stripped = stripArrayField(repaired, "points");
         if (stripped !== repaired) {
           try {
-            return JSON.parse(stripped) as Partial<AgentPayload>;
+            return JSON5.parse(stripped) as Partial<AgentPayload>;
           } catch (tertiaryError) {
             const tertiaryMessage =
               tertiaryError instanceof Error
@@ -727,7 +818,7 @@ const parseModelPayload = (content: string) => {
     const strippedOriginal = stripArrayField(jsonString, "points");
     if (strippedOriginal !== jsonString) {
       try {
-        return JSON.parse(strippedOriginal) as Partial<AgentPayload>;
+        return JSON5.parse(strippedOriginal) as Partial<AgentPayload>;
       } catch (tertiaryError) {
         const tertiaryMessage =
           tertiaryError instanceof Error
@@ -738,7 +829,12 @@ const parseModelPayload = (content: string) => {
     }
 
     const message = error instanceof Error ? error.message : String(error ?? "unknown error");
-    console.warn("Fireworks JSON parse failed", message, jsonString.slice(0, 400));
+    console.warn(
+      "Fireworks JSON parse failed",
+      message,
+      jsonString.slice(0, 400),
+      jsonString === originalJsonString ? undefined : originalJsonString.slice(0, 400)
+    );
     return { highlights: ["PARSE_WARNING: " + message] } as Partial<AgentPayload>;
   }
 };
@@ -847,14 +943,15 @@ const buildAgentPayload = (
     summary: string;
   }
 ): AgentPayload => {
-  const decision = draft.decision ?? {};
+  const decision: Partial<AgentPayload["decision"]> = draft.decision ?? {};
 
   const action = ((): AgentDecision => {
-    if (decision.action === "buy" || decision.action === "sell" || decision.action === "hold") {
-      return decision.action;
+    const actionRaw = decision.action as string | undefined;
+    if (actionRaw === "buy" || actionRaw === "sell" || actionRaw === "hold") {
+      return actionRaw;
     }
-    if (typeof decision.action === "string") {
-      const lower = decision.action.toLowerCase();
+    if (typeof actionRaw === "string") {
+      const lower = actionRaw.toLowerCase();
       if (lower.includes("buy")) {
         return "buy";
       }
@@ -883,8 +980,9 @@ const buildAgentPayload = (
   const baseHighlights = ensureStringArray(draft.highlights);
   const nextSteps = ensureStringArray(draft.nextSteps);
 
-  const marketDraft = draft.market ?? {};
-  const chartDraft = (marketDraft as Record<string, unknown>).chart ?? {};
+  const marketDraft: Partial<AgentPayload["market"]> = draft.market ?? {};
+  const chartDraft: Partial<AgentPayload["market"]["chart"]> =
+    (marketDraft as Record<string, unknown>).chart ?? {};
   const chartPoints = sanitizeChartPoints((chartDraft as Record<string, unknown>).points);
   const chartInterval = ensureString(
     (chartDraft as Record<string, unknown>).interval,

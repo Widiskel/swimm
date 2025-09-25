@@ -192,13 +192,14 @@ const id = {
       linkText: "Analisis",
       descriptionSuffix: " untuk menyimpan rekomendasi terbaru Anda.",
     },
-   entryCard: {
-     confidence: "Keyakinan",
-     planTimeframe: "Timeframe rencana",
+    entryCard: {
+      confidence: "Keyakinan",
+      planTimeframe: "Timeframe rencana",
       openInDashboard: "Buka di halaman analisa",
       entries: "Entry",
       takeProfits: "Take profit",
       stopLoss: "Stop loss",
+      sizingNotes: "Catatan sizing",
       noSizingNotes: "Tidak ada catatan sizing",
     },
   },

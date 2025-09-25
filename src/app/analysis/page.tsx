@@ -60,6 +60,8 @@ export default function AnalysisPage() {
   const [analysisError, setAnalysisError] = useState<string | null>(null);
 
   const liveMarketRef = useRef<LiveMarketHandle | null>(null);
+  const chartSectionRef = useRef<HTMLElement | null>(null);
+  const analysisSectionRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -152,6 +154,11 @@ export default function AnalysisPage() {
 
   const handleShowChart = () => {
     liveMarketRef.current?.startChart();
+    if (typeof window !== "undefined") {
+      window.requestAnimationFrame(() => {
+        chartSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    }
   };
 
   const handleTimeframeChange = (nextTimeframe: (typeof TIMEFRAME_OPTIONS)[number]) => {
@@ -211,6 +218,11 @@ export default function AnalysisPage() {
       setResponse(payload);
       setAnalysisCandles(latestCandles.slice(-180));
       addEntry({ pair: selectedPair, timeframe, response: payload });
+      if (typeof window !== "undefined") {
+        window.requestAnimationFrame(() => {
+          analysisSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        });
+      }
     } catch (runError) {
       console.error(runError);
       if (runError instanceof Error) {
@@ -318,6 +330,7 @@ export default function AnalysisPage() {
           onAnalyze={handleAnalyze}
           isRunningAnalysis={isRunning}
           analysisError={analysisError}
+          sectionRef={chartSectionRef}
         />
 
         <AnalysisSection
@@ -337,6 +350,7 @@ export default function AnalysisPage() {
           formattedPair={formattedPair}
           chartStartLabel={chartStartLabel}
           chartEndLabel={chartEndLabel}
+          sectionRef={analysisSectionRef}
         />
       </main>
     </div>

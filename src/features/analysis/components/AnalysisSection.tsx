@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type MutableRefObject, type RefObject } from "react";
 import { motion } from "framer-motion";
 import {
   createChart,
@@ -48,6 +48,7 @@ type AnalysisSectionProps = {
   formattedPair: string;
   chartStartLabel: string;
   chartEndLabel: string;
+  sectionRef?: RefObject<HTMLElement> | MutableRefObject<HTMLElement | null> | null;
 };
 
 const MotionSection = motion.section;
@@ -69,6 +70,7 @@ export function AnalysisSection({
   formattedPair,
   chartStartLabel,
   chartEndLabel,
+  sectionRef,
 }: AnalysisSectionProps) {
   const { messages, __ } = useLanguage();
   const analysisCopy = messages.analysis;
@@ -220,6 +222,11 @@ export function AnalysisSection({
 
   return (
     <MotionSection
+      ref={(node) => {
+        if (sectionRef && "current" in sectionRef) {
+          (sectionRef as MutableRefObject<HTMLElement | null>).current = node;
+        }
+      }}
       id="insights"
       className="rounded-3xl border border-[var(--swimm-neutral-300)] bg-white p-8"
       initial={{ opacity: 0, y: 48 }}

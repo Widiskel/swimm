@@ -10,6 +10,16 @@ const PRIVY_APP_ID = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
 
 type ButtonState = "idle" | "loading";
 
+type MaybeWalletAccount = {
+  address?: string | null;
+  type?: string | null;
+};
+
+type MaybeWalletUser = {
+  linkedAccounts?: MaybeWalletAccount[] | null;
+  wallets?: MaybeWalletAccount[] | null;
+};
+
 const shorten = (value: string) => {
   if (value.length <= 10) {
     return value;
@@ -31,7 +41,10 @@ const GuardedAuthControls = () => {
     if (user.email?.address) {
       return user.email.address;
     }
-    const walletAddress = user.wallet?.address ?? user.wallets?.[0]?.address;
+    const extendedUser = user as MaybeWalletUser;
+    const linkedWallet = extendedUser.linkedAccounts?.find((account) => account?.type === "wallet");
+    const walletFallback = extendedUser.wallets?.[0]?.address ?? linkedWallet?.address ?? undefined;
+    const walletAddress = user.wallet?.address ?? walletFallback ?? undefined;
     if (walletAddress) {
       return shorten(walletAddress);
     }

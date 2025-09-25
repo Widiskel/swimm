@@ -72,4 +72,4 @@ export const INDICATOR_CONFIG: IndicatorConfigItem[] = [
 
 export const TARGET_LABELS = ["TP1", "TP2", "TP3", "TP4", "TP5"] as const;
 
-export const DEFAULT_PAIR_SYMBOL = (process.env.BINANCE_SYMBOL ?? "BTCUSDT") as const;
+export const DEFAULT_PAIR_SYMBOL = process.env.BINANCE_SYMBOL ?? "BTCUSDT";

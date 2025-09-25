@@ -1,21 +1,23 @@
 "use client";
 
 import { PrivyProvider } from "@privy-io/react-auth";
+import type { PrivyClientConfig } from "@privy-io/react-auth";
 import type { PropsWithChildren } from "react";
 
 const PRIVY_APP_ID = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
 
-const providerConfig = {
+const providerConfig: PrivyClientConfig = {
   loginMethods: ["email", "wallet"],
   embeddedWallets: {
-    createOnLogin: "users-without-wallets" as const,
+    ethereum: {
+      createOnLogin: "users-without-wallets",
+    },
   },
-};
-
-const providerAppearance = {
-  theme: "dark" as const,
-  accentColor: "#0ea5e9",
-  logo: "/file.svg",
+  appearance: {
+    theme: "dark",
+    accentColor: "#0ea5e9",
+    logo: "/file.svg",
+  },
 };
 
 function PrivyBoundary({ children }: PropsWithChildren) {
@@ -27,11 +29,7 @@ function PrivyBoundary({ children }: PropsWithChildren) {
   }
 
   return (
-    <PrivyProvider
-      appId={PRIVY_APP_ID}
-      config={providerConfig}
-      appearance={providerAppearance}
-    >
+    <PrivyProvider appId={PRIVY_APP_ID} config={providerConfig}>
       {children}
     </PrivyProvider>
   );

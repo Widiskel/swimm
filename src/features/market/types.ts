@@ -7,6 +7,7 @@ import type {
   LineStyle,
   LineWidth,
 } from "lightweight-charts";
+import type { BinanceMarketSummary } from "@/lib/binance";
 
 export type IndicatorKey =
   | "sma20"
@@ -116,4 +117,3 @@ export type LiveChartCallbacks = {
 };
 
 // Re-export Binance types locally to avoid circular imports.
-export type { BinanceMarketSummary } from "@/lib/binance";

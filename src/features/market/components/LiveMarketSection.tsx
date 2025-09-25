@@ -6,6 +6,8 @@ import {
   useMemo,
   useRef,
   useState,
+  type MutableRefObject,
+  type RefObject,
 } from "react";
 import { motion } from "framer-motion";
 import {
@@ -50,6 +52,7 @@ export type LiveMarketSectionProps = {
   onAnalyze: () => void;
   isRunningAnalysis: boolean;
   analysisError: string | null;
+  sectionRef?: RefObject<HTMLElement> | MutableRefObject<HTMLElement | null> | null;
 };
 
 export const LiveMarketSection = forwardRef<
@@ -67,11 +70,21 @@ export const LiveMarketSection = forwardRef<
     onAnalyze,
     isRunningAnalysis,
     analysisError,
+    sectionRef,
   },
   ref
 ) {
   const { messages, languageTag, __ } = useLanguage();
   const liveCopy = messages.live;
+
+  const handleSectionRef = useCallback(
+    (node: HTMLElement | null) => {
+      if (sectionRef && "current" in sectionRef) {
+        (sectionRef as MutableRefObject<HTMLElement | null>).current = node;
+      }
+    },
+    [sectionRef]
+  );
 
   const chartContainerRef = useRef<HTMLDivElement | null>(null);
   const chartApiRef = useRef<IChartApi | null>(null);
@@ -440,6 +453,7 @@ export const LiveMarketSection = forwardRef<
 
   return (
     <motion.section
+      ref={handleSectionRef}
       className="space-y-6"
       initial={{ opacity: 0, y: 40 }}
       whileInView={{ opacity: 1, y: 0 }}

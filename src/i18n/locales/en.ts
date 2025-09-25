@@ -192,6 +192,7 @@ const en = {
       entries: "Entries",
       takeProfits: "Take profits",
       stopLoss: "Stop loss",
+      sizingNotes: "Sizing notes",
       noSizingNotes: "No sizing notes",
     },
   },

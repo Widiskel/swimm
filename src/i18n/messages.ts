@@ -12,5 +12,4 @@ export type Messages = (typeof messages)[Locale];
 export const isLocale = (value: string): value is Locale =>
   Object.prototype.hasOwnProperty.call(messages, value);
 
-export const getLanguageTag = (locale: Locale) =>
-  (locale === "id" ? "id-ID" : "en-US") as const;
+export const getLanguageTag = (locale: Locale) => (locale === "id" ? "id-ID" : "en-US");
