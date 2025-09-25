@@ -93,6 +93,32 @@ const id = {
       "Analisa akan menggunakan pair {pair} dari {provider} dengan timeframe {timeframe}.",
     analyzeButton: "Analisa",
     analyzingButton: "Analisa berjalan...",
+    errors: {
+      fetchSnapshot: "Gagal mengambil data pasar dari provider.",
+      renderChart: "Gagal menampilkan chart. Coba lagi.",
+    },
+  },
+  market: {
+    summary: {
+      unavailable: "Data pasar {provider} tidak tersedia.",
+      spotTitle: "{symbol} spot ({provider})",
+      lastPrice: "Harga terakhir: {value}",
+      change24h: "Perubahan 24 jam: {value}%",
+      highLow24h: "High/Low 24 jam: {high} / {low}",
+      volume24hBase: "Volume 24 jam: {value} {asset}",
+      volume24hQuote: "Volume (quote): {value} USDT",
+      weightedAverage: "Average tertimbang: {value}",
+      lastUpdate: "Update terakhir: {value}",
+      providerLabel: {
+        binance: "Binance",
+        bybit: "Bybit",
+      },
+    },
+    errors: {
+      unsupportedPair: "Pair tidak didukung. Contoh pair: {samples}",
+      invalidInterval: "Interval chart tidak valid.",
+      loadPairs: "Gagal memuat daftar pair dari provider.",
+    },
   },
   analysis: {
     heading: "Analisa agent untuk {pair} ({timeframe})",

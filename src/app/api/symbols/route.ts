@@ -3,11 +3,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { fetchBinanceTradablePairs } from "@/features/market/exchanges/binance";
 import { fetchBybitTradablePairs } from "@/features/market/exchanges/bybit";
 import { DEFAULT_PROVIDER, isCexProvider } from "@/features/market/exchanges";
+import { isLocale, type Locale } from "@/i18n/messages";
+import { translate } from "@/i18n/translate";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const providerParam = searchParams.get("provider")?.toLowerCase() ?? DEFAULT_PROVIDER;
   const provider = isCexProvider(providerParam) ? providerParam : DEFAULT_PROVIDER;
+  const localeParam = searchParams.get("locale") ?? "";
+  const locale: Locale = localeParam && isLocale(localeParam) ? localeParam : "en";
 
   try {
     const pairs =
@@ -17,7 +21,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error("Failed to load tradable pairs", error);
     return NextResponse.json(
-      { error: "Gagal memuat daftar pair dari provider." },
+      { error: translate(locale, "market.errors.loadPairs") },
       { status: 500 }
     );
   }

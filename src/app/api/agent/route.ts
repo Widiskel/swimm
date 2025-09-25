@@ -1303,7 +1303,10 @@ export async function POST(request: Request) {
     tavilyExtractPromise,
   ]);
   const resolvedSymbol = summaryData?.symbol ?? symbol;
-  const marketSummary = provider === "bybit" ? formatBybitSummary(summaryData) : formatBinanceSummary(summaryData);
+  const marketSummary =
+    provider === "bybit"
+      ? formatBybitSummary(summaryData, locale)
+      : formatBinanceSummary(summaryData, locale);
   const marketAnalytics = buildMarketAnalytics(candles, timeframe, locale);
   const resolvedLastPrice =
     (typeof marketAnalytics.lastClose === "number" && marketAnalytics.lastClose > 0

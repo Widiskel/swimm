@@ -79,7 +79,7 @@ export default function AnalysisPage() {
     const loadPairs = async () => {
       setIsLoadingPairs(true);
       try {
-        const res = await fetch(`/api/symbols?provider=${provider}`);
+        const res = await fetch(`/api/symbols?provider=${provider}&locale=${locale}`);
         if (!res.ok) {
           throw new Error(`Failed to load symbols: ${res.status}`);
         }
@@ -109,7 +109,7 @@ export default function AnalysisPage() {
     return () => {
       cancelled = true;
     };
-  }, [provider]);
+  }, [locale, provider]);
 
   const providerLabel = useMemo(() => __("pairSelection.providerOptions." + provider), [__, provider]);
 

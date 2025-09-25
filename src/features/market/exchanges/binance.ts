@@ -1,3 +1,6 @@
+import { translate } from "@/i18n/translate";
+import type { Locale } from "@/i18n/messages";
+
 const BINANCE_REST_URL = process.env.BINANCE_API_URL ?? "https://api.binance.com";
 const DEFAULT_SYMBOL = process.env.BINANCE_SYMBOL ?? "BTCUSDT";
 
@@ -351,10 +354,12 @@ export const fetchBinanceOrderBook = async (
 };
 
 export const formatBinanceSummary = (
-  summary: BinanceMarketSummary | null
+  summary: BinanceMarketSummary | null,
+  locale: Locale = "en"
 ): string => {
+  const providerLabel = translate(locale, "market.summary.providerLabel.binance");
   if (!summary) {
-    return "(Data pasar Binance tidak tersedia)";
+    return translate(locale, "market.summary.unavailable", { provider: providerLabel });
   }
 
   const {
@@ -372,13 +377,28 @@ export const formatBinanceSummary = (
   const baseAsset = symbol.replace(/USDT$/i, "").replace(/USDC$/i, "").replace(/BUSD$/i, "");
 
   return [
-    `${symbol} spot (Binance)`,
-    `Harga terakhir: ${lastPrice.toFixed(2)}`,
-    `Perubahan 24 jam: ${priceChangePercent.toFixed(2)}%`,
-    `High/Low 24 jam: ${highPrice.toFixed(2)} / ${lowPrice.toFixed(2)}`,
-    `Volume 24 jam: ${volume.toFixed(2)} ${baseAsset || symbol}`,
-    `Volume (quote): ${quoteVolume.toFixed(2)} USDT`,
-    `Average tertimbang: ${weightedAvgPrice.toFixed(2)}`,
-    `Update terakhir: ${closeTime}`,
+    translate(locale, "market.summary.spotTitle", {
+      symbol,
+      provider: providerLabel,
+    }),
+    translate(locale, "market.summary.lastPrice", { value: lastPrice.toFixed(2) }),
+    translate(locale, "market.summary.change24h", {
+      value: priceChangePercent.toFixed(2),
+    }),
+    translate(locale, "market.summary.highLow24h", {
+      high: highPrice.toFixed(2),
+      low: lowPrice.toFixed(2),
+    }),
+    translate(locale, "market.summary.volume24hBase", {
+      value: volume.toFixed(2),
+      asset: baseAsset || symbol,
+    }),
+    translate(locale, "market.summary.volume24hQuote", {
+      value: quoteVolume.toFixed(2),
+    }),
+    translate(locale, "market.summary.weightedAverage", {
+      value: weightedAvgPrice.toFixed(2),
+    }),
+    translate(locale, "market.summary.lastUpdate", { value: closeTime }),
   ].join("\n");
 };

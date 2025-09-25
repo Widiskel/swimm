@@ -78,7 +78,7 @@ export const LiveMarketSection = forwardRef<
   },
   ref
 ) {
-  const { messages, languageTag, __ } = useLanguage();
+  const { messages, languageTag, __, locale } = useLanguage();
   const liveCopy = messages.live;
   const providerLabel = useMemo(() => __("pairSelection.providerOptions." + provider), [__, provider]);
 
@@ -195,10 +195,11 @@ export const LiveMarketSection = forwardRef<
           interval,
           limit: "500",
           provider: providerValue,
+          locale,
         });
         const res = await fetch(`/api/market?${params.toString()}`);
         if (!res.ok) {
-          throw new Error("Gagal mengambil data pasar dari provider.");
+          throw new Error(__("live.errors.fetchSnapshot"));
         }
         const payload = (await res.json()) as MarketSnapshot;
         setChartData(payload);
@@ -208,13 +209,13 @@ export const LiveMarketSection = forwardRef<
         setChartError(
           error instanceof Error
             ? error.message
-            : "Gagal menampilkan chart. Coba lagi."
+            : __("live.errors.renderChart")
         );
       } finally {
         setIsChartLoading(false);
       }
     },
-    [provider, selectedPair, timeframe]
+    [provider, selectedPair, timeframe, __, locale]
   );
 
   const startChartPolling = useCallback(

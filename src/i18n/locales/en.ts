@@ -90,6 +90,32 @@ const en = {
     analysisNote: "Analysis will use {pair} from {provider} with timeframe {timeframe}.",
     analyzeButton: "Analyze",
     analyzingButton: "Analyzing...",
+    errors: {
+      fetchSnapshot: "Failed to retrieve market data from the provider.",
+      renderChart: "Unable to display the chart. Please try again.",
+    },
+  },
+  market: {
+    summary: {
+      unavailable: "{provider} market data is unavailable.",
+      spotTitle: "{symbol} spot ({provider})",
+      lastPrice: "Last price: {value}",
+      change24h: "24h change: {value}%",
+      highLow24h: "24h high/low: {high} / {low}",
+      volume24hBase: "24h volume: {value} {asset}",
+      volume24hQuote: "Quote volume: {value} USDT",
+      weightedAverage: "Weighted average: {value}",
+      lastUpdate: "Last update: {value}",
+      providerLabel: {
+        binance: "Binance",
+        bybit: "Bybit",
+      },
+    },
+    errors: {
+      unsupportedPair: "Pair is not supported. Sample pairs: {samples}",
+      invalidInterval: "Invalid chart interval.",
+      loadPairs: "Failed to load tradable pairs from the provider.",
+    },
   },
   analysis: {
     heading: "Agent analysis for {pair} ({timeframe})",

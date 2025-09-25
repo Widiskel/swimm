@@ -14,6 +14,8 @@ import {
   formatBybitSummary,
 } from "@/features/market/exchanges/bybit";
 import { DEFAULT_PROVIDER, isCexProvider } from "@/features/market/exchanges";
+import { isLocale, type Locale } from "@/i18n/messages";
+import { translate } from "@/i18n/translate";
 
 const ALLOWED_INTERVALS = new Set(["1m", "5m", "15m", "1h", "4h", "1d"]);
 
@@ -29,6 +31,8 @@ export async function GET(request: NextRequest) {
     : (process.env.BINANCE_SYMBOL ?? "BTCUSDT");
   const intervalParam = searchParams.get("interval")?.toLowerCase() ?? "15m";
   const limitParam = Number.parseInt(searchParams.get("limit") ?? "500", 10);
+  const localeParam = searchParams.get("locale") ?? "";
+  const locale: Locale = localeParam && isLocale(localeParam) ? localeParam : "en";
 
   if (provider === "binance") {
     const isSupported = await isPairTradable(symbolParam);
@@ -36,7 +40,11 @@ export async function GET(request: NextRequest) {
       const pairs = await fetchBinanceTradablePairs();
       const topSamples = pairs.slice(0, 20).map((item) => item.label).join(", ");
       return NextResponse.json(
-        { error: `Pair tidak didukung. Contoh pair: ${topSamples}` },
+        {
+          error: translate(locale, "market.errors.unsupportedPair", {
+            samples: topSamples,
+          }),
+        },
         { status: 400 }
       );
     }
@@ -44,7 +52,7 @@ export async function GET(request: NextRequest) {
 
   if (!ALLOWED_INTERVALS.has(intervalParam)) {
     return NextResponse.json(
-      { error: "Interval chart tidak valid." },
+      { error: translate(locale, "market.errors.invalidInterval") },
       { status: 400 }
     );
   }
@@ -71,7 +79,10 @@ export async function GET(request: NextRequest) {
     provider,
     candles,
     orderBook,
-    summary: provider === "bybit" ? formatBybitSummary(summary) : formatBinanceSummary(summary),
+    summary:
+      provider === "bybit"
+        ? formatBybitSummary(summary, locale)
+        : formatBinanceSummary(summary, locale),
     summaryStats: summary,
     updatedAt: new Date().toISOString(),
   });
