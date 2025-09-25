@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { randomUUID } from "node:crypto";
 import type { Collection, WithId } from "mongodb";
+import type { RequestCookies } from "next/dist/compiled/@edge-runtime/cookies";
 import { getMongoDb } from "./mongodb";
 
 export const SESSION_COOKIE_NAME = "swimm_session";
@@ -50,6 +51,10 @@ const buildSessionCookieOptions = (expiresAt: Date) => ({
   expires: expiresAt,
 });
 
+const getMutableCookies = async () => {
+  return (await cookies()) as unknown as RequestCookies;
+};
+
 export const createSession = async (payload: {
   userId: string;
   email?: string | null;
@@ -76,7 +81,7 @@ export const createSession = async (payload: {
 
   await collection.insertOne(doc);
 
-  const cookieStore = cookies();
+  const cookieStore = await getMutableCookies();
   cookieStore.set({
     ...buildSessionCookieOptions(expiresAt),
     value: sessionId,
@@ -89,23 +94,27 @@ export const touchSession = async (sessionId: string) => {
   const collection = await getSessionCollection();
   const now = new Date();
   const expiresAt = new Date(now.getTime() + SESSION_TTL_MS);
-  const result = await collection.findOneAndUpdate(
+  const updateResult = await collection.updateOne(
     { sessionId },
     {
       $set: {
         updatedAt: now,
         expiresAt,
       },
-    },
-    { returnDocument: "after" }
+    }
   );
-  const doc = result.value;
+
+  if (updateResult.matchedCount === 0) {
+    return null;
+  }
+
+  const doc = await collection.findOne({ sessionId });
 
   if (!doc) {
     return null;
   }
 
-  const cookieStore = cookies();
+  const cookieStore = await getMutableCookies();
   cookieStore.set({
     ...buildSessionCookieOptions(expiresAt),
     value: sessionId,
@@ -115,7 +124,7 @@ export const touchSession = async (sessionId: string) => {
 };
 
 export const getSessionFromCookie = async () => {
-  const cookieStore = cookies();
+  const cookieStore = await getMutableCookies();
   const sessionId = cookieStore.get(SESSION_COOKIE_NAME)?.value;
   if (!sessionId) {
     return null;
@@ -139,7 +148,7 @@ export const getSessionFromCookie = async () => {
 };
 
 export const destroySession = async () => {
-  const cookieStore = cookies();
+  const cookieStore = await getMutableCookies();
   const sessionId = cookieStore.get(SESSION_COOKIE_NAME)?.value;
   if (!sessionId) {
     return;
@@ -164,4 +173,15 @@ export const toSessionResponse = (session: SessionDocument | null): SessionPubli
     expiresAt: session.expiresAt.toISOString(),
   };
 };
+
+
+
+
+
+
+
+
+
+
+
 

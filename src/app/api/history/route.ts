@@ -64,9 +64,20 @@ const mapHistoryDoc = (
   updatedAt: doc.updatedAt.toISOString(),
 });
 
-const sanitizePayload = (payload: unknown) => {
+type SanitizedHistoryPayload =
+  | { error: string }
+  | {
+      pair: string;
+      timeframe: string;
+      provider: string;
+      response: AgentResponse;
+      verdict: Verdict;
+      feedback: string | null;
+    };
+
+const sanitizePayload = (payload: unknown): SanitizedHistoryPayload => {
   if (!payload || typeof payload !== "object") {
-    return { error: "Payload must be an object." } as const;
+    return { error: "Payload must be an object." };
   }
 
   const {
@@ -86,16 +97,16 @@ const sanitizePayload = (payload: unknown) => {
   };
 
   if (!pair || typeof pair !== "string") {
-    return { error: "Pair is required." } as const;
+    return { error: "Pair is required." };
   }
   if (!timeframe || typeof timeframe !== "string") {
-    return { error: "Timeframe is required." } as const;
+    return { error: "Timeframe is required." };
   }
   if (!response || typeof response !== "object") {
-    return { error: "Agent response is required." } as const;
+    return { error: "Agent response is required." };
   }
   if (!verdict || !ALLOWED_VERDICTS.has(verdict as Verdict)) {
-    return { error: "Verdict must be one of: accurate, inaccurate, unknown." } as const;
+    return { error: "Verdict must be one of: accurate, inaccurate, unknown." };
   }
 
   const normalizedProvider = isCexProvider(provider ?? null) ? provider! : DEFAULT_PROVIDER;
@@ -108,7 +119,7 @@ const sanitizePayload = (payload: unknown) => {
     response,
     verdict: verdict as Verdict,
     feedback: sanitizedFeedback,
-  } as const;
+  };
 };
 
 export async function GET() {
@@ -204,3 +215,5 @@ export async function DELETE() {
     return buildError("Unable to clear history.", 500);
   }
 }
+
+

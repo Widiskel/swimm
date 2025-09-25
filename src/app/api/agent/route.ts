@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import JSON5 from "json5";
+import type { Filter } from "mongodb";
 import {
   fetchBinanceCandles,
   fetchBinanceMarketSummary,
@@ -23,6 +24,7 @@ import {
 import { getMongoDb } from "@/lib/mongodb";
 import { getSessionFromCookie } from "@/lib/session";
 import { isLocale, type Locale } from "@/i18n/messages";
+import type { AgentResponse } from "@/features/analysis/types";
 
 type DataMode = "scrape" | "upload" | "manual";
 
@@ -228,7 +230,7 @@ const buildHistoryInsightsForPrompt = async (
   try {
     const db = await getMongoDb();
     const collection = db.collection<HistoryDocument>(HISTORY_COLLECTION);
-    const match = {
+    const match: Filter<HistoryDocument> = {
       userId,
       pair,
       $or: [
@@ -237,7 +239,7 @@ const buildHistoryInsightsForPrompt = async (
         { "response.decision.action": "buy" },
         { "response.decision.action": "sell" },
       ],
-    } as const;
+    };
 
     const docs = await collection
       .find(match)
@@ -1560,5 +1562,10 @@ export async function POST(request: Request) {
     clearTimeout(timeout);
   }
 }
+
+
+
+
+
 
 
