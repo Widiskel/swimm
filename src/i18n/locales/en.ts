@@ -1,4 +1,4 @@
-﻿const en = {
+const en = {
   common: {
     close: "Close",
   },
@@ -18,7 +18,10 @@
       home: "Home",
       analysis: "Analysis",
       history: "History",
+      profile: "Profile",
     },
+    mobileMenuLabel: "Open navigation menu",
+    mobileMenuCloseLabel: "Close navigation menu",
   },
   hero: {
     badge: "Live Market Intelligence",
@@ -231,7 +234,52 @@
     },
 
  },
-  analysisFallback: {
+  profile: {
+    badge: "Account",
+    title: "Profile & Exchange API Keys",
+    description:
+      "Connect your personal Binance and Bybit API credentials so SWIMM can prioritise your allocations. Leave fields blank to keep using the default workspace keys.",
+    loading: "Loading your profile...",
+    success: "Settings saved. Future analyses will prioritise your personal keys.",
+    disclaimer:
+      "Keys are stored securely for your account only. We only use them for market data requests and do not initiate trades.",
+    placeholders: {
+      apiKey: "Enter API key",
+      apiSecret: "Enter API secret",
+    },
+    binance: {
+      title: "Binance credentials",
+      description: "Provide read-only API keys with at least market data permissions.",
+      apiKey: "API key",
+      apiSecret: "API secret",
+    },
+    bybit: {
+      title: "Bybit credentials",
+      description: "Optional. Use if you prefer Bybit market data feeds.",
+      apiKey: "API key",
+      apiSecret: "API secret",
+    },
+    actions: {
+      save: "Save settings",
+      saving: "Saving...",
+    },
+    authRequired: {
+      title: "Sign in to manage your profile",
+      description: "Connect your Privy account to edit personal API keys and preferences.",
+      cta: "Sign in",
+    },
+    meta: {
+      title: "Profile overview",
+      lastUpdated: "Last updated {timestamp}",
+      neverUpdated: "No settings saved yet.",
+      hint: "All keys are encrypted at rest and never shared across accounts.",
+      fallback: "If left blank, SWIMM will use the default project API credentials.",
+    },
+    errors: {
+      sessionRequired: "Please sign in before saving settings.",
+      saveFailed: "Failed to save settings. Try again.",
+    },
+  },  analysisFallback: {
     summary: "Analysis could not be generated. Please rerun the agent with richer data.",
     rationale: "The model did not provide a rationale. Add more objective details for the next attempt.",
   },
@@ -356,7 +404,7 @@
       },
     },
     summaryRow: {
-      entry: "{pair} � {timeframe}",
+      entry: "{pair} ? {timeframe}",
       format: "{decision} -> {verdict}",
       noDecision: "No decision",
       noVerdict: "No verdict",
@@ -460,3 +508,8 @@
 };
 
 export default en;
+
+
+
+
+

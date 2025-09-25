@@ -90,9 +90,21 @@ export type BinanceTradingPair = {
   label: string;
 };
 
-const withHeaders = () => {
+export type BinanceRequestAuth = {
+  apiKey?: string | null;
+};
+
+const resolveApiKey = (override?: string | null) => {
+  const cleaned = override?.trim();
+  if (cleaned && cleaned.length > 0) {
+    return cleaned;
+  }
+  return process.env.BINANCE_API_KEY ?? null;
+};
+
+const withHeaders = (auth?: BinanceRequestAuth) => {
   const headers = new Headers({ "Content-Type": "application/json" });
-  const apiKey = process.env.BINANCE_API_KEY;
+  const apiKey = resolveApiKey(auth?.apiKey);
 
   if (apiKey) {
     headers.set("X-MBX-APIKEY", apiKey);
@@ -177,7 +189,7 @@ const ensureDefaultPair = (pairs: BinanceTradingPair[]): BinanceTradingPair[] =>
   return [derivePairFromSymbol(symbol), ...pairs];
 };
 
-export const fetchBinanceTradablePairs = async (): Promise<BinanceTradingPair[]> => {
+export const fetchBinanceTradablePairs = async (auth?: BinanceRequestAuth): Promise<BinanceTradingPair[]> => {
   const now = Date.now();
   if (pairCache && now < pairCacheExpiresAt) {
     return pairCache;
@@ -187,7 +199,7 @@ export const fetchBinanceTradablePairs = async (): Promise<BinanceTradingPair[]>
     const url = new URL("/api/v3/exchangeInfo", BINANCE_REST_URL);
     const response = await fetch(url, {
       method: "GET",
-      headers: withHeaders(),
+      headers: withHeaders(auth),
       cache: "no-store",
     });
 
@@ -230,12 +242,15 @@ export const fetchBinanceTradablePairs = async (): Promise<BinanceTradingPair[]>
   }
 };
 
-export const isPairTradable = async (symbol: string): Promise<boolean> => {
+export const isPairTradable = async (
+  symbol: string,
+  auth?: BinanceRequestAuth
+): Promise<boolean> => {
   if (!symbol) {
     return false;
   }
   const target = resolveSymbol(symbol);
-  const pairs = await fetchBinanceTradablePairs();
+  const pairs = await fetchBinanceTradablePairs(auth);
   return pairs.some((pair) => pair.symbol === target);
 };
 
@@ -255,7 +270,8 @@ const parseTicker = (data: BinanceTicker24hResponse): BinanceMarketSummary => ({
 export const fetchBinanceCandles = async (
   symbol: string = DEFAULT_SYMBOL,
   interval: string = "5m",
-  limit = 120
+  limit = 120,
+  auth?: BinanceRequestAuth
 ): Promise<BinanceCandle[]> => {
   try {
     const resolvedSymbol = resolveSymbol(symbol);
@@ -266,7 +282,7 @@ export const fetchBinanceCandles = async (
 
     const response = await fetch(url, {
       method: "GET",
-      headers: withHeaders(),
+      headers: withHeaders(auth),
       cache: "no-store",
     });
 
@@ -291,7 +307,8 @@ export const fetchBinanceCandles = async (
 };
 
 export const fetchBinanceMarketSummary = async (
-  symbol: string = DEFAULT_SYMBOL
+  symbol: string = DEFAULT_SYMBOL,
+  auth?: BinanceRequestAuth
 ): Promise<BinanceMarketSummary | null> => {
   try {
     const resolvedSymbol = resolveSymbol(symbol);
@@ -300,7 +317,7 @@ export const fetchBinanceMarketSummary = async (
 
     const response = await fetch(url, {
       method: "GET",
-      headers: withHeaders(),
+      headers: withHeaders(auth),
       cache: "no-store",
     });
 
@@ -318,7 +335,8 @@ export const fetchBinanceMarketSummary = async (
 
 export const fetchBinanceOrderBook = async (
   symbol: string = DEFAULT_SYMBOL,
-  limit = 20
+  limit = 20,
+  auth?: BinanceRequestAuth
 ): Promise<{ bids: BinanceOrderBookSide[]; asks: BinanceOrderBookSide[] }> => {
   try {
     const resolvedSymbol = resolveSymbol(symbol);
@@ -328,7 +346,7 @@ export const fetchBinanceOrderBook = async (
 
     const response = await fetch(url, {
       method: "GET",
-      headers: withHeaders(),
+      headers: withHeaders(auth),
       cache: "no-store",
     });
 
@@ -402,3 +420,23 @@ export const formatBinanceSummary = (
     translate(locale, "market.summary.lastUpdate", { value: closeTime }),
   ].join("\n");
 };
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

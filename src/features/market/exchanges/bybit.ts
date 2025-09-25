@@ -27,9 +27,21 @@ const PAIR_CACHE_TTL_MS = 5 * 60 * 1000;
 let pairCache: TradingPair[] | null = null;
 let pairCacheExpiresAt = 0;
 
-const withHeaders = () => {
+export type BybitRequestAuth = {
+  apiKey?: string | null;
+};
+
+const resolveApiKey = (override?: string | null) => {
+  const cleaned = override?.trim();
+  if (cleaned && cleaned.length > 0) {
+    return cleaned;
+  }
+  return process.env.BYBIT_API_KEY ?? null;
+};
+
+const withHeaders = (auth?: BybitRequestAuth) => {
   const headers = new Headers({ "Content-Type": "application/json" });
-  const apiKey = process.env.BYBIT_API_KEY;
+  const apiKey = resolveApiKey(auth?.apiKey);
   if (apiKey) {
     headers.set("X-BAPI-API-KEY", apiKey);
   }
@@ -99,12 +111,12 @@ type BybitInstrumentsResponse = {
   };
 };
 
-const fetchInstruments = async (): Promise<BybitInstrumentInfo[]> => {
+const fetchInstruments = async (auth?: BybitRequestAuth): Promise<BybitInstrumentInfo[]> => {
   const url = new URL("/v5/market/instruments-info", BYBIT_REST_URL);
   url.searchParams.set("category", "spot");
   const response = await fetch(url, {
     method: "GET",
-    headers: withHeaders(),
+    headers: withHeaders(auth),
     cache: "no-store",
   });
   if (!response.ok) {
@@ -114,14 +126,14 @@ const fetchInstruments = async (): Promise<BybitInstrumentInfo[]> => {
   return payload.result?.list ?? [];
 };
 
-export const fetchBybitTradablePairs = async (): Promise<TradingPair[]> => {
+export const fetchBybitTradablePairs = async (auth?: BybitRequestAuth): Promise<TradingPair[]> => {
   const now = Date.now();
   if (pairCache && now < pairCacheExpiresAt) {
     return pairCache;
   }
 
   try {
-    const instruments = await fetchInstruments();
+    const instruments = await fetchInstruments(auth);
     const pairs = instruments
       .filter(shouldIncludeSymbol)
       .map((instrument) => {
@@ -207,7 +219,8 @@ const intervalToMs = (interval: string): number => {
 export const fetchBybitCandles = async (
   symbol: string,
   interval: string,
-  limit: number
+  limit: number,
+  auth?: BybitRequestAuth
 ): Promise<MarketCandle[]> => {
   try {
     const resolvedSymbol = resolveSymbol(symbol);
@@ -220,7 +233,7 @@ export const fetchBybitCandles = async (
 
     const response = await fetch(url, {
       method: "GET",
-      headers: withHeaders(),
+      headers: withHeaders(auth),
       cache: "no-store",
     });
 
@@ -289,7 +302,7 @@ export const fetchBybitMarketSummary = async (symbol: string): Promise<MarketSum
 
     const response = await fetch(url, {
       method: "GET",
-      headers: withHeaders(),
+      headers: withHeaders(auth),
       cache: "no-store",
     });
 
@@ -341,7 +354,8 @@ type BybitOrderBookResponse = {
 
 export const fetchBybitOrderBook = async (
   symbol: string,
-  limit: number
+  limit: number,
+  auth?: BybitRequestAuth
 ): Promise<{ bids: OrderBookSide[]; asks: OrderBookSide[] }> => {
   try {
     const resolvedSymbol = resolveSymbol(symbol);
@@ -352,7 +366,7 @@ export const fetchBybitOrderBook = async (
 
     const response = await fetch(url, {
       method: "GET",
-      headers: withHeaders(),
+      headers: withHeaders(auth),
       cache: "no-store",
     });
 
@@ -431,3 +445,16 @@ export const formatBybitSummary = (
 };
 
 export const mapTimeframeToBybitIntervalSymbol = mapTimeframeToBybitInterval;
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,4 +1,4 @@
-﻿const id = {
+const id = {
   common: {
     close: "Tutup",
   },
@@ -18,7 +18,10 @@
       home: "Beranda",
       analysis: "Analisis",
       history: "Riwayat",
+      profile: "Profil",
     },
+    mobileMenuLabel: "Buka menu navigasi",
+    mobileMenuCloseLabel: "Tutup menu navigasi",
   },
   hero: {
     badge: "Intelijen Pasar Live",
@@ -205,7 +208,52 @@
       hint: "Riwayat tersimpan privat bersama verdict dan feedback Anda.",
     },
   },
-  analysisFallback: {
+  profile: {
+    badge: "Profil",
+    title: "Profil & API Key Exchange",
+    description:
+      "Hubungkan API key Binance dan Bybit milik Anda agar SWIMM dapat memprioritaskan data sesuai akun. Biarkan kosong untuk memakai key bawaan proyek.",
+    loading: "Memuat profil Anda...",
+    success: "Pengaturan tersimpan. Analisa berikutnya akan memakai key pribadi Anda.",
+    disclaimer:
+      "Key disimpan aman hanya untuk akun Anda. Kami hanya memakainya untuk permintaan data pasar dan tidak mengeksekusi transaksi.",
+    placeholders: {
+      apiKey: "Masukkan API key",
+      apiSecret: "Masukkan API secret",
+    },
+    binance: {
+      title: "Kredensial Binance",
+      description: "Gunakan API key read-only dengan izin akses data pasar.",
+      apiKey: "API key",
+      apiSecret: "API secret",
+    },
+    bybit: {
+      title: "Kredensial Bybit",
+      description: "Opsional. Isi jika Anda ingin memakai feed data Bybit.",
+      apiKey: "API key",
+      apiSecret: "API secret",
+    },
+    actions: {
+      save: "Simpan pengaturan",
+      saving: "Menyimpan...",
+    },
+    authRequired: {
+      title: "Masuk untuk mengelola profil",
+      description: "Hubungkan akun Privy Anda untuk mengubah API key pribadi dan preferensi lainnya.",
+      cta: "Masuk",
+    },
+    meta: {
+      title: "Ringkasan profil",
+      lastUpdated: "Terakhir diperbarui {timestamp}",
+      neverUpdated: "Belum ada pengaturan yang disimpan.",
+      hint: "Seluruh key dienkripsi dan tidak dibagikan ke akun lain.",
+      fallback: "Jika dibiarkan kosong, SWIMM memakai API key default proyek.",
+    },
+    errors: {
+      sessionRequired: "Silakan masuk sebelum menyimpan pengaturan.",
+      saveFailed: "Gagal menyimpan pengaturan. Coba lagi.",
+    },
+  },  analysisFallback: {
     summary:
       "Analisa tidak berhasil dibuat. Coba jalankan ulang agent dengan data yang lebih lengkap.",
     rationale:
@@ -333,7 +381,7 @@
       },
     },
     summaryRow: {
-      entry: "{pair} � {timeframe}",
+      entry: "{pair} ? {timeframe}",
       format: "{decision} -> {verdict}",
       noDecision: "Tidak ada keputusan",
       noVerdict: "Tidak ada verdict",
@@ -446,3 +494,7 @@
 };
 
 export default id;
+
+
+
+

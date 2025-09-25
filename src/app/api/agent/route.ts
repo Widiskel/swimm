@@ -1390,12 +1390,16 @@ export async function POST(request: Request) {
   const objective = body.objective.trim();
 
   const session = await getSessionFromCookie();
+  const settings = session ? await getUserSettings(session.userId) : null;
+
+  const binanceAuth = settings?.binanceApiKey ? { apiKey: settings.binanceApiKey } : undefined;
+  const bybitAuth = settings?.bybitApiKey ? { apiKey: settings.bybitApiKey } : undefined;
 
   const requestedSymbol = body.pairSymbol?.toUpperCase() ?? process.env.BINANCE_SYMBOL ?? "BTCUSDT";
   const providerParam = typeof body.provider === "string" ? body.provider.toLowerCase() : DEFAULT_PROVIDER;
   const provider: CexProvider = isCexProvider(providerParam) ? providerParam : DEFAULT_PROVIDER;
 
-  const isSupportedSymbol = await isPairTradable(requestedSymbol);
+  const isSupportedSymbol = await isPairTradable(requestedSymbol, binanceAuth);
   if (!isSupportedSymbol) {
     return NextResponse.json(
       {
@@ -1439,12 +1443,12 @@ export async function POST(request: Request) {
   const [[summaryData, candles], tavilySearch, tavilyArticles, historyInsights] = await Promise.all([
     (provider === "bybit"
       ? Promise.all([
-          fetchBybitMarketSummary(symbol),
-          fetchBybitCandles(symbol, timeframe, 500),
+          fetchBybitMarketSummary(symbol, bybitAuth),
+          fetchBybitCandles(symbol, timeframe, 500, bybitAuth),
         ])
       : Promise.all([
-          fetchBinanceMarketSummary(symbol),
-          fetchBinanceCandles(symbol, CEX_INTERVAL_MAP[timeframe], 500),
+          fetchBinanceMarketSummary(symbol, binanceAuth),
+          fetchBinanceCandles(symbol, CEX_INTERVAL_MAP[timeframe], 500, binanceAuth),
         ])),
     tavilySearchPromise,
     tavilyExtractPromise,
@@ -1562,6 +1566,14 @@ export async function POST(request: Request) {
     clearTimeout(timeout);
   }
 }
+
+
+
+
+
+
+
+
 
 
 

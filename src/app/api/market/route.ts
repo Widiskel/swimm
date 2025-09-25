@@ -16,6 +16,8 @@ import {
 import { DEFAULT_PROVIDER, isCexProvider } from "@/features/market/exchanges";
 import { isLocale, type Locale } from "@/i18n/messages";
 import { translate } from "@/i18n/translate";
+import { getSessionFromCookie } from "@/lib/session";
+import { getUserSettings } from "@/lib/user-settings";
 
 const ALLOWED_INTERVALS = new Set(["1m", "5m", "15m", "1h", "4h", "1d"]);
 
@@ -34,10 +36,16 @@ export async function GET(request: NextRequest) {
   const localeParam = searchParams.get("locale") ?? "";
   const locale: Locale = localeParam && isLocale(localeParam) ? localeParam : "en";
 
+  const session = await getSessionFromCookie();
+  const settings = session ? await getUserSettings(session.userId) : null;
+
+  const binanceAuth = settings?.binanceApiKey ? { apiKey: settings.binanceApiKey } : undefined;
+  const bybitAuth = settings?.bybitApiKey ? { apiKey: settings.bybitApiKey } : undefined;
+
   if (provider === "binance") {
-    const isSupported = await isPairTradable(symbolParam);
+    const isSupported = await isPairTradable(symbolParam, binanceAuth);
     if (!isSupported) {
-      const pairs = await fetchBinanceTradablePairs();
+      const pairs = await fetchBinanceTradablePairs(binanceAuth);
       const topSamples = pairs.slice(0, 20).map((item) => item.label).join(", ");
       return NextResponse.json(
         {
@@ -62,14 +70,14 @@ export async function GET(request: NextRequest) {
   const [candles, summary, orderBook] = await Promise.all(
     provider === "bybit"
       ? [
-          fetchBybitCandles(symbolParam, intervalParam, limit),
-          fetchBybitMarketSummary(symbolParam),
-          fetchBybitOrderBook(symbolParam, 50),
+          fetchBybitCandles(symbolParam, intervalParam, limit, bybitAuth),
+          fetchBybitMarketSummary(symbolParam, bybitAuth),
+          fetchBybitOrderBook(symbolParam, 50, bybitAuth),
         ]
       : [
-          fetchBinanceCandles(symbolParam, intervalParam, limit),
-          fetchBinanceMarketSummary(symbolParam),
-          fetchBinanceOrderBook(symbolParam, 50),
+          fetchBinanceCandles(symbolParam, intervalParam, limit, binanceAuth),
+          fetchBinanceMarketSummary(symbolParam, binanceAuth),
+          fetchBinanceOrderBook(symbolParam, 50, binanceAuth),
         ]
   );
 
@@ -87,3 +95,7 @@ export async function GET(request: NextRequest) {
     updatedAt: new Date().toISOString(),
   });
 }
+
+
+
+
