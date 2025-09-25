@@ -293,7 +293,10 @@ type BybitTickerResponse = {
   };
 };
 
-export const fetchBybitMarketSummary = async (symbol: string): Promise<MarketSummary | null> => {
+export const fetchBybitMarketSummary = async (
+  symbol: string,
+  auth?: BybitRequestAuth
+): Promise<MarketSummary | null> => {
   try {
     const resolvedSymbol = resolveSymbol(symbol);
     const url = new URL("/v5/market/tickers", BYBIT_REST_URL);
@@ -445,6 +448,7 @@ export const formatBybitSummary = (
 };
 
 export const mapTimeframeToBybitIntervalSymbol = mapTimeframeToBybitInterval;
+
 
 
 

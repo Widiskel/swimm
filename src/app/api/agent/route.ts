@@ -23,6 +23,7 @@ import {
 } from "@/lib/tavily";
 import { getMongoDb } from "@/lib/mongodb";
 import { getSessionFromCookie } from "@/lib/session";
+import { getUserSettings } from "@/lib/user-settings";
 import { isLocale, type Locale } from "@/i18n/messages";
 import type { AgentResponse } from "@/features/analysis/types";
 
@@ -1566,6 +1567,7 @@ export async function POST(request: Request) {
     clearTimeout(timeout);
   }
 }
+
 
 
 
