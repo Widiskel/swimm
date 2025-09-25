@@ -857,6 +857,25 @@ const buildTradePlan = (
       ? "short"
       : "neutral";
 
+  const sizingNotesDefaultHold =
+    "Tidak ada rencana eksekusi. Tunggu konfirmasi tambahan sebelum membuka posisi.";
+
+  if (action === "hold") {
+    return {
+      bias,
+      entries: [],
+      entry: null,
+      stopLoss: null,
+      takeProfits: [],
+      executionWindow: ensureString(draft?.executionWindow, "-"),
+      sizingNotes: ensureString(draft?.sizingNotes, sizingNotesDefaultHold),
+      rationale: ensureString(
+        draft?.rationale,
+        "Momentum belum jelas. Evaluasi ulang setelah harga menembus area kunci."
+      ),
+    };
+  }
+
   const entryArrayCandidate = ensureNumericArray((draft as Record<string, unknown>)?.entries);
   const entryCandidate = ensureNumber(draft?.entry);
   const marketPrice =
