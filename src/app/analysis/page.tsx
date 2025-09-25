@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
@@ -248,7 +248,7 @@ export default function AnalysisPage() {
     }
     if (!canPersistHistory) {
       setSaveStatus("error");
-      setSaveError(savePanelCopy.loginRequired);
+      setSaveError(savePanelCopy.loginPrompt);
       return;
     }
     if (!saveVerdict) {
@@ -479,3 +479,4 @@ export default function AnalysisPage() {
     </div>
   );
 }
+
