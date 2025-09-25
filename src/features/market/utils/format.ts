@@ -9,7 +9,11 @@ export const withAlpha = (hex: string, alpha: number) => {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 };
 
-export const formatPairLabel = (symbol: string) => {
+export const formatPairLabel = (symbol: string | null | undefined) => {
+  if (!symbol) {
+    return "";
+  }
+
   const upper = symbol.toUpperCase();
   if (upper.includes("/")) {
     return upper;

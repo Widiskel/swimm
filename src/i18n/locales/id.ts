@@ -1,4 +1,7 @@
 const id = {
+  common: {
+    close: "Tutup",
+  },
   header: {
     logo: "WA",
     brand: "Web Analytic AI",
@@ -49,6 +52,11 @@ const id = {
     button: "Tampilkan chart",
     loading: "Memuat daftar pair...",
     empty: "Tidak ada pair tersedia",
+    triggerLabel: "Buka pemilih trading pair",
+    modalTitle: "Pilih trading pair",
+    searchPlaceholder: "Cari berdasarkan simbol atau nama token...",
+    searchEmpty: "Tidak ada pair yang cocok.",
+    noSelection: "Pilih trading pair",
   },
   live: {
     card: {
@@ -139,36 +147,36 @@ const id = {
       "Model tidak memberikan rasionalisasi. Tambahkan detail objektif untuk analisa lanjutan.",
   },
   auth: {
-    connecting: "Menghubungkan Privy...",
+    connecting: "Menyiapkan proses masuk...",
     loginProcessing: "Memproses...",
-    login: "Masuk / Daftar",
+    login: "Masuk",
     logoutProcessing: "Keluar...",
     logout: "Keluar",
     loginError: "Login gagal. Silakan coba lagi.",
     logoutError: "Logout gagal. Silakan coba lagi.",
     authenticatedLabel: "Terautentikasi",
-    defaultUser: "Pengguna Privy",
+    defaultUser: "Akun",
     envMissing:
       "Setel NEXT_PUBLIC_PRIVY_APP_ID untuk mengaktifkan autentikasi.",
   },
   analysisPage: {
-    connectingTitle: "Menghubungkan layanan Privy...",
+    connectingTitle: "Memeriksa status login Anda...",
     connectingSubtitle:
-      "Harap tunggu, kami sedang memverifikasi status autentikasi Anda.",
+      "Harap tunggu, kami sedang memverifikasi akses Anda ke area terlindungi.",
     protectedBadge: "Area Terproteksi",
     signInHeading: "Masuk untuk menjalankan analisa trading terpersonalisasi",
     signInDescription:
       "Analisa realtime tersedia setelah Anda masuk. Akses agen SWIMM untuk forecasting harga dan playbook siap eksekusi.",
-    signInButton: "Masuk lewat Privy",
+    signInButton: "Masuk",
     backHome: "Kembali ke beranda",
   },
   history: {
-    connecting: "Menghubungkan layanan Privy...",
+    connecting: "Memeriksa status login Anda...",
     protectedBadge: "Area Terproteksi",
     signInHeading: "Masuk untuk melihat riwayat analisa Anda",
     signInDescription:
       "Simpan dan bandingkan setiap output agen untuk mengevaluasi konsistensi strategi. Riwayat tersimpan secara lokal di perangkat ini.",
-    signInButton: "Masuk lewat Privy",
+    signInButton: "Masuk",
     title: "Riwayat analisa",
     subtitle:
       "Riwayat tersimpan di perangkat ini. Hapus saat ingin memulai dari awal.",
@@ -184,10 +192,10 @@ const id = {
       linkText: "Analisis",
       descriptionSuffix: " untuk menyimpan rekomendasi terbaru Anda.",
     },
-    entryCard: {
-      confidence: "Keyakinan",
-      planTimeframe: "Timeframe rencana",
-      openInDashboard: "Buka di dashboard",
+   entryCard: {
+     confidence: "Keyakinan",
+     planTimeframe: "Timeframe rencana",
+      openInDashboard: "Buka di halaman analisa",
       entries: "Entry",
       takeProfits: "Take profit",
       stopLoss: "Stop loss",
@@ -294,7 +302,7 @@ const id = {
     },
     footer: {
       copyright: "Soon you Will Make Money",
-      navDashboard: "Dashboard",
+      navDashboard: "Analisis",
       navHistory: "Riwayat",
     },
   },

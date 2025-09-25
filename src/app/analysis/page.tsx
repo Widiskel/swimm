@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { motion } from "framer-motion";
 import { usePrivy } from "@privy-io/react-auth";
 import type { CandlestickData } from "lightweight-charts";
 
@@ -25,6 +26,8 @@ import { DEFAULT_PAIR_SYMBOL, INDICATOR_CONFIG, TIMEFRAME_OPTIONS } from "@/feat
 import type { IndicatorKey, OverlayLevel } from "@/features/market/types";
 import { useHistory } from "@/providers/history-provider";
 import { useLanguage } from "@/providers/language-provider";
+
+const MotionLink = motion(Link);
 
 type TradingPair = {
   symbol: string;
@@ -222,12 +225,12 @@ export default function AnalysisPage() {
 
   if (!ready) {
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-100">
+      <div className="min-h-screen bg-[var(--swimm-bg)] text-[var(--swimm-text)]">
         <SiteHeader />
         <main className="mx-auto flex min-h-[60vh] max-w-4xl items-center justify-center px-6 text-center">
           <div className="space-y-4">
-            <p className="text-lg text-slate-300">{analysisCopy.connectingTitle}</p>
-            <p className="text-sm text-slate-500">{analysisCopy.connectingSubtitle}</p>
+            <p className="text-lg text-[var(--swimm-neutral-500)]">{analysisCopy.connectingTitle}</p>
+            <p className="text-sm text-[var(--swimm-neutral-300)]">{analysisCopy.connectingSubtitle}</p>
           </div>
         </main>
       </div>
@@ -236,32 +239,38 @@ export default function AnalysisPage() {
 
   if (!authenticated) {
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-100">
+      <div className="min-h-screen bg-[var(--swimm-bg)] text-[var(--swimm-text)]">
         <SiteHeader />
         <main className="mx-auto flex min-h-[60vh] max-w-4xl flex-col items-center justify-center gap-6 px-6 text-center">
-          <span className="rounded-full border border-slate-800 px-4 py-1 text-xs tracking-[0.35em] text-slate-400 uppercase">
+          <span className="rounded-full border border-[var(--swimm-primary-500)]/40 bg-[var(--swimm-primary-500)]/10 px-4 py-1 text-xs uppercase tracking-[0.35em] text-[var(--swimm-primary-700)]">
             {analysisCopy.protectedBadge}
           </span>
-          <h2 className="text-3xl font-semibold text-slate-50 sm:text-4xl">
+          <h2 className="text-3xl font-semibold text-[var(--swimm-navy-900)] sm:text-4xl">
             {analysisCopy.signInHeading}
           </h2>
-          <p className="max-w-2xl text-base text-slate-400">
+          <p className="max-w-2xl text-base text-[var(--swimm-neutral-500)]">
             {analysisCopy.signInDescription}
           </p>
           <div className="flex flex-wrap items-center justify-center gap-4">
-            <button
+            <motion.button
               type="button"
               onClick={() => login?.()}
-              className="rounded-md border border-sky-500 px-6 py-2 text-sm font-medium text-slate-100 transition hover:bg-sky-500/10"
+              className="rounded-full border border-[var(--swimm-primary-500)] bg-[var(--swimm-primary-500)] px-6 py-2 text-sm font-semibold text-[var(--swimm-navy-900)] shadow-sm shadow-[var(--swimm-glow)]"
+              whileHover={{ y: -3 }}
+              whileTap={{ scale: 0.97 }}
+              transition={{ type: "spring", stiffness: 240, damping: 18 }}
             >
               {analysisCopy.signInButton}
-            </button>
-            <Link
+            </motion.button>
+            <MotionLink
               href="/"
-              className="rounded-md border border-slate-700 px-6 py-2 text-sm text-slate-300 transition hover:bg-slate-800/60"
+              className="rounded-full border border-[var(--swimm-neutral-300)] px-6 py-2 text-sm font-semibold text-[var(--swimm-neutral-500)]"
+              whileHover={{ y: -3 }}
+              whileTap={{ scale: 0.97 }}
+              transition={{ type: "spring", stiffness: 240, damping: 18 }}
             >
               {analysisCopy.backHome}
-            </Link>
+            </MotionLink>
           </div>
         </main>
       </div>
@@ -269,12 +278,25 @@ export default function AnalysisPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
+    <div className="min-h-screen bg-[var(--swimm-bg)] text-[var(--swimm-text)]">
       <SiteHeader />
 
       <main className="mx-auto max-w-6xl px-6 py-12 space-y-10">
-        <section className="grid gap-8 lg:grid-cols-[1.2fr_1fr]">
-          <HeroSection />
+        <motion.section
+          className="grid gap-8 lg:grid-cols-[1.2fr_1fr]"
+          initial={{ opacity: 0, y: 50 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, amount: 0.3 }}
+          transition={{ duration: 0.65, ease: "easeOut" }}
+        >
+          <motion.div
+            initial={{ opacity: 0, x: -40 }}
+            whileInView={{ opacity: 1, x: 0 }}
+            viewport={{ once: true, amount: 0.3 }}
+            transition={{ duration: 0.6, ease: "easeOut" }}
+          >
+            <HeroSection />
+          </motion.div>
           <PairSelectionCard
             selectedPair={selectedPair}
             onPairChange={handlePairChange}
@@ -282,7 +304,7 @@ export default function AnalysisPage() {
             pairs={availablePairs}
             isLoadingPairs={isLoadingPairs}
           />
-        </section>
+        </motion.section>
 
         <LiveMarketSection
           ref={liveMarketRef}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { motion } from "framer-motion";
 import {
   createChart,
   type CandlestickData,
@@ -26,6 +27,7 @@ import type {
   IndicatorSeriesMap,
   OverlayLevel,
 } from "@/features/market/types";
+import { formatPairLabel } from "@/features/market/utils/format";
 
 const SNAPSHOT_LIMIT = 220;
 
@@ -47,6 +49,8 @@ type AnalysisSectionProps = {
   chartStartLabel: string;
   chartEndLabel: string;
 };
+
+const MotionSection = motion.section;
 
 export function AnalysisSection({
   response,
@@ -215,19 +219,23 @@ export function AnalysisSection({
   const nextStepsList = nextStepLines;
 
   return (
-    <section
+    <MotionSection
       id="insights"
-      className="rounded-3xl border border-slate-800 bg-slate-900/40 p-8"
+      className="rounded-3xl border border-[var(--swimm-neutral-300)] bg-white p-8"
+      initial={{ opacity: 0, y: 48 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, amount: 0.3 }}
+      transition={{ duration: 0.7, ease: "easeOut" }}
     >
       <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <h3 className="text-xl font-semibold text-slate-100">
+          <h3 className="text-xl font-semibold text-[var(--swimm-navy-900)]">
             {__("analysis.heading", {
               pair: formattedPair,
               timeframe: timeframe.toUpperCase(),
             })}
           </h3>
-          <p className="mt-1 text-sm text-slate-400">
+          <p className="mt-1 text-sm text-[var(--swimm-neutral-500)]">
             {__("analysis.confidence", {
               value: confidenceValue,
               action: actionLabel,
@@ -237,73 +245,73 @@ export function AnalysisSection({
       </div>
 
       <div className="mt-8 grid gap-6 lg:grid-cols-[1.2fr_1fr]">
-        <div className="rounded-3xl border border-slate-800 bg-slate-950/60 p-6">
+        <div className="rounded-3xl border border-[var(--swimm-neutral-300)] bg-white p-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">
+            <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--swimm-neutral-300)]">
               {analysisCopy.summaryTitle}
             </div>
             <span
               className={`rounded-full border px-3 py-1 text-xs font-semibold uppercase ${
                 actionLabel === "BUY"
-                  ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300"
+                  ? "border-[var(--swimm-up)]/40 bg-[var(--swimm-up)]/10 text-[var(--swimm-up)]"
                   : actionLabel === "SELL"
-                  ? "border-rose-500/40 bg-rose-500/10 text-rose-200"
-                  : "border-amber-500/40 bg-amber-500/10 text-amber-200"
+                  ? "border-[var(--swimm-down)]/40 bg-[var(--swimm-down)]/10 text-[var(--swimm-down)]"
+                  : "border-[var(--swimm-warn)]/40 bg-[var(--swimm-warn)]/10 text-[var(--swimm-warn)]"
               }`}
             >
               {actionLabel}
             </span>
           </div>
-          <p className="mt-4 text-sm text-slate-300">{summaryText}</p>
-          <p className="mt-4 rounded-xl border border-slate-800 bg-slate-950/60 px-4 py-3 text-xs text-slate-400">
+          <p className="mt-4 text-sm text-[var(--swimm-neutral-500)]">{summaryText}</p>
+          <p className="mt-4 rounded-xl border border-[var(--swimm-neutral-300)] bg-white px-4 py-3 text-xs text-[var(--swimm-neutral-500)]">
             {rationaleText}
           </p>
 
-          <div className="mt-6 rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
+          <div className="mt-6 rounded-2xl border border-[var(--swimm-neutral-300)] bg-white p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">
+              <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--swimm-neutral-300)]">
                 {analysisCopy.snapshot.title}
               </div>
-              <div className="text-[11px] uppercase tracking-wide text-slate-500">
+              <div className="text-[11px] uppercase tracking-wide text-[var(--swimm-neutral-300)]">
                 Timeframe {timeframe.toUpperCase()}
               </div>
             </div>
-            <p className="mt-3 text-xs text-slate-400">
+            <p className="mt-3 text-xs text-[var(--swimm-neutral-500)]">
               {analysisCopy.snapshot.description}
             </p>
-            <div className="relative mt-4 h-64 w-full overflow-hidden rounded-xl border border-slate-800 bg-slate-950/70">
+            <div className="relative mt-4 h-64 w-full overflow-hidden rounded-xl border border-[var(--swimm-neutral-300)] bg-white">
               <div
                 ref={chartContainerRef}
                 className="pointer-events-none h-full w-full"
               />
               {!snapshotReady && (
-                <div className="absolute inset-0 flex items-center justify-center text-xs text-slate-500">
+                <div className="absolute inset-0 flex items-center justify-center text-xs text-[var(--swimm-neutral-300)]">
                   {analysisCopy.snapshot.placeholder}
                 </div>
               )}
             </div>
-            <div className="mt-3 flex flex-wrap items-center gap-3 text-[11px] text-slate-500">
-              <span className="rounded-full border border-sky-500/30 px-2 py-1 text-sky-200">
+            <div className="mt-3 flex flex-wrap items-center gap-3 text-[11px] text-[var(--swimm-neutral-300)]">
+              <span className="rounded-full border border-[var(--swimm-primary-500)]/40 px-2 py-1 text-[var(--swimm-primary-700)]">
                 {analysisCopy.snapshot.legendEntry}
               </span>
-              <span className="rounded-full border border-emerald-500/30 px-2 py-1 text-emerald-200">
+              <span className="rounded-full border border-[var(--swimm-up)]/30 px-2 py-1 text-[var(--swimm-up)]">
                 {analysisCopy.snapshot.legendTarget}
               </span>
-              <span className="rounded-full border border-rose-500/30 px-2 py-1 text-rose-200">
+              <span className="rounded-full border border-[var(--swimm-down)]/30 px-2 py-1 text-[var(--swimm-down)]">
                 {analysisCopy.snapshot.legendStop}
               </span>
             </div>
           </div>
 
-          <div className="mt-6 rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
-            <div className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">
+          <div className="mt-6 rounded-2xl border border-[var(--swimm-neutral-300)] bg-white p-4">
+            <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--swimm-neutral-300)]">
               {analysisCopy.chartInsight.title}
             </div>
-            <p className="mt-3 text-xs text-slate-300">{chartNarrativeText}</p>
-            <p className="mt-2 text-xs text-slate-400">
+            <p className="mt-3 text-xs text-[var(--swimm-neutral-500)]">{chartNarrativeText}</p>
+            <p className="mt-2 text-xs text-[var(--swimm-neutral-500)]">
               {analysisCopy.chartInsight.forecast} {chartForecastText}
             </p>
-            <div className="mt-4 grid gap-2 text-[11px] text-slate-400 sm:grid-cols-2">
+            <div className="mt-4 grid gap-2 text-[11px] text-[var(--swimm-neutral-500)] sm:grid-cols-2">
               <div>
                 {analysisCopy.chartInsight.rangeStart}: {chartStartLabel}
               </div>
@@ -314,30 +322,30 @@ export function AnalysisSection({
           </div>
 
           <div className="mt-6 grid gap-4 md:grid-cols-2">
-            <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4">
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <div className="rounded-2xl border border-[var(--swimm-neutral-300)] bg-white p-4">
+              <div className="text-xs font-semibold uppercase tracking-wide text-[var(--swimm-neutral-500)]">
                 {analysisCopy.technical.title}
               </div>
-              <ul className="mt-3 space-y-2 text-xs text-slate-300">
+              <ul className="mt-3 space-y-2 text-xs text-[var(--swimm-neutral-500)]">
                 {technicalList.map((item) => (
                   <li
                     key={item}
-                    className="rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-2"
+                    className="rounded-xl border border-[var(--swimm-neutral-300)] bg-white px-3 py-2"
                   >
                     {item}
                   </li>
                 ))}
               </ul>
             </div>
-            <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4">
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <div className="rounded-2xl border border-[var(--swimm-neutral-300)] bg-white p-4">
+              <div className="text-xs font-semibold uppercase tracking-wide text-[var(--swimm-neutral-500)]">
                 {analysisCopy.fundamental.title}
               </div>
-              <ul className="mt-3 space-y-2 text-xs text-slate-300">
+              <ul className="mt-3 space-y-2 text-xs text-[var(--swimm-neutral-500)]">
                 {fundamentalList.map((item) => (
                   <li
                     key={item}
-                    className="rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-2"
+                    className="rounded-xl border border-[var(--swimm-neutral-300)] bg-white px-3 py-2"
                   >
                     {item}
                   </li>
@@ -347,15 +355,15 @@ export function AnalysisSection({
           </div>
 
           {supportiveList.length > 0 && (
-            <div className="mt-6 rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <div className="mt-6 rounded-2xl border border-[var(--swimm-neutral-300)] bg-white p-4">
+              <div className="text-xs font-semibold uppercase tracking-wide text-[var(--swimm-neutral-500)]">
                 {analysisCopy.highlights.title}
               </div>
-              <ul className="mt-3 space-y-2 text-xs text-slate-300">
+              <ul className="mt-3 space-y-2 text-xs text-[var(--swimm-neutral-500)]">
                 {supportiveList.map((highlight) => (
                   <li
                     key={highlight}
-                    className="rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-2"
+                    className="rounded-xl border border-[var(--swimm-neutral-300)] bg-white px-3 py-2"
                   >
                     {highlight}
                   </li>
@@ -366,13 +374,13 @@ export function AnalysisSection({
         </div>
 
         <div className="space-y-6">
-          <div className="rounded-3xl border border-slate-800 bg-slate-950/60 p-6">
-            <div className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">
+          <div className="rounded-3xl border border-[var(--swimm-neutral-300)] bg-white p-6">
+            <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--swimm-neutral-300)]">
               {analysisCopy.tradePlan.title}
             </div>
-            <div className="mt-4 grid gap-4 text-xs text-slate-300">
+            <div className="mt-4 grid gap-4 text-xs text-[var(--swimm-neutral-500)]">
               <div>
-                <div className="font-semibold text-slate-200">
+                <div className="font-semibold text-[var(--swimm-navy-900)]">
                   {analysisCopy.tradePlan.entryZone}
                 </div>
                 {entryZoneValues.length ? (
@@ -380,7 +388,7 @@ export function AnalysisSection({
                     {entryZoneValues.map((entry, index) => (
                       <li
                         key={`entry-${entry}-${index}`}
-                        className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2"
+                        className="flex items-center justify-between rounded-lg border border-[var(--swimm-neutral-300)] bg-white px-3 py-2"
                       >
                         <span>
                           {entryZoneValues.length > 1
@@ -392,20 +400,20 @@ export function AnalysisSection({
                     ))}
                   </ul>
                 ) : (
-                  <p className="mt-2 text-xs text-slate-500">
+                  <p className="mt-2 text-xs text-[var(--swimm-neutral-300)]">
                     {analysisCopy.tradePlan.noEntry}
                   </p>
                 )}
               </div>
               <div>
-                <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                <div className="text-xs font-semibold uppercase tracking-wide text-[var(--swimm-neutral-500)]">
                   {analysisCopy.tradePlan.targets}
                 </div>
-                <ul className="mt-2 space-y-1 text-xs text-slate-300">
+                <ul className="mt-2 space-y-1 text-xs text-[var(--swimm-neutral-500)]">
                   {paddedTargets.map((target, index) => (
                     <li
                       key={`plan-target-${index}`}
-                      className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2"
+                      className="flex items-center justify-between rounded-lg border border-[var(--swimm-neutral-300)] bg-white px-3 py-2"
                     >
                       <span>{TARGET_LABELS[index]}</span>
                       <span>{target !== null ? formatPrice(target) : "-"}</span>
@@ -413,62 +421,62 @@ export function AnalysisSection({
                   ))}
                 </ul>
                 {paddedTargets.every((target) => target === null) && (
-                  <p className="mt-2 text-xs text-slate-500">
+                  <p className="mt-2 text-xs text-[var(--swimm-neutral-300)]">
                     {analysisCopy.tradePlan.noTargets}
                   </p>
                 )}
               </div>
-              <div className="flex items-center justify-between text-xs text-slate-400">
+              <div className="flex items-center justify-between text-xs text-[var(--swimm-neutral-500)]">
                 <span>{analysisCopy.tradePlan.stopLoss}</span>
-                <span className="text-slate-200">{formatPrice(tradeStopLoss)}</span>
+                <span className="text-[var(--swimm-navy-900)]">{formatPrice(tradeStopLoss)}</span>
               </div>
-              <div className="grid gap-3 text-xs text-slate-400 sm:grid-cols-2">
-                <div className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-3">
-                  <div className="font-semibold text-slate-300">
+              <div className="grid gap-3 text-xs text-[var(--swimm-neutral-500)] sm:grid-cols-2">
+                <div className="rounded-lg border border-[var(--swimm-neutral-300)] bg-white px-3 py-3">
+                  <div className="font-semibold text-[var(--swimm-neutral-500)]">
                     {analysisCopy.tradePlan.executionWindow}
                   </div>
-                  <div className="mt-1 text-[11px] text-slate-400">
+                  <div className="mt-1 text-[11px] text-[var(--swimm-neutral-500)]">
                     {tradeExecutionWindow}
                   </div>
                 </div>
-                <div className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-3">
-                  <div className="font-semibold text-slate-300">
+                <div className="rounded-lg border border-[var(--swimm-neutral-300)] bg-white px-3 py-3">
+                  <div className="font-semibold text-[var(--swimm-neutral-500)]">
                     {analysisCopy.tradePlan.sizingNotes}
                   </div>
-                  <div className="mt-1 text-[11px] text-slate-400">
+                  <div className="mt-1 text-[11px] text-[var(--swimm-neutral-500)]">
                     {sizingNotesText}
                   </div>
                 </div>
               </div>
               <div>
-                <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                <div className="text-xs font-semibold uppercase tracking-wide text-[var(--swimm-neutral-500)]">
                   {analysisCopy.tradePlan.narrativeTitle}
                 </div>
-                <p className="mt-2 whitespace-pre-line text-xs text-slate-300">
+                <p className="mt-2 whitespace-pre-line text-xs text-[var(--swimm-neutral-500)]">
                   {tradingNarrativeText}
                 </p>
               </div>
             </div>
           </div>
 
-          <div className="rounded-3xl border border-slate-800 bg-slate-950/60 p-6">
-            <div className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">
+          <div className="rounded-3xl border border-[var(--swimm-neutral-300)] bg-white p-6">
+            <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--swimm-neutral-300)]">
               {analysisCopy.nextSteps.title}
             </div>
-            <ul className="mt-4 space-y-3 text-sm text-slate-300">
+            <ul className="mt-4 space-y-3 text-sm text-[var(--swimm-neutral-500)]">
               {nextStepsList.map((step) => (
                 <li
                   key={step}
-                  className="flex items-start gap-3 rounded-xl border border-slate-800 bg-slate-950/80 px-4 py-3"
+                  className="flex items-start gap-3 rounded-xl border border-[var(--swimm-neutral-300)] bg-[var(--swimm-neutral-100)] px-4 py-3"
                 >
-                  <span className="mt-1 h-2 w-2 rounded-full bg-sky-400" />
+                  <span className="mt-1 h-2 w-2 rounded-full bg-[var(--swimm-primary-700)]" />
                   <span>{step}</span>
                 </li>
               ))}
             </ul>
           </div>
-          <div className="rounded-3xl border border-slate-800 bg-slate-950/60 p-6 text-sm text-slate-400">
-            <div className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">
+          <div className="rounded-3xl border border-[var(--swimm-neutral-300)] bg-white p-6 text-sm text-[var(--swimm-neutral-500)]">
+            <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--swimm-neutral-300)]">
               {analysisCopy.integration.title}
             </div>
             <p className="mt-3">{analysisCopy.integration.body1}</p>
@@ -476,7 +484,7 @@ export function AnalysisSection({
           </div>
         </div>
       </div>
-    </section>
+    </MotionSection>
   );
 }
 
@@ -527,7 +535,7 @@ export const buildOverlayLevels = (
     levels.push({
       price: Number(price.toFixed(2)),
       label: entryZoneValues.length > 1 ? `ENTRY ${index + 1}` : "ENTRY",
-      color: "#38bdf8",
+      color: "#17dce0",
     });
   });
 
@@ -536,7 +544,7 @@ export const buildOverlayLevels = (
       levels.push({
         price: Number(target.toFixed(2)),
         label: `TP${index + 1}`,
-        color: "#22c55e",
+        color: "#16c784",
       });
     }
   });
@@ -545,7 +553,7 @@ export const buildOverlayLevels = (
     levels.push({
       price: Number(tradeStopLoss.toFixed(2)),
       label: "STOP",
-      color: "#ef4444",
+      color: "#ea3943",
     });
   }
 

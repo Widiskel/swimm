@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { motion } from "framer-motion";
 import {
   createChart,
   type CandlestickData,
@@ -412,10 +413,10 @@ export const LiveMarketSection = forwardRef<
   const priceChangePct = summaryStats?.priceChangePercent ?? null;
   const changeBadgeClass =
     priceChangePct === null
-      ? "border-slate-700 bg-slate-900 text-slate-200"
+      ? "border-[var(--swimm-neutral-300)] bg-white text-[var(--swimm-neutral-500)]"
       : priceChangePct >= 0
-      ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200"
-      : "border-rose-500/40 bg-rose-500/10 text-rose-200";
+      ? "border-[var(--swimm-up)]/40 bg-[var(--swimm-up)]/10 text-[var(--swimm-up)]"
+      : "border-[var(--swimm-down)]/40 bg-[var(--swimm-down)]/10 text-[var(--swimm-down)]";
   const priceChangeLabel =
     priceChangePct !== null
       ? `${priceChangePct >= 0 ? "+" : ""}${priceChangePct.toFixed(2)}%`
@@ -438,25 +439,34 @@ export const LiveMarketSection = forwardRef<
     : "-";
 
   return (
-    <section className="space-y-6">
-      <div className="rounded-3xl border border-slate-800 bg-slate-900/40 p-6">
+    <motion.section
+      className="space-y-6"
+      initial={{ opacity: 0, y: 40 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, amount: 0.25 }}
+      transition={{ duration: 0.6, ease: "easeOut" }}
+    >
+      <div
+        className="rounded-3xl border border-[var(--swimm-neutral-300)] bg-white p-6 shadow"
+        data-aos="fade-up"
+      >
         <div className="space-y-4">
-          <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4">
+          <div className="rounded-2xl border border-[var(--swimm-neutral-300)] bg-white/85 p-4">
             <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
               <div className="space-y-2">
-                <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                <div className="text-xs font-semibold uppercase tracking-wide text-[var(--swimm-neutral-500)]">
                   {liveCopy.card.title}
                 </div>
                 <div className="flex flex-wrap items-baseline gap-3">
-                  <h3 className="text-2xl font-semibold text-slate-100">
+                  <h3 className="text-2xl font-semibold text-[var(--swimm-navy-900)]">
                     {formatPairLabel(selectedPair)}
                   </h3>
-                  <span className="rounded-full border border-slate-700 px-3 py-1 text-xs font-semibold uppercase text-slate-300">
+                  <span className="rounded-full border border-[var(--swimm-primary-700)]/40 bg-[var(--swimm-primary-500)]/15 px-3 py-1 text-xs font-semibold uppercase text-[var(--swimm-primary-700)]">
                     {timeframe.toUpperCase()}
                   </span>
                 </div>
-                <div className="flex flex-wrap items-center gap-3 text-sm text-slate-300">
-                  <span className="text-lg font-semibold text-slate-100">
+                <div className="flex flex-wrap items-center gap-3 text-sm text-[var(--swimm-neutral-500)]">
+                  <span className="text-lg font-semibold text-[var(--swimm-navy-900)]">
                     {summaryStats
                       ? simpleNumberFormatter.format(summaryStats.lastPrice)
                       : "-"}
@@ -468,13 +478,13 @@ export const LiveMarketSection = forwardRef<
                       {priceChangeLabel}
                     </span>
                   )}
-                  <div className="ml-auto flex flex-wrap items-center gap-2 text-xs text-slate-400">
+                  <div className="ml-auto flex flex-wrap items-center gap-2 text-xs text-[var(--swimm-neutral-500)]">
                     <span>
                       {liveCopy.stats.volumeBase}:
-                      <span className="ml-1 text-slate-200">{volumeLabelBase}</span>
+                      <span className="ml-1 text-[var(--swimm-navy-900)]">{volumeLabelBase}</span>
                     </span>
                     {summaryStats && (
-                      <span className="ml-2 text-slate-500">
+                      <span className="ml-2 text-[var(--swimm-neutral-300)]">
                         ({volumeLabelQuote})
                       </span>
                     )}
@@ -482,11 +492,11 @@ export const LiveMarketSection = forwardRef<
                 </div>
                 <div>
                   {liveCopy.stats.highLow}:
-                  <span className="ml-1 text-slate-200">{highLowLabel}</span>
+                  <span className="ml-1 text-[var(--swimm-navy-900)]">{highLowLabel}</span>
                 </div>
                 <div>
                   {liveCopy.stats.lastUpdate}:
-                  <span className="ml-1 text-slate-200">{formattedUpdatedAt}</span>
+                  <span className="ml-1 text-[var(--swimm-navy-900)]">{formattedUpdatedAt}</span>
                 </div>
               </div>
             </div>
@@ -498,8 +508,8 @@ export const LiveMarketSection = forwardRef<
                   onClick={() => onTimeframeChange(option)}
                   className={`rounded-full border px-4 py-2 text-xs font-semibold transition ${
                     timeframe === option
-                      ? "border-sky-500 bg-sky-500/20 text-sky-200"
-                      : "border-slate-800 bg-slate-950/40 text-slate-300 hover:border-slate-600 hover:text-slate-100"
+                      ? "border-[var(--swimm-primary-700)] bg-[var(--swimm-primary-500)]/20 text-[var(--swimm-primary-700)]"
+                      : "border-[var(--swimm-neutral-300)] bg-white text-[var(--swimm-neutral-500)] hover:border-[var(--swimm-primary-500)] hover:text-[var(--swimm-primary-700)]"
                   }`}
                 >
                   {option.toUpperCase()}
@@ -507,8 +517,8 @@ export const LiveMarketSection = forwardRef<
               ))}
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
-              <div className="rounded-xl border border-slate-800 bg-slate-950/50 px-4 py-3 text-xs text-slate-300">
-                <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+              <div className="rounded-xl border border-[var(--swimm-neutral-300)] bg-white px-4 py-3 text-xs text-[var(--swimm-neutral-500)]">
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--swimm-neutral-500)]">
                   {liveCopy.card.indicatorsTitle}
                 </div>
                 <div className="mt-2 flex flex-wrap gap-2">
@@ -529,8 +539,8 @@ export const LiveMarketSection = forwardRef<
                         onClick={() => onToggleIndicator(indicator.key)}
                         className={`rounded-full border px-3 py-1 text-[11px] font-semibold transition ${
                           active
-                            ? "bg-slate-950 shadow-inner"
-                            : "border-slate-800 bg-slate-950/40 text-slate-400 hover:border-slate-600 hover:text-slate-100"
+                            ? "bg-transparent"
+                            : "border-[var(--swimm-neutral-300)] bg-white text-[var(--swimm-neutral-500)] hover:border-[var(--swimm-primary-500)] hover:text-[var(--swimm-primary-700)]"
                         }`}
                         style={activeStyle}
                       >
@@ -541,131 +551,131 @@ export const LiveMarketSection = forwardRef<
                 </div>
               </div>
             </div>
-            <div className="mt-4 grid gap-2 rounded-xl border border-slate-800 bg-slate-950/50 px-4 py-3 text-xs text-slate-300 sm:grid-cols-2">
-                  {hoverData ? (
-                    <>
-                      <div className="font-semibold text-slate-200">
-                        {hoverData.timeLabel}
-                      </div>
-                      <div className="text-right text-slate-400">
-                        {liveCopy.card.hoverClose}: {priceFormatter.format(hoverData.close)}
-                      </div>
-                      <div>
-                        {liveCopy.card.hoverOpen}: {priceFormatter.format(hoverData.open)}
-                      </div>
-                      <div className="text-right">
-                        {liveCopy.card.hoverHigh}: {priceFormatter.format(hoverData.high)}
-                      </div>
-                      <div>
-                        {liveCopy.card.hoverLow}: {priceFormatter.format(hoverData.low)}
-                      </div>
-                      <div className="text-right text-slate-600">
-                        {liveCopy.card.indicatorHint}
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <div className="font-semibold text-slate-500">
-                        {liveCopy.card.hoverPrompt}
-                      </div>
-                      <div className="text-right text-slate-600">
-                        {liveCopy.card.hoverClose}: -
-                      </div>
-                      <div>{liveCopy.card.hoverOpen}: -</div>
-                      <div className="text-right">{liveCopy.card.hoverHigh}: -</div>
-                      <div>{liveCopy.card.hoverLow}: -</div>
-                      <div className="text-right text-slate-600">
-                        {liveCopy.card.indicatorHint}
-                      </div>
-                    </>
-                  )}
+            <div className="mt-4 grid gap-2 rounded-xl border border-[var(--swimm-neutral-300)] bg-[var(--swimm-neutral-100)] px-4 py-3 text-xs text-[var(--swimm-neutral-500)] sm:grid-cols-2">
+              {hoverData ? (
+                <>
+                  <div className="font-semibold text-[var(--swimm-navy-900)]">
+                    {hoverData.timeLabel}
+                  </div>
+                  <div className="text-right">
+                    {liveCopy.card.hoverClose}: {priceFormatter.format(hoverData.close)}
+                  </div>
+                  <div>
+                    {liveCopy.card.hoverOpen}: {priceFormatter.format(hoverData.open)}
+                  </div>
+                  <div className="text-right">
+                    {liveCopy.card.hoverHigh}: {priceFormatter.format(hoverData.high)}
+                  </div>
+                  <div>
+                    {liveCopy.card.hoverLow}: {priceFormatter.format(hoverData.low)}
+                  </div>
+                  <div className="text-right text-[var(--swimm-neutral-300)]">
+                    {liveCopy.card.indicatorHint}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="font-semibold text-[var(--swimm-neutral-500)]">
+                    {liveCopy.card.hoverPrompt}
+                  </div>
+                  <div className="text-right text-[var(--swimm-neutral-300)]">
+                    {liveCopy.card.hoverClose}: -
+                  </div>
+                  <div>{liveCopy.card.hoverOpen}: -</div>
+                  <div className="text-right">{liveCopy.card.hoverHigh}: -</div>
+                  <div>{liveCopy.card.hoverLow}: -</div>
+                  <div className="text-right text-[var(--swimm-neutral-300)]">
+                    {liveCopy.card.indicatorHint}
+                  </div>
+                </>
+              )}
             </div>
           </div>
 
           {chartError && (
-            <div className="mt-4 rounded-2xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+            <div className="mt-4 rounded-2xl border border-[var(--swimm-down)]/30 bg-[var(--swimm-down)]/10 px-4 py-3 text-sm text-[var(--swimm-down)]">
               {chartError}
             </div>
           )}
 
-          <div className="mt-4 grid gap-6 lg:grid-cols-[2fr_1fr]">
-            <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
-              <div
-                className={`relative h-96 w-full overflow-hidden rounded-xl border border-slate-800 bg-slate-950/60 transition-all duration-500 ${
-                  isChartVisible
-                    ? "opacity-100 translate-y-0"
-                    : "pointer-events-none opacity-0 -translate-y-4"
-                }`}
-              >
+      <div className="mt-4 grid gap-6 lg:grid-cols-[2fr_1fr] lg:items-stretch">
+        <div className="flex flex-col rounded-2xl border border-[var(--swimm-neutral-300)] bg-white p-4">
+          <div
+            className={`relative flex-1 min-h-[24rem] w-full overflow-hidden rounded-xl border border-[var(--swimm-neutral-300)] bg-white transition-all duration-500 ${
+              isChartVisible
+                ? "opacity-100 translate-y-0"
+                : "pointer-events-none opacity-0 -translate-y-4"
+            }`}
+          >
                 <div ref={chartContainerRef} className="h-full w-full" />
                 {isChartLoading && (
-                  <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-slate-950/80 text-sm text-slate-400">
+                  <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-[var(--swimm-neutral-100)]/80 text-sm text-[var(--swimm-neutral-500)]">
                     {liveCopy.card.loading}
                   </div>
                 )}
               </div>
-              {!isChartVisible && !isChartLoading && (
-                <div className="flex h-96 items-center justify-center rounded-xl border border-dashed border-slate-800 bg-slate-950/40 text-sm text-slate-500">
-                  {liveCopy.card.emptyState}
-                </div>
-              )}
+          {!isChartVisible && !isChartLoading && (
+            <div className="flex min-h-[24rem] items-center justify-center rounded-xl border border-dashed border-[var(--swimm-neutral-300)] bg-white text-sm text-[var(--swimm-neutral-500)]">
+              {liveCopy.card.emptyState}
             </div>
+          )}
+        </div>
 
-            <div className="space-y-4">
-              <div
-                className={`h-96 rounded-2xl border border-slate-800 bg-slate-950/60 p-4 transition-all duration-500 overflow-scroll ${
-                  isChartVisible
-                    ? "opacity-100 translate-y-0"
-                    : "pointer-events-none opacity-0 -translate-y-4"
-                }`}
-              >
-                <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                  {liveCopy.orderBook.title}
-                </div>
-                <div className="mt-3 grid flex-1 grid-cols-2 gap-3 overflow-hidden text-xs text-slate-300">
-                  <div className="flex flex-col overflow-hidden">
-                    <div className="text-slate-400">{liveCopy.orderBook.bids}</div>
-                    <ul className="mt-2 flex-1 space-y-1 overflow-y-auto pr-1">
-                      {(chartData?.orderBook?.bids ?? [])
-                        .slice(0, ORDERBOOK_LIMIT)
-                        .map((bid, index) => (
+        <div className="space-y-4 lg:flex lg:h-full lg:flex-col">
+          <div
+            className={`flex h-full min-h-[24rem] flex-col overflow-hidden rounded-2xl border border-[var(--swimm-neutral-300)] bg-white p-4 transition-all duration-500 ${
+              isChartVisible
+                ? "opacity-100 translate-y-0"
+                : "pointer-events-none opacity-0 -translate-y-4"
+            }`}
+          >
+            <div className="text-xs font-semibold uppercase tracking-wide text-[var(--swimm-neutral-500)]">
+              {liveCopy.orderBook.title}
+            </div>
+            <div className="mt-3 grid flex-1 grid-cols-2 gap-3 overflow-hidden text-xs text-[var(--swimm-neutral-500)]">
+              <div className="flex flex-col overflow-hidden">
+                <div>{liveCopy.orderBook.bids}</div>
+                <ul className="mt-2 flex-1 space-y-1 overflow-y-auto pr-1">
+                  {(chartData?.orderBook?.bids ?? [])
+                    .slice(0, ORDERBOOK_LIMIT)
+                    .map((bid, index) => (
                           <li
                             key={`bid-${bid.price}-${index}`}
-                            className="flex items-center justify-between rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2"
+                            className="flex items-center justify-between rounded-lg border border-[var(--swimm-up)]/30 bg-[var(--swimm-up)]/10 px-3 py-2"
                           >
                             <span>{simpleNumberFormatter.format(bid.price)}</span>
-                            <span className="text-emerald-300">
+                            <span className="text-[var(--swimm-up)]">
                               {bid.quantity.toFixed(4)}
                             </span>
-                          </li>
-                        ))}
-                    </ul>
-                  </div>
-                  <div className="flex flex-col overflow-hidden">
-                    <div className="text-slate-400">{liveCopy.orderBook.asks}</div>
-                    <ul className="mt-2 flex-1 space-y-1 overflow-y-auto pl-1">
-                      {(chartData?.orderBook?.asks ?? [])
-                        .slice(0, ORDERBOOK_LIMIT)
-                        .map((ask, index) => (
+                      </li>
+                    ))}
+                </ul>
+              </div>
+              <div className="flex flex-col overflow-hidden">
+                <div>{liveCopy.orderBook.asks}</div>
+                <ul className="mt-2 flex-1 space-y-1 overflow-y-auto pl-1">
+                  {(chartData?.orderBook?.asks ?? [])
+                    .slice(0, ORDERBOOK_LIMIT)
+                    .map((ask, index) => (
                           <li
                             key={`ask-${ask.price}-${index}`}
-                            className="flex items-center justify-between rounded-lg border border-rose-500/20 bg-rose-500/5 px-3 py-2"
+                            className="flex items-center justify-between rounded-lg border border-[var(--swimm-down)]/30 bg-[var(--swimm-down)]/10 px-3 py-2"
                           >
                             <span>{simpleNumberFormatter.format(ask.price)}</span>
-                            <span className="text-rose-300">
+                            <span className="text-[var(--swimm-down)]">
                               {ask.quantity.toFixed(4)}
                             </span>
                           </li>
                         ))}
                     </ul>
-                  </div>
-                </div>
               </div>
             </div>
           </div>
+        </div>
+      </div>
 
-          <div className="mt-6 flex flex-col gap-3 border-t border-slate-800 pt-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="text-xs text-slate-500">
+      <div className="mt-6 flex flex-col gap-3 border-t border-[var(--swimm-neutral-300)] pt-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="text-xs text-[var(--swimm-neutral-500)]">
               {__("live.analysisNote", {
                 pair: formatPairLabel(selectedPair),
                 timeframe: timeframe.toUpperCase(),
@@ -675,7 +685,7 @@ export const LiveMarketSection = forwardRef<
               type="button"
               onClick={onAnalyze}
               disabled={!canRunAnalysis}
-              className="inline-flex items-center justify-center rounded-full border border-sky-500 bg-sky-500/20 px-6 py-3 text-sm font-semibold text-sky-100 transition hover:bg-sky-500/30 disabled:cursor-not-allowed disabled:border-slate-700 disabled:bg-slate-800/60 disabled:text-slate-500"
+              className="inline-flex items-center justify-center rounded-full border border-[var(--swimm-primary-500)] bg-[var(--swimm-primary-500)] px-6 py-3 text-sm font-semibold text-[var(--swimm-navy-900)] shadow-sm shadow-[var(--swimm-glow)] transition hover:bg-[var(--swimm-primary-700)] hover:text-white disabled:cursor-not-allowed disabled:border-[var(--swimm-neutral-300)] disabled:bg-[var(--swimm-neutral-300)]/40 disabled:text-[var(--swimm-neutral-500)]"
             >
               {isRunningAnalysis
                 ? liveCopy.analyzingButton
@@ -683,12 +693,12 @@ export const LiveMarketSection = forwardRef<
             </button>
           </div>
           {analysisError && (
-            <div className="mt-4 rounded-2xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+            <div className="mt-4 rounded-2xl border border-[var(--swimm-down)]/30 bg-[var(--swimm-down)]/10 px-4 py-3 text-sm text-[var(--swimm-down)]">
               {analysisError}
             </div>
           )}
         </div>
       </div>
-    </section>
+    </motion.section>
   );
 });

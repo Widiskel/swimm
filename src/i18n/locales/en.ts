@@ -1,4 +1,7 @@
 const en = {
+  common: {
+    close: "Close",
+  },
   header: {
     logo: "WA",
     brand: "Web Analytic AI",
@@ -48,6 +51,11 @@ const en = {
     button: "Show chart",
     loading: "Loading pairs...",
     empty: "No pairs available",
+    triggerLabel: "Open trading pair selector",
+    modalTitle: "Select trading pair",
+    searchPlaceholder: "Search by symbol or token name...",
+    searchEmpty: "No pairs match your search.",
+    noSelection: "Select a trading pair",
   },
   live: {
     card: {
@@ -133,35 +141,35 @@ const en = {
     rationale: "The model did not provide a rationale. Add more objective details for the next attempt.",
   },
   auth: {
-    connecting: "Connecting to Privy...",
+    connecting: "Preparing sign-in...",
     loginProcessing: "Processing...",
-    login: "Sign in / Register",
+    login: "Sign in",
     logoutProcessing: "Signing out...",
     logout: "Sign out",
     loginError: "Login failed. Please try again.",
     logoutError: "Logout failed. Please try again.",
     authenticatedLabel: "Authenticated",
-    defaultUser: "Privy user",
+    defaultUser: "Account",
     envMissing:
       "Set NEXT_PUBLIC_PRIVY_APP_ID to enable authentication.",
   },
   analysisPage: {
-    connectingTitle: "Connecting to Privy services...",
-    connectingSubtitle: "Please wait while we verify your authentication status.",
+    connectingTitle: "Checking your sign-in status...",
+    connectingSubtitle: "Please wait while we verify access to protected tools.",
     protectedBadge: "Protected Area",
     signInHeading: "Sign in to run personalised trading analysis",
     signInDescription:
       "Real-time analytics unlock after you sign in. Launch the SWIMM agent for price forecasts and execution-ready playbooks.",
-    signInButton: "Sign in with Privy",
+    signInButton: "Sign in",
     backHome: "Back to home",
   },
   history: {
-    connecting: "Connecting to Privy services...",
+    connecting: "Checking your sign-in status...",
     protectedBadge: "Protected Area",
     signInHeading: "Sign in to view your analysis history",
     signInDescription:
       "Store and compare every agent output to evaluate strategy consistency. History is saved locally on this device.",
-    signInButton: "Sign in with Privy",
+    signInButton: "Sign in",
     title: "Analysis history",
     subtitle:
       "History lives locally on this device. Clear it whenever you want to start fresh.",
@@ -180,7 +188,7 @@ const en = {
     entryCard: {
       confidence: "Confidence",
       planTimeframe: "Plan timeframe",
-      openInDashboard: "Open in dashboard",
+      openInDashboard: "Open in analysis",
       entries: "Entries",
       takeProfits: "Take profits",
       stopLoss: "Stop loss",
@@ -278,7 +286,7 @@ const en = {
     },
     footer: {
       copyright: "Soon You Will Make Money",
-      navDashboard: "Dashboard",
+      navDashboard: "Analysis",
       navHistory: "History",
     },
   },

@@ -22,7 +22,7 @@ export function LanguageSwitcher() {
         aria-label={messages.header.languageLabel}
         value={locale}
         onChange={handleChange}
-        className="appearance-none rounded-full border border-slate-700 bg-slate-900/90 px-6 py-2 text-transparent outline-none transition hover:border-slate-500 focus:border-sky-500"
+        className="appearance-none rounded-full border border-[var(--swimm-neutral-300)] bg-white px-6 py-2 text-transparent outline-none shadow-sm shadow-[var(--swimm-glow)] transition hover:border-[var(--swimm-primary-500)] hover:shadow-[var(--swimm-glow)] focus:border-[var(--swimm-primary-700)]"
       >
         {(Object.keys(FLAGS) as Locale[]).map((option) => (
           <option key={option} value={option}>
