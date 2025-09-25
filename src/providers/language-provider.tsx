@@ -1,74 +1,99 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import {
+  createContext,
+  type PropsWithChildren,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 
-type Language = "en" | "id";
+import {
+  getLanguageTag,
+  isLocale,
+  messages,
+  type Locale,
+  type Messages,
+} from "@/i18n/messages";
+
+type Replacements = Record<string, string | number>;
 
 type LanguageContextValue = {
-  language: Language;
-  setLanguage: (language: Language) => void;
-  toggleLanguage: () => void;
-  t: (english: string, indonesian: string) => string;
-  select: (value: string) => string;
+  locale: Locale;
+  languageTag: ReturnType<typeof getLanguageTag>;
+  messages: Messages;
+  setLocale: (locale: Locale) => void;
+  __: (path: string, replacements?: Replacements) => string;
 };
+
+const STORAGE_KEY = "wa-locale";
 
 const LanguageContext = createContext<LanguageContextValue | null>(null);
 
-const STORAGE_KEY = "swimm-language";
+const resolvePath = (source: Messages, path: string): unknown =>
+  path.split(".").reduce<unknown>((acc, segment) => {
+    if (!acc || typeof acc !== "object") {
+      return undefined;
+    }
+    return (acc as Record<string, unknown>)[segment];
+  }, source);
 
-const readInitialLanguage = (): Language => {
-  if (typeof window === "undefined") {
-    return "en";
+const formatMessage = (message: string, replacements?: Replacements) => {
+  if (!replacements) {
+    return message;
   }
-  const stored = window.localStorage.getItem(STORAGE_KEY);
-  return stored === "id" ? "id" : "en";
+  return Object.entries(replacements).reduce((acc, [key, value]) => {
+    const regex = new RegExp(`\\{${key}\\}`, "g");
+    return acc.replace(regex, String(value));
+  }, message);
 };
 
-export function LanguageProvider({ children }: { children: React.ReactNode }) {
-  const [language, setLanguageState] = useState<Language>("en");
+export function LanguageProvider({ children }: PropsWithChildren) {
+  const [locale, setLocaleState] = useState<Locale>("en");
 
   useEffect(() => {
-    const initial = readInitialLanguage();
-    setLanguageState(initial);
-  }, []);
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(STORAGE_KEY, language);
+    if (typeof window === "undefined") {
+      return;
     }
-  }, [language]);
-
-  const setLanguage = useCallback((next: Language) => {
-    setLanguageState(next);
+    const stored = window.localStorage.getItem(STORAGE_KEY);
+    if (stored && isLocale(stored)) {
+      setLocaleState(stored);
+    }
   }, []);
 
-  const toggleLanguage = useCallback(() => {
-    setLanguageState((prev) => (prev === "en" ? "id" : "en"));
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    window.localStorage.setItem(STORAGE_KEY, locale);
+  }, [locale]);
+
+  const setLocale = useCallback((next: Locale) => {
+    setLocaleState(next);
   }, []);
 
-  const t = useCallback(
-    (english: string, indonesian: string) => (language === "id" ? indonesian : english),
-    [language]
-  );
+  const value = useMemo<LanguageContextValue>(() => {
+    const localeMessages = messages[locale];
+    const languageTag = getLanguageTag(locale);
 
-  const select = useCallback(
-    (value: string) => {
-      if (!value.includes(" // ")) {
-        return value;
+    const translate = (path: string, replacements?: Replacements) => {
+      const resolved = resolvePath(localeMessages, path);
+      if (typeof resolved === "string") {
+        return formatMessage(resolved, replacements);
       }
-      const [english, indonesian] = value.split(" // ");
-      if (language === "id") {
-        return (indonesian ?? english ?? "").trim();
-      }
-      return (english ?? indonesian ?? "").trim();
-    },
-    [language]
-  );
+      return path;
+    };
 
-  const value = useMemo(
-    () => ({ language, setLanguage, toggleLanguage, t, select }),
-    [language, setLanguage, toggleLanguage, t, select]
-  );
+    return {
+      locale,
+      languageTag,
+      messages: localeMessages,
+      setLocale,
+      __: translate,
+    };
+  }, [locale, setLocale]);
 
   return <LanguageContext.Provider value={value}>{children}</LanguageContext.Provider>;
 }

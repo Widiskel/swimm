@@ -40,7 +40,8 @@ const buildInitialIndicatorVisibility = () => {
 };
 
 export default function AnalysisPage() {
-  const { t } = useLanguage();
+  const { messages, languageTag } = useLanguage();
+  const analysisCopy = messages.analysisPage;
   const { ready, authenticated, login } = usePrivy();
   const { addEntry } = useHistory();
 
@@ -91,11 +92,11 @@ export default function AnalysisPage() {
 
   const priceFormatter = useMemo(
     () =>
-      new Intl.NumberFormat("id-ID", {
+      new Intl.NumberFormat(languageTag, {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
       }),
-    []
+    [languageTag]
   );
   const formatPrice = useMemo(() => formatPriceLabel(priceFormatter), [priceFormatter]);
 
@@ -133,8 +134,8 @@ export default function AnalysisPage() {
 
   const [chartStartLabel, chartEndLabel] = useMemo(() => {
     const points = response?.market?.chart?.points ?? [];
-    return buildChartRangeLabels(points);
-  }, [response]);
+    return buildChartRangeLabels(points, languageTag);
+  }, [languageTag, response]);
 
   const canRunAnalysis = ready && authenticated && latestCandles.length > 0 && !isRunning;
 
@@ -170,7 +171,7 @@ export default function AnalysisPage() {
     if (!latestCandles.length || !ready || !authenticated) {
       return;
     }
-    const objective = `Analisa trading pair ${formattedPair} pada timeframe ${timeframe}`;
+    const objective = `Analyse trading pair ${formattedPair} on timeframe ${timeframe}`;
 
     setIsRunning(true);
     setAnalysisError(null);
@@ -225,12 +226,8 @@ export default function AnalysisPage() {
         <SiteHeader />
         <main className="mx-auto flex min-h-[60vh] max-w-4xl items-center justify-center px-6 text-center">
           <div className="space-y-4">
-            <p className="text-lg text-slate-300">
-              {t("Connecting to Privy services...", "Menghubungkan layanan Privy...")}
-            </p>
-            <p className="text-sm text-slate-500">
-              {t("Please wait while we verify your authentication status.", "Harap tunggu, kami sedang memverifikasi status autentikasi Anda.")}
-            </p>
+            <p className="text-lg text-slate-300">{analysisCopy.connectingTitle}</p>
+            <p className="text-sm text-slate-500">{analysisCopy.connectingSubtitle}</p>
           </div>
         </main>
       </div>
@@ -243,16 +240,13 @@ export default function AnalysisPage() {
         <SiteHeader />
         <main className="mx-auto flex min-h-[60vh] max-w-4xl flex-col items-center justify-center gap-6 px-6 text-center">
           <span className="rounded-full border border-slate-800 px-4 py-1 text-xs tracking-[0.35em] text-slate-400 uppercase">
-            {t("Protected Area", "Area Terproteksi")}
+            {analysisCopy.protectedBadge}
           </span>
           <h2 className="text-3xl font-semibold text-slate-50 sm:text-4xl">
-            {t("Sign in to run personalised trading analysis", "Masuk untuk menjalankan analisa trading terpersonalisasi")}
+            {analysisCopy.signInHeading}
           </h2>
           <p className="max-w-2xl text-base text-slate-400">
-            {t(
-              "Real-time analytics are available once you log in. Access the SWIMM agent for price forecasts and execution-ready playbooks.",
-              "Analisa realtime tersedia setelah Anda masuk. Akses agen SWIMM untuk forecasting harga dan playbook siap eksekusi."
-            )}
+            {analysisCopy.signInDescription}
           </p>
           <div className="flex flex-wrap items-center justify-center gap-4">
             <button
@@ -260,13 +254,13 @@ export default function AnalysisPage() {
               onClick={() => login?.()}
               className="rounded-md border border-sky-500 px-6 py-2 text-sm font-medium text-slate-100 transition hover:bg-sky-500/10"
             >
-              {t("Sign in with Privy", "Masuk lewat Privy")}
+              {analysisCopy.signInButton}
             </button>
             <Link
               href="/"
               className="rounded-md border border-slate-700 px-6 py-2 text-sm text-slate-300 transition hover:bg-slate-800/60"
             >
-              {t("Back to home", "Kembali ke beranda")}
+              {analysisCopy.backHome}
             </Link>
           </div>
         </main>

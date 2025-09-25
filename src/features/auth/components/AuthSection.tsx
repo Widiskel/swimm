@@ -3,6 +3,8 @@
 import { useCallback, useMemo, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 
+import { useLanguage } from "@/providers/language-provider";
+
 const PRIVY_APP_ID = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
 
 type ButtonState = "idle" | "loading";
@@ -16,6 +18,8 @@ const shorten = (value: string) => {
 
 const GuardedAuthControls = () => {
   const { ready, authenticated, user, login, logout } = usePrivy();
+  const { messages } = useLanguage();
+  const copy = messages.auth;
   const [state, setState] = useState<ButtonState>("idle");
   const [error, setError] = useState<string | null>(null);
 
@@ -46,15 +50,11 @@ const GuardedAuthControls = () => {
       await login();
     } catch (authError) {
       console.error("Privy login failed", authError);
-      setError(
-        authError instanceof Error
-          ? authError.message
-          : "Login gagal. Silakan coba lagi."
-      );
+      setError(authError instanceof Error ? authError.message : copy.loginError);
     } finally {
       setState("idle");
     }
-  }, [login]);
+  }, [copy.loginError, login]);
 
   const handleLogout = useCallback(async () => {
     setState("loading");
@@ -63,15 +63,11 @@ const GuardedAuthControls = () => {
       await logout();
     } catch (authError) {
       console.error("Privy logout failed", authError);
-      setError(
-        authError instanceof Error
-          ? authError.message
-          : "Logout gagal. Silakan coba lagi."
-      );
+      setError(authError instanceof Error ? authError.message : copy.logoutError);
     } finally {
       setState("idle");
     }
-  }, [logout]);
+  }, [copy.logoutError, logout]);
 
   if (!ready) {
     return (
@@ -80,7 +76,7 @@ const GuardedAuthControls = () => {
         className="rounded-md border border-slate-700 px-4 py-2 text-sm font-medium text-slate-400"
         disabled
       >
-        Menghubungkan Privy...
+        {copy.connecting}
       </button>
     );
   }
@@ -94,7 +90,7 @@ const GuardedAuthControls = () => {
           disabled={state === "loading"}
           className="rounded-md border border-sky-500 px-4 py-2 text-sm font-medium text-slate-100 transition hover:bg-sky-500/10 disabled:cursor-not-allowed disabled:border-slate-700 disabled:text-slate-500"
         >
-          {state === "loading" ? "Memproses..." : "Masuk / Daftar"}
+          {state === "loading" ? copy.loginProcessing : copy.login}
         </button>
         {error ? (
           <span className="text-xs text-rose-400">{error}</span>
@@ -107,9 +103,9 @@ const GuardedAuthControls = () => {
     <div className="flex items-center gap-3">
       <div className="flex flex-col text-right text-sm">
         <span className="font-medium text-slate-100">
-          {displayName ?? "Pengguna Privy"}
+          {displayName ?? copy.defaultUser}
         </span>
-        <span className="text-xs text-slate-500">Terautentikasi</span>
+        <span className="text-xs text-slate-500">{copy.authenticatedLabel}</span>
       </div>
       <button
         type="button"
@@ -117,7 +113,7 @@ const GuardedAuthControls = () => {
         disabled={state === "loading"}
         className="rounded-md border border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-300 transition hover:bg-slate-700/30 disabled:cursor-not-allowed disabled:text-slate-500"
       >
-        {state === "loading" ? "Keluar..." : "Keluar"}
+        {state === "loading" ? copy.logoutProcessing : copy.logout}
       </button>
       {error ? <span className="text-xs text-rose-400">{error}</span> : null}
     </div>
@@ -125,10 +121,16 @@ const GuardedAuthControls = () => {
 };
 
 export function AuthSection() {
+  const { messages } = useLanguage();
+  const copy = messages.auth;
+
   if (!PRIVY_APP_ID) {
+    const [prefix, suffix] = copy.envMissing.split("NEXT_PUBLIC_PRIVY_APP_ID");
     return (
       <div className="rounded-md border border-dashed border-slate-700 px-3 py-2 text-xs text-slate-500">
-        Setel <code className="text-slate-300">NEXT_PUBLIC_PRIVY_APP_ID</code> untuk mengaktifkan login.
+        {prefix}
+        <code className="text-slate-300">NEXT_PUBLIC_PRIVY_APP_ID</code>
+        {suffix}
       </div>
     );
   }

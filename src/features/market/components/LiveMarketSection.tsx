@@ -31,6 +31,7 @@ import {
   INDICATOR_CONFIG,
   TIMEFRAME_OPTIONS,
 } from "../constants";
+import { useLanguage } from "@/providers/language-provider";
 
 const REFRESH_INTERVAL = 30_000;
 const ORDERBOOK_LIMIT = 50;
@@ -71,6 +72,9 @@ export const LiveMarketSection = forwardRef<
   },
   ref
 ) {
+  const { messages, languageTag, __ } = useLanguage();
+  const liveCopy = messages.live;
+
   const chartContainerRef = useRef<HTMLDivElement | null>(null);
   const chartApiRef = useRef<IChartApi | null>(null);
   const candleSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
@@ -88,22 +92,33 @@ export const LiveMarketSection = forwardRef<
   const [hoverData, setHoverData] = useState<HoverData | null>(null);
   const hoverDataRef = useRef<HoverData | null>(null);
 
+  const hoverDateFormatter = useMemo(
+    () =>
+      new Intl.DateTimeFormat(languageTag, {
+        day: "2-digit",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+    [languageTag]
+  );
+
   const priceFormatter = useMemo(
     () =>
-      new Intl.NumberFormat("id-ID", {
+      new Intl.NumberFormat(languageTag, {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
       }),
-    []
+    [languageTag]
   );
 
   const simpleNumberFormatter = useMemo(
     () =>
-      new Intl.NumberFormat("id-ID", {
+      new Intl.NumberFormat(languageTag, {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
       }),
-    []
+    [languageTag]
   );
 
   const setHoverState = useCallback((value: HoverData | null) => {
@@ -320,12 +335,7 @@ export const LiveMarketSection = forwardRef<
             ? param.time.getTime()
             : Date.parse(String(param.time));
         setHoverState({
-          timeLabel: new Date(timeValue).toLocaleString("id-ID", {
-            day: "2-digit",
-            month: "short",
-            hour: "2-digit",
-            minute: "2-digit",
-          }),
+          timeLabel: hoverDateFormatter.format(new Date(timeValue)),
           open: candleData.open,
           high: candleData.high,
           low: candleData.low,
@@ -359,14 +369,8 @@ export const LiveMarketSection = forwardRef<
     const latest = candlestickSeriesData[candlestickSeriesData.length - 1];
     if (latest && !hoverDataRef.current) {
       setHoverState({
-        timeLabel: new Date((latest.time as number) * 1000).toLocaleString(
-          "id-ID",
-          {
-            day: "2-digit",
-            month: "short",
-            hour: "2-digit",
-            minute: "2-digit",
-          }
+        timeLabel: hoverDateFormatter.format(
+          new Date((latest.time as number) * 1000)
         ),
         open: latest.open,
         high: latest.high,
@@ -396,6 +400,7 @@ export const LiveMarketSection = forwardRef<
     candlestickSeriesData,
     indicatorVisibility,
     isChartActive,
+    hoverDateFormatter,
     resetChart,
     setHoverState,
   ]);
@@ -428,6 +433,9 @@ export const LiveMarketSection = forwardRef<
         summaryStats.highPrice
       )} / ${simpleNumberFormatter.format(summaryStats.lowPrice)}`
     : "-";
+  const formattedUpdatedAt = chartData?.updatedAt
+    ? hoverDateFormatter.format(new Date(chartData.updatedAt))
+    : "-";
 
   return (
     <section className="space-y-6">
@@ -437,7 +445,7 @@ export const LiveMarketSection = forwardRef<
             <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
               <div className="space-y-2">
                 <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                  Chart live
+                  {liveCopy.card.title}
                 </div>
                 <div className="flex flex-wrap items-baseline gap-3">
                   <h3 className="text-2xl font-semibold text-slate-100">
@@ -462,10 +470,8 @@ export const LiveMarketSection = forwardRef<
                   )}
                   <div className="ml-auto flex flex-wrap items-center gap-2 text-xs text-slate-400">
                     <span>
-                      Volume 24 jam:
-                      <span className="ml-1 text-slate-200">
-                        {volumeLabelBase}
-                      </span>
+                      {liveCopy.stats.volumeBase}:
+                      <span className="ml-1 text-slate-200">{volumeLabelBase}</span>
                     </span>
                     {summaryStats && (
                       <span className="ml-2 text-slate-500">
@@ -475,21 +481,12 @@ export const LiveMarketSection = forwardRef<
                   </div>
                 </div>
                 <div>
-                  High/Low 24 jam:
+                  {liveCopy.stats.highLow}:
                   <span className="ml-1 text-slate-200">{highLowLabel}</span>
                 </div>
                 <div>
-                  Update terakhir:
-                  <span className="ml-1 text-slate-200">
-                    {chartData?.updatedAt
-                      ? new Date(chartData.updatedAt).toLocaleString("id-ID", {
-                          day: "2-digit",
-                          month: "short",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })
-                      : "-"}
-                  </span>
+                  {liveCopy.stats.lastUpdate}:
+                  <span className="ml-1 text-slate-200">{formattedUpdatedAt}</span>
                 </div>
               </div>
             </div>
@@ -512,7 +509,7 @@ export const LiveMarketSection = forwardRef<
             <div className="mt-4 flex flex-wrap gap-2">
               <div className="rounded-xl border border-slate-800 bg-slate-950/50 px-4 py-3 text-xs text-slate-300">
                 <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                  Indicators
+                  {liveCopy.card.indicatorsTitle}
                 </div>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {INDICATOR_CONFIG.map((indicator) => {
@@ -545,37 +542,43 @@ export const LiveMarketSection = forwardRef<
               </div>
             </div>
             <div className="mt-4 grid gap-2 rounded-xl border border-slate-800 bg-slate-950/50 px-4 py-3 text-xs text-slate-300 sm:grid-cols-2">
-              {hoverData ? (
-                <>
-                  <div className="font-semibold text-slate-200">
-                    {hoverData.timeLabel}
-                  </div>
-                  <div className="text-right text-slate-400">
-                    Close: {priceFormatter.format(hoverData.close)}
-                  </div>
-                  <div>Open: {priceFormatter.format(hoverData.open)}</div>
-                  <div className="text-right">
-                    High: {priceFormatter.format(hoverData.high)}
-                  </div>
-                  <div>Low: {priceFormatter.format(hoverData.low)}</div>
-                  <div className="text-right text-slate-600">
-                    Indikator overlays terlihat di chart
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="font-semibold text-slate-500">
-                    Arahkan kursor ke candlestick
-                  </div>
-                  <div className="text-right text-slate-600">Close: -</div>
-                  <div>Open: -</div>
-                  <div className="text-right">High: -</div>
-                  <div>Low: -</div>
-                  <div className="text-right text-slate-600">
-                    Indikator overlays terlihat di chart
-                  </div>
-                </>
-              )}
+                  {hoverData ? (
+                    <>
+                      <div className="font-semibold text-slate-200">
+                        {hoverData.timeLabel}
+                      </div>
+                      <div className="text-right text-slate-400">
+                        {liveCopy.card.hoverClose}: {priceFormatter.format(hoverData.close)}
+                      </div>
+                      <div>
+                        {liveCopy.card.hoverOpen}: {priceFormatter.format(hoverData.open)}
+                      </div>
+                      <div className="text-right">
+                        {liveCopy.card.hoverHigh}: {priceFormatter.format(hoverData.high)}
+                      </div>
+                      <div>
+                        {liveCopy.card.hoverLow}: {priceFormatter.format(hoverData.low)}
+                      </div>
+                      <div className="text-right text-slate-600">
+                        {liveCopy.card.indicatorHint}
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="font-semibold text-slate-500">
+                        {liveCopy.card.hoverPrompt}
+                      </div>
+                      <div className="text-right text-slate-600">
+                        {liveCopy.card.hoverClose}: -
+                      </div>
+                      <div>{liveCopy.card.hoverOpen}: -</div>
+                      <div className="text-right">{liveCopy.card.hoverHigh}: -</div>
+                      <div>{liveCopy.card.hoverLow}: -</div>
+                      <div className="text-right text-slate-600">
+                        {liveCopy.card.indicatorHint}
+                      </div>
+                    </>
+                  )}
             </div>
           </div>
 
@@ -597,13 +600,13 @@ export const LiveMarketSection = forwardRef<
                 <div ref={chartContainerRef} className="h-full w-full" />
                 {isChartLoading && (
                   <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-slate-950/80 text-sm text-slate-400">
-                    Memuat chart...
+                    {liveCopy.card.loading}
                   </div>
                 )}
               </div>
               {!isChartVisible && !isChartLoading && (
                 <div className="flex h-96 items-center justify-center rounded-xl border border-dashed border-slate-800 bg-slate-950/40 text-sm text-slate-500">
-                  Pilih pair lalu klik &quot;Tampilkan chart&quot; untuk melihat candlestick.
+                  {liveCopy.card.emptyState}
                 </div>
               )}
             </div>
@@ -617,11 +620,11 @@ export const LiveMarketSection = forwardRef<
                 }`}
               >
                 <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                  Order book
+                  {liveCopy.orderBook.title}
                 </div>
                 <div className="mt-3 grid flex-1 grid-cols-2 gap-3 overflow-hidden text-xs text-slate-300">
                   <div className="flex flex-col overflow-hidden">
-                    <div className="text-slate-400">Bids</div>
+                    <div className="text-slate-400">{liveCopy.orderBook.bids}</div>
                     <ul className="mt-2 flex-1 space-y-1 overflow-y-auto pr-1">
                       {(chartData?.orderBook?.bids ?? [])
                         .slice(0, ORDERBOOK_LIMIT)
@@ -639,7 +642,7 @@ export const LiveMarketSection = forwardRef<
                     </ul>
                   </div>
                   <div className="flex flex-col overflow-hidden">
-                    <div className="text-slate-400">Asks</div>
+                    <div className="text-slate-400">{liveCopy.orderBook.asks}</div>
                     <ul className="mt-2 flex-1 space-y-1 overflow-y-auto pl-1">
                       {(chartData?.orderBook?.asks ?? [])
                         .slice(0, ORDERBOOK_LIMIT)
@@ -663,8 +666,10 @@ export const LiveMarketSection = forwardRef<
 
           <div className="mt-6 flex flex-col gap-3 border-t border-slate-800 pt-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="text-xs text-slate-500">
-              Analisa akan menggunakan pair {formatPairLabel(selectedPair)} dengan
-              timeframe {timeframe.toUpperCase()}.
+              {__("live.analysisNote", {
+                pair: formatPairLabel(selectedPair),
+                timeframe: timeframe.toUpperCase(),
+              })}
             </div>
             <button
               type="button"
@@ -672,7 +677,9 @@ export const LiveMarketSection = forwardRef<
               disabled={!canRunAnalysis}
               className="inline-flex items-center justify-center rounded-full border border-sky-500 bg-sky-500/20 px-6 py-3 text-sm font-semibold text-sky-100 transition hover:bg-sky-500/30 disabled:cursor-not-allowed disabled:border-slate-700 disabled:bg-slate-800/60 disabled:text-slate-500"
             >
-              {isRunningAnalysis ? "Analisis berjalan..." : "Analys"}
+              {isRunningAnalysis
+                ? liveCopy.analyzingButton
+                : liveCopy.analyzeButton}
             </button>
           </div>
           {analysisError && (
