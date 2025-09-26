@@ -13,6 +13,7 @@ import {
   fetchBybitMarketSummary,
   formatBybitSummary,
   mapTimeframeToBybitIntervalSymbol,
+  isBybitPairTradable,
 } from "@/features/market/exchanges/bybit";
 import { DEFAULT_PROVIDER, isCexProvider, type CexProvider } from "@/features/market/exchanges";
 import {
@@ -25,6 +26,7 @@ import { getMongoDb } from "@/lib/mongodb";
 import { getSessionFromCookie } from "@/lib/session";
 import { getUserSettings } from "@/lib/user-settings";
 import { isLocale, type Locale } from "@/i18n/messages";
+import { translate } from "@/i18n/translate";
 import type { AgentResponse } from "@/features/analysis/types";
 
 type DataMode = "scrape" | "upload" | "manual";
@@ -1400,11 +1402,17 @@ export async function POST(request: Request) {
   const providerParam = typeof body.provider === "string" ? body.provider.toLowerCase() : DEFAULT_PROVIDER;
   const provider: CexProvider = isCexProvider(providerParam) ? providerParam : DEFAULT_PROVIDER;
 
-  const isSupportedSymbol = await isPairTradable(requestedSymbol, binanceAuth);
+  const providerLabel = translate(locale, `market.summary.providerLabel.${provider}`);
+  const isSupportedSymbol = provider === "bybit"
+    ? await isBybitPairTradable(requestedSymbol)
+    : await isPairTradable(requestedSymbol, binanceAuth);
   if (!isSupportedSymbol) {
     return NextResponse.json(
       {
-        error: "Symbol tidak didukung oleh sumber data Binance.",
+        error: translate(locale, "agent.errors.unsupportedSymbol", {
+          symbol: requestedSymbol,
+          provider: providerLabel,
+        }),
       },
       { status: 400 }
     );
@@ -1567,8 +1575,6 @@ export async function POST(request: Request) {
     clearTimeout(timeout);
   }
 }
-
-
 
 
 

@@ -20,9 +20,8 @@ export function SiteHeader() {
       { href: "/", label: header.nav.home },
       { href: "/analysis", label: header.nav.analysis },
       { href: "/history", label: header.nav.history },
-      { href: "/profile", label: header.nav.profile },
     ],
-    [header.nav.analysis, header.nav.history, header.nav.home, header.nav.profile]
+    [header.nav.analysis, header.nav.history, header.nav.home]
   );
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -189,5 +188,4 @@ export function SiteHeader() {
     </MotionHeader>
   );
 }
-
 

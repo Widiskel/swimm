@@ -89,7 +89,9 @@ export function LanguageSwitcher() {
           height={20}
           className="h-5 w-5 rounded-full"
         />
-        <span>{activeOption.label}</span>
+        <span className="text-xs font-semibold uppercase tracking-[0.15em]">
+          {activeOption.value.toUpperCase()}
+        </span>
         <svg
           aria-hidden="true"
           viewBox="0 0 20 20"
@@ -123,7 +125,10 @@ export function LanguageSwitcher() {
                       height={20}
                       className="h-5 w-5 rounded-full"
                     />
-                    <span>{option.label}</span>
+                    <span className="text-xs font-semibold uppercase tracking-[0.15em]">
+                      {option.value.toUpperCase()}
+                    </span>
+                    <span className="sr-only">{option.label}</span>
                   </button>
                 </li>
               );
