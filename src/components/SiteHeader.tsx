@@ -72,14 +72,10 @@ export function SiteHeader() {
             className="flex items-center sm:hidden"
             aria-label={header.mobileMenuLabel}
           >
-            <Image
-              src="/logo/logo.png"
-              alt={header.logoAlt}
-              width={40}
-              height={40}
-              className="h-10 w-10 flex-shrink-0"
-              priority
-            />
+            <svg viewBox="0 0 24 24" className="h-7 w-7 text-[var(--swimm-navy-900)]" aria-hidden="true">
+              <line x1="3" y1="8" x2="21" y2="8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+              <line x1="3" y1="16" x2="21" y2="16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            </svg>
           </button>
           <MotionLink
             href="/"
@@ -93,8 +89,8 @@ export function SiteHeader() {
               width={170}
               height={48}
               className="h-12 w-auto"
-              priority
               sizes="(max-width: 640px) 40px, 170px"
+              priority
             />
           </MotionLink>
         </div>
@@ -112,7 +108,7 @@ export function SiteHeader() {
           ))}
         </nav>
         <div className="flex items-center gap-3">
-          <div className="hidden md:block">
+          <div className="block">
             <LanguageSwitcher />
           </div>
           <AuthSection />
@@ -135,14 +131,6 @@ export function SiteHeader() {
             className="relative z-10 flex h-full w-[85%] max-w-sm flex-col bg-white px-6 pb-10 pt-8 text-[var(--swimm-navy-900)] shadow-xl"
           >
             <div className="flex items-center justify-between">
-              <Image
-                src="/logo/branding.png"
-                alt={header.brandingAlt}
-                width={140}
-                height={40}
-                className="h-10 w-auto"
-                priority
-              />
               <button
                 type="button"
                 onClick={closeMobileMenu}
@@ -176,9 +164,6 @@ export function SiteHeader() {
             </nav>
 
             <div className="mt-auto flex flex-col gap-4">
-              <div className="rounded-2xl border border-[var(--swimm-neutral-200)] bg-white p-3">
-                <LanguageSwitcher />
-              </div>
               <div className="rounded-2xl border border-[var(--swimm-neutral-200)] bg-white p-4">
                 <AuthSection />
               </div>
@@ -189,5 +174,8 @@ export function SiteHeader() {
     </MotionHeader>
   );
 }
+
+
+
 
 
