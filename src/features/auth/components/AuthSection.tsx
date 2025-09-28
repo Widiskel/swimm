@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import Link from "next/link";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { usePrivy } from "@privy-io/react-auth";
 
@@ -33,6 +34,8 @@ const GuardedAuthControls = () => {
   const copy = messages.auth;
   const [state, setState] = useState<ButtonState>("idle");
   const [error, setError] = useState<string | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement | null>(null);
 
   const displayName = useMemo(() => {
     if (!user) {
@@ -75,6 +78,7 @@ const GuardedAuthControls = () => {
     setError(null);
     try {
       await logout();
+      setMenuOpen(false);
     } catch (authError) {
       console.error("Logout failed", authError);
       setError(authError instanceof Error ? authError.message : copy.logoutError);
@@ -82,6 +86,39 @@ const GuardedAuthControls = () => {
       setState("idle");
     }
   }, [copy.logoutError, logout]);
+
+  useEffect(() => {
+    if (!menuOpen) {
+      return;
+    }
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (!containerRef.current) {
+        return;
+      }
+      if (containerRef.current.contains(event.target as Node)) {
+        return;
+      }
+      setMenuOpen(false);
+    };
+
+    window.addEventListener("click", handleClickOutside);
+    return () => {
+      window.removeEventListener("click", handleClickOutside);
+    };
+  }, [menuOpen]);
+
+  const initials = useMemo(() => {
+    const source = (displayName ?? copy.defaultUser).trim();
+    const letters = source.replace(/[^A-Za-z0-9]/g, "");
+    if (letters.length >= 2) {
+      return letters.slice(0, 2).toUpperCase();
+    }
+    if (letters.length === 1) {
+      return letters.toUpperCase();
+    }
+    return "US";
+  }, [copy.defaultUser, displayName]);
 
   if (!ready) {
     return (
@@ -119,28 +156,112 @@ const GuardedAuthControls = () => {
   }
 
   return (
-    <div className="flex items-center gap-3">
-      <div className="flex flex-col text-right text-sm">
-        <span className="font-medium text-[var(--swimm-navy-900)]">
-          {displayName ?? copy.defaultUser}
-        </span>
-        <span className="text-xs text-[var(--swimm-neutral-500)]">{copy.authenticatedLabel}</span>
-      </div>
+    <div className="relative" ref={containerRef}>
       <motion.button
         type="button"
-        onClick={handleLogout}
-        disabled={state === "loading"}
-        className="rounded-full border border-[var(--swimm-neutral-300)] px-4 py-1.5 text-xs font-medium text-[var(--swimm-neutral-500)]"
+        onClick={() => setMenuOpen((prev) => !prev)}
         whileHover={{ y: -2 }}
         whileTap={{ scale: 0.97 }}
-        transition={{ type: "spring", stiffness: 300, damping: 22 }}
+        transition={{ type: "spring", stiffness: 260, damping: 20 }}
+        aria-haspopup="menu"
+        aria-expanded={menuOpen}
+        className="flex h-11 w-11 items-center justify-center rounded-full border border-[var(--swimm-primary-500)] bg-[var(--swimm-primary-500)]/10 text-sm font-semibold uppercase tracking-[0.18em] text-[var(--swimm-primary-700)] shadow-[var(--swimm-glow)]"
       >
-        {state === "loading" ? copy.logoutProcessing : copy.logout}
+        {initials}
       </motion.button>
-      {error ? <span className="text-xs text-[var(--swimm-down)]">{error}</span> : null}
+      {menuOpen ? (
+        <div className="absolute right-0 z-30 mt-3 w-52 rounded-2xl border border-[var(--swimm-neutral-200)] bg-white p-3 shadow-xl">
+          <div className="mb-3 border-b border-[var(--swimm-neutral-100)] pb-2 text-sm">
+            <p className="font-semibold text-[var(--swimm-navy-900)]">
+              {displayName ?? copy.defaultUser}
+            </p>
+            <p className="text-xs text-[var(--swimm-neutral-500)]">{copy.authenticatedLabel}</p>
+          </div>
+          <ul className="flex flex-col gap-1 text-sm">
+            <li>
+              <LinkButton href="/profile" label={messages.siteHeader.nav.profile} onNavigate={() => setMenuOpen(false)} />
+            </li>
+            <li>
+              <button
+                type="button"
+                onClick={handleLogout}
+                disabled={state === "loading"}
+                className="flex w-full items-center justify-between rounded-xl border border-[var(--swimm-neutral-200)] px-3 py-2 text-[var(--swimm-neutral-600)] transition hover:border-[var(--swimm-down)]/40 hover:bg-[var(--swimm-down)]/10 hover:text-[var(--swimm-down)] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <span>{state === "loading" ? copy.logoutProcessing : copy.logout}</span>
+                <svg
+                  viewBox="0 0 20 20"
+                  className="h-4 w-4"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M7 5V4a2 2 0 0 1 2-2h7v16H9a2 2 0 0 1-2-2v-1"
+                    stroke="currentColor"
+                    strokeWidth="1.6"
+                    fill="none"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <path
+                    d="M13 10H3m0 0 3-3m-3 3 3 3"
+                    stroke="currentColor"
+                    strokeWidth="1.6"
+                    fill="none"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </button>
+            </li>
+          </ul>
+          {error ? <p className="mt-3 text-xs text-[var(--swimm-down)]">{error}</p> : null}
+        </div>
+      ) : null}
     </div>
   );
 };
+
+type LinkButtonProps = {
+  href: string;
+  label: string;
+  onNavigate: () => void;
+};
+
+const MotionLinkButton = motion(Link);
+
+const LinkButton = ({ href, label, onNavigate }: LinkButtonProps) => (
+  <MotionLinkButton
+    href={href}
+    onClick={onNavigate}
+    whileHover={{ x: 3 }}
+    transition={{ type: "spring", stiffness: 260, damping: 18 }}
+    className="flex items-center justify-between rounded-xl border border-[var(--swimm-neutral-200)] px-3 py-2 text-[var(--swimm-neutral-600)] transition hover:border-[var(--swimm-primary-500)]/50 hover:bg-[var(--swimm-primary-500)]/10 hover:text-[var(--swimm-primary-700)]"
+  >
+    <span>{label}</span>
+    <svg
+      viewBox="0 0 20 20"
+      className="h-4 w-4"
+      aria-hidden="true"
+    >
+      <path
+        d="m9 6 4 4-4 4"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M4 10h9"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  </MotionLinkButton>
+);
 
 export function AuthSection() {
   const { messages } = useLanguage();

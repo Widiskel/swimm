@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { usePrivy } from "@privy-io/react-auth";
@@ -83,30 +83,37 @@ export default function AnalysisPage() {
   });
   const canPersistHistory = sessionStatus === "authenticated";
 
+  const loadPairs = useCallback(async () => {
+    const res = await fetch(`/api/symbols?provider=${provider}&locale=${locale}`);
+    if (!res.ok) {
+      throw new Error(`Failed to load symbols: ${res.status}`);
+    }
+    const payload = (await res.json()) as { symbols?: TradingPair[] };
+    return payload.symbols ?? [];
+  }, [locale, provider]);
+
   useEffect(() => {
     let cancelled = false;
-    const loadPairs = async () => {
+    const run = async () => {
       setIsLoadingPairs(true);
       try {
-        const res = await fetch(`/api/symbols?provider=${provider}&locale=${locale}`);
-        if (!res.ok) {
-          throw new Error(`Failed to load symbols: ${res.status}`);
+        const pairs = await loadPairs();
+        if (cancelled) {
+          return;
         }
-        const payload = (await res.json()) as { symbols?: TradingPair[] };
-        const pairs = payload.symbols ?? [];
-        if (!cancelled) {
-          setAvailablePairs(pairs);
-          if (pairs.length > 0) {
-            const preferred = lastPairByProviderRef.current[provider];
-            const nextSymbol = pairs.some((item) => item.symbol === preferred)
-              ? preferred
-              : pairs[0].symbol;
-            lastPairByProviderRef.current[provider] = nextSymbol;
-            setSelectedPair(nextSymbol);
-          }
+        setAvailablePairs(pairs);
+        if (pairs.length > 0) {
+          const preferred = lastPairByProviderRef.current[provider];
+          const nextSymbol = pairs.some((item) => item.symbol === preferred)
+            ? preferred
+            : pairs[0].symbol;
+          lastPairByProviderRef.current[provider] = nextSymbol;
+          setSelectedPair(nextSymbol);
         }
       } catch (error) {
-        console.error("Failed to fetch tradable pairs", error);
+        if (!cancelled) {
+          console.error("Failed to fetch tradable pairs", error);
+        }
       } finally {
         if (!cancelled) {
           setIsLoadingPairs(false);
@@ -114,11 +121,11 @@ export default function AnalysisPage() {
       }
     };
 
-    loadPairs();
+    run();
     return () => {
       cancelled = true;
     };
-  }, [locale, provider]);
+  }, [loadPairs, provider]);
 
   useEffect(() => {
     const isSavableSignal = (response?.decision?.action ?? "").toLowerCase() === "buy" || (response?.decision?.action ?? "").toLowerCase() === "sell";

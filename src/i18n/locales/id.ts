@@ -212,24 +212,24 @@ const id = {
     badge: "Profil",
     title: "Profil & API Key Exchange",
     description:
-      "Hubungkan API key Binance dan Bybit milik Anda agar SWIMM dapat memprioritaskan data sesuai akun. Biarkan kosong untuk memakai key bawaan proyek.",
+      "Hubungkan API key bursa yang Anda gunakan untuk eksekusi order atau pengecekan aset. Fitur eksekusi trading akan tetap nonaktif sampai key terhubung. Jika hanya perlu data pasar publik, biarkan kosong dan gunakan key proyek.",
     loading: "Memuat profil Anda...",
     success: "Pengaturan tersimpan. Analisa berikutnya akan memakai key pribadi Anda.",
     disclaimer:
-      "Key disimpan aman hanya untuk akun Anda. Kami hanya memakainya untuk permintaan data pasar dan tidak mengeksekusi transaksi.",
+      "Key terenkripsi dan hanya terikat pada akun Anda. SWIMM tidak akan mengeksekusi transaksi tanpa persetujuan Anda.",
     placeholders: {
       apiKey: "Masukkan API key",
       apiSecret: "Masukkan API secret",
     },
     binance: {
       title: "Kredensial Binance",
-      description: "Gunakan API key read-only dengan izin akses data pasar.",
+      description: "Masukkan key yang memiliki izin trading jika ingin sinkron saldo atau rencana eksekusi. Untuk data pasar saja, key proyek sudah mencukupi.",
       apiKey: "API key",
       apiSecret: "API secret",
     },
     bybit: {
       title: "Kredensial Bybit",
-      description: "Opsional. Isi jika Anda ingin memakai feed data Bybit.",
+      description: "Opsional. Isi jika memerlukan fitur akun di Bybit. Kosongkan jika hanya memakai feed pasar bersama.",
       apiKey: "API key",
       apiSecret: "API secret",
     },
@@ -247,17 +247,23 @@ const id = {
       lastUpdated: "Terakhir diperbarui {timestamp}",
       neverUpdated: "Belum ada pengaturan yang disimpan.",
       hint: "Seluruh key dienkripsi dan tidak dibagikan ke akun lain.",
-      fallback: "Jika dibiarkan kosong, SWIMM memakai API key default proyek.",
+      fallback: "Jika dibiarkan kosong, fitur trading yang memerlukan akses akun tidak akan aktif dan Anda hanya mendapatkan alat data pasar publik.",
     },
     errors: {
       sessionRequired: "Silakan masuk sebelum menyimpan pengaturan.",
       saveFailed: "Gagal menyimpan pengaturan. Coba lagi.",
     },
-  },  analysisFallback: {
+  },
+  analysisFallback: {
     summary:
       "Analisa tidak berhasil dibuat. Coba jalankan ulang agent dengan data yang lebih lengkap.",
     rationale:
       "Model tidak memberikan rasionalisasi. Tambahkan detail objektif untuk analisa lanjutan.",
+  },
+  agent: {
+    errors: {
+      unsupportedSymbol: "Symbol {symbol} tidak didukung oleh sumber data {provider}.",
+    },
   },
   auth: {
     connecting: "Menyiapkan proses masuk...",
@@ -494,7 +500,3 @@ const id = {
 };
 
 export default id;
-
-
-
-

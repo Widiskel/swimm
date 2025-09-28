@@ -238,24 +238,24 @@ const en = {
     badge: "Account",
     title: "Profile & Exchange API Keys",
     description:
-      "Connect your personal Binance and Bybit API credentials so SWIMM can prioritise your allocations. Leave fields blank to keep using the default workspace keys.",
+      "Link trading keys that your exchanges use for order execution and portfolio access. Trading actions stay disabled until keys are connected. Leave the fields blank if you only plan to fetch public market data.",
     loading: "Loading your profile...",
     success: "Settings saved. Future analyses will prioritise your personal keys.",
     disclaimer:
-      "Keys are stored securely for your account only. We only use them for market data requests and do not initiate trades.",
+      "Keys stay encrypted and tied to your account. SWIMM will never place trades or move funds without your consent.",
     placeholders: {
       apiKey: "Enter API key",
       apiSecret: "Enter API secret",
     },
     binance: {
       title: "Binance credentials",
-      description: "Provide read-only API keys with at least market data permissions.",
+      description: "Use trade-enabled keys if you want SWIMM to sync positions or prepare executions. For market-only access, your workspace project key already covers price data.",
       apiKey: "API key",
       apiSecret: "API secret",
     },
     bybit: {
       title: "Bybit credentials",
-      description: "Optional. Use if you prefer Bybit market data feeds.",
+      description: "Optional. Supply keys for account-aware tooling on Bybit. Leave blank when you only need the shared market feed.",
       apiKey: "API key",
       apiSecret: "API secret",
     },
@@ -273,15 +273,21 @@ const en = {
       lastUpdated: "Last updated {timestamp}",
       neverUpdated: "No settings saved yet.",
       hint: "All keys are encrypted at rest and never shared across accounts.",
-      fallback: "If left blank, SWIMM will use the default project API credentials.",
+      fallback: "If you leave these fields blank, account-aware trading features stay disabled and only public market tools remain available.",
     },
     errors: {
       sessionRequired: "Please sign in before saving settings.",
       saveFailed: "Failed to save settings. Try again.",
     },
-  },  analysisFallback: {
+  },
+  analysisFallback: {
     summary: "Analysis could not be generated. Please rerun the agent with richer data.",
     rationale: "The model did not provide a rationale. Add more objective details for the next attempt.",
+  },
+  agent: {
+    errors: {
+      unsupportedSymbol: "{symbol} is not supported by the {provider} data source.",
+    },
   },
   auth: {
     connecting: "Preparing sign-in...",
@@ -508,8 +514,4 @@ const en = {
 };
 
 export default en;
-
-
-
-
 
