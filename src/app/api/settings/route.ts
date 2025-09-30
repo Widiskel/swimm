@@ -39,6 +39,7 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = (await request.json().catch(() => null)) as {
+      displayName?: unknown;
       binanceApiKey?: unknown;
       binanceApiSecret?: unknown;
       bybitApiKey?: unknown;
@@ -50,6 +51,7 @@ export async function PUT(request: NextRequest) {
     }
 
     const payload = {
+      displayName: sanitizeValue(body.displayName),
       binanceApiKey: sanitizeValue(body.binanceApiKey),
       binanceApiSecret: sanitizeValue(body.binanceApiSecret),
       bybitApiKey: sanitizeValue(body.bybitApiKey),

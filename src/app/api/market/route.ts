@@ -14,6 +14,11 @@ import {
   formatBybitSummary,
 } from "@/features/market/exchanges/bybit";
 import { DEFAULT_PROVIDER, isCexProvider } from "@/features/market/exchanges";
+import {
+  DEFAULT_MARKET_MODE,
+  isMarketMode,
+  type MarketMode,
+} from "@/features/market/constants";
 import { isLocale, type Locale } from "@/i18n/messages";
 import { translate } from "@/i18n/translate";
 import { getSessionFromCookie } from "@/lib/session";
@@ -26,11 +31,12 @@ export async function GET(request: NextRequest) {
   const providerParam = searchParams.get("provider")?.toLowerCase() ?? DEFAULT_PROVIDER;
   const provider = isCexProvider(providerParam) ? providerParam : DEFAULT_PROVIDER;
   const symbolParamRaw = searchParams.get("symbol")?.toUpperCase();
+  const modeParam = searchParams.get("mode")?.toLowerCase() ?? DEFAULT_MARKET_MODE;
+  const mode: MarketMode = isMarketMode(modeParam) ? modeParam : DEFAULT_MARKET_MODE;
+  const defaultSymbol = "BTCUSDT";
   const symbolParam = symbolParamRaw
     ? symbolParamRaw.replace(/[^A-Z0-9]/g, "")
-    : provider === "bybit"
-    ? (process.env.BYBIT_SYMBOL ?? "BTCUSDT")
-    : (process.env.BINANCE_SYMBOL ?? "BTCUSDT");
+    : defaultSymbol;
   const intervalParam = searchParams.get("interval")?.toLowerCase() ?? "15m";
   const limitParam = Number.parseInt(searchParams.get("limit") ?? "500", 10);
   const localeParam = searchParams.get("locale") ?? "";
@@ -43,9 +49,9 @@ export async function GET(request: NextRequest) {
   const bybitAuth = settings?.bybitApiKey ? { apiKey: settings.bybitApiKey } : undefined;
 
   if (provider === "binance") {
-    const isSupported = await isPairTradable(symbolParam, binanceAuth);
+    const isSupported = await isPairTradable(symbolParam, binanceAuth, mode);
     if (!isSupported) {
-      const pairs = await fetchBinanceTradablePairs(binanceAuth);
+      const pairs = await fetchBinanceTradablePairs(binanceAuth, mode);
       const topSamples = pairs.slice(0, 20).map((item) => item.label).join(", ");
       return NextResponse.json(
         {
@@ -70,14 +76,14 @@ export async function GET(request: NextRequest) {
   const [candles, summary, orderBook] = await Promise.all(
     provider === "bybit"
       ? [
-          fetchBybitCandles(symbolParam, intervalParam, limit, bybitAuth),
-          fetchBybitMarketSummary(symbolParam, bybitAuth),
-          fetchBybitOrderBook(symbolParam, 50, bybitAuth),
+          fetchBybitCandles(symbolParam, intervalParam, limit, bybitAuth, mode),
+          fetchBybitMarketSummary(symbolParam, bybitAuth, mode),
+          fetchBybitOrderBook(symbolParam, 50, bybitAuth, mode),
         ]
       : [
-          fetchBinanceCandles(symbolParam, intervalParam, limit, binanceAuth),
-          fetchBinanceMarketSummary(symbolParam, binanceAuth),
-          fetchBinanceOrderBook(symbolParam, 50, binanceAuth),
+          fetchBinanceCandles(symbolParam, intervalParam, limit, binanceAuth, mode),
+          fetchBinanceMarketSummary(symbolParam, binanceAuth, mode),
+          fetchBinanceOrderBook(symbolParam, 50, binanceAuth, mode),
         ]
   );
 
@@ -85,17 +91,15 @@ export async function GET(request: NextRequest) {
     symbol: symbolParam,
     interval: intervalParam,
     provider,
+    mode,
     candles,
     orderBook,
     summary:
       provider === "bybit"
-        ? formatBybitSummary(summary, locale)
-        : formatBinanceSummary(summary, locale),
+        ? formatBybitSummary(summary, locale, mode)
+        : formatBinanceSummary(summary, locale, mode),
     summaryStats: summary,
     updatedAt: new Date().toISOString(),
   });
 }
-
-
-
 

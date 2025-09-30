@@ -6,6 +6,13 @@ export const PROVIDER_ICON_MAP: Record<CexProvider, string> = {
   bybit: "/cex/bybit.webp",
 };
 
+export const MARKET_MODES = ["spot", "futures"] as const;
+export type MarketMode = (typeof MARKET_MODES)[number];
+export const DEFAULT_MARKET_MODE: MarketMode = "spot";
+export const isMarketMode = (
+  value: string | null | undefined
+): value is MarketMode => value === "spot" || value === "futures";
+
 export const TIMEFRAME_OPTIONS = ["1m", "5m", "15m", "1h", "4h", "1d"] as const;
 
 export const INDICATOR_CONFIG: IndicatorConfigItem[] = [
@@ -78,4 +85,4 @@ export const INDICATOR_CONFIG: IndicatorConfigItem[] = [
 
 export const TARGET_LABELS = ["TP1", "TP2", "TP3", "TP4", "TP5"] as const;
 
-export const DEFAULT_PAIR_SYMBOL = process.env.BINANCE_SYMBOL ?? "BTCUSDT";
+export const DEFAULT_PAIR_SYMBOL = "BTCUSDT";

@@ -6,9 +6,11 @@ import type {
 } from "./binance";
 import { translate } from "@/i18n/translate";
 import type { Locale } from "@/i18n/messages";
+import type { MarketMode } from "@/features/market/constants";
 
 const BYBIT_REST_URL = process.env.BYBIT_API_URL ?? "https://api.bybit.com";
 const DEFAULT_SYMBOL = process.env.BYBIT_SYMBOL ?? "BTCUSDT";
+const DEFAULT_FUTURES_SYMBOL = process.env.BYBIT_FUTURES_SYMBOL ?? DEFAULT_SYMBOL;
 
 const QUOTE_ASSET_ALLOW_LIST = new Set([
   "USDT",
@@ -24,8 +26,14 @@ const QUOTE_ASSET_ALLOW_LIST = new Set([
 
 const PAIR_CACHE_TTL_MS = 5 * 60 * 1000;
 
-let pairCache: TradingPair[] | null = null;
-let pairCacheExpiresAt = 0;
+const pairCache: Record<MarketMode, TradingPair[] | null> = {
+  spot: null,
+  futures: null,
+};
+const pairCacheExpiresAt: Record<MarketMode, number> = {
+  spot: 0,
+  futures: 0,
+};
 
 export type BybitRequestAuth = {
   apiKey?: string | null;
@@ -50,18 +58,18 @@ const withHeaders = (auth?: BybitRequestAuth) => {
 
 const normalise = (value: string | undefined | null) => (value ? value.toString().trim().toUpperCase() : "");
 
-const resolveSymbol = (value?: string) => {
+const resolveSymbol = (value?: string, fallbackSymbol: string = DEFAULT_SYMBOL) => {
   const cleaned = normalise(value);
   if (cleaned) {
     return cleaned.replace(/[^A-Z0-9]/g, "");
   }
-  const fallback = normalise(DEFAULT_SYMBOL);
+  const fallback = normalise(fallbackSymbol);
   return fallback || "BTCUSDT";
 };
 
 const buildPairLabel = (base: string, quote: string) => `${base} / ${quote}`;
 
-const shouldIncludeSymbol = (item: BybitInstrumentInfo) => {
+const shouldIncludeSymbol = (item: BybitInstrumentInfo, mode: MarketMode) => {
   if (!item) {
     return false;
   }
@@ -76,11 +84,18 @@ const shouldIncludeSymbol = (item: BybitInstrumentInfo) => {
   if (!QUOTE_ASSET_ALLOW_LIST.has(quote)) {
     return false;
   }
+  if (mode === "futures") {
+    const contractType = normalise(item.contractType);
+    if (contractType && !contractType.includes("PERPETUAL")) {
+      return false;
+    }
+  }
   return true;
 };
 
-const ensureDefaultPair = (pairs: TradingPair[]): TradingPair[] => {
-  const symbol = resolveSymbol(DEFAULT_SYMBOL);
+const ensureDefaultPair = (pairs: TradingPair[], mode: MarketMode): TradingPair[] => {
+  const fallbackSymbol = mode === "futures" ? DEFAULT_FUTURES_SYMBOL : DEFAULT_SYMBOL;
+  const symbol = resolveSymbol(fallbackSymbol, fallbackSymbol);
   if (pairs.some((pair) => pair.symbol === symbol)) {
     return pairs;
   }
@@ -102,6 +117,7 @@ type BybitInstrumentInfo = {
   baseCoin: string;
   quoteCoin: string;
   status: string;
+  contractType?: string;
 };
 
 type BybitInstrumentsResponse = {
@@ -111,9 +127,12 @@ type BybitInstrumentsResponse = {
   };
 };
 
-const fetchInstruments = async (auth?: BybitRequestAuth): Promise<BybitInstrumentInfo[]> => {
+const fetchInstruments = async (
+  mode: MarketMode,
+  auth?: BybitRequestAuth
+): Promise<BybitInstrumentInfo[]> => {
   const url = new URL("/v5/market/instruments-info", BYBIT_REST_URL);
-  url.searchParams.set("category", "spot");
+  url.searchParams.set("category", mode === "futures" ? "linear" : "spot");
   const response = await fetch(url, {
     method: "GET",
     headers: withHeaders(auth),
@@ -126,20 +145,24 @@ const fetchInstruments = async (auth?: BybitRequestAuth): Promise<BybitInstrumen
   return payload.result?.list ?? [];
 };
 
-export const fetchBybitTradablePairs = async (auth?: BybitRequestAuth): Promise<TradingPair[]> => {
+export const fetchBybitTradablePairs = async (
+  mode: MarketMode = "spot",
+  auth?: BybitRequestAuth
+): Promise<TradingPair[]> => {
   const now = Date.now();
-  if (pairCache && now < pairCacheExpiresAt) {
-    return pairCache;
+  if (pairCache[mode] && now < pairCacheExpiresAt[mode]) {
+    return pairCache[mode] ?? [];
   }
 
   try {
-    const instruments = await fetchInstruments(auth);
+    const instruments = await fetchInstruments(mode, auth);
     const pairs = instruments
-      .filter(shouldIncludeSymbol)
+      .filter((instrument) => shouldIncludeSymbol(instrument, mode))
       .map((instrument) => {
         const base = normalise(instrument.baseCoin);
         const quote = normalise(instrument.quoteCoin);
-        const symbol = resolveSymbol(instrument.symbol);
+        const fallbackSymbol = mode === "futures" ? DEFAULT_FUTURES_SYMBOL : DEFAULT_SYMBOL;
+        const symbol = resolveSymbol(instrument.symbol, fallbackSymbol);
         return {
           symbol,
           baseAsset: base,
@@ -148,19 +171,23 @@ export const fetchBybitTradablePairs = async (auth?: BybitRequestAuth): Promise<
         } satisfies TradingPair;
       });
     const deduped = Array.from(new Map(pairs.map((pair) => [pair.symbol, pair])).values());
-    const result = ensureDefaultPair(deduped).sort((a, b) => a.symbol.localeCompare(b.symbol));
-    pairCache = result;
-    pairCacheExpiresAt = now + PAIR_CACHE_TTL_MS;
+    const result = ensureDefaultPair(deduped, mode).sort((a, b) => a.symbol.localeCompare(b.symbol));
+    pairCache[mode] = result;
+    pairCacheExpiresAt[mode] = now + PAIR_CACHE_TTL_MS;
     return result;
   } catch (error) {
     console.error("Failed to fetch Bybit tradable pairs", error);
-    return ensureDefaultPair(pairCache ?? []);
+    const fallback = ensureDefaultPair(pairCache[mode] ?? [], mode);
+    pairCache[mode] = fallback;
+    pairCacheExpiresAt[mode] = now + PAIR_CACHE_TTL_MS;
+    return fallback;
   }
 };
 
-export const isBybitPairTradable = async (symbol: string) => {
-  const normalized = resolveSymbol(symbol);
-  const pairs = await fetchBybitTradablePairs();
+export const isBybitPairTradable = async (symbol: string, mode: MarketMode = "spot") => {
+  const fallbackSymbol = mode === "futures" ? DEFAULT_FUTURES_SYMBOL : DEFAULT_SYMBOL;
+  const normalized = resolveSymbol(symbol, fallbackSymbol);
+  const pairs = await fetchBybitTradablePairs(mode);
   if (pairs.some((pair) => pair.symbol === normalized)) {
     return true;
   }
@@ -220,13 +247,15 @@ export const fetchBybitCandles = async (
   symbol: string,
   interval: string,
   limit: number,
-  auth?: BybitRequestAuth
+  auth?: BybitRequestAuth,
+  mode: MarketMode = "spot"
 ): Promise<MarketCandle[]> => {
   try {
-    const resolvedSymbol = resolveSymbol(symbol);
+    const fallbackSymbol = mode === "futures" ? DEFAULT_FUTURES_SYMBOL : DEFAULT_SYMBOL;
+    const resolvedSymbol = resolveSymbol(symbol, fallbackSymbol);
     const bybitInterval = mapTimeframeToBybitInterval(interval);
     const url = new URL("/v5/market/kline", BYBIT_REST_URL);
-    url.searchParams.set("category", "spot");
+    url.searchParams.set("category", mode === "futures" ? "linear" : "spot");
     url.searchParams.set("symbol", resolvedSymbol);
     url.searchParams.set("interval", bybitInterval);
     url.searchParams.set("limit", String(Math.min(Math.max(limit, 1), 1000)));
@@ -295,12 +324,14 @@ type BybitTickerResponse = {
 
 export const fetchBybitMarketSummary = async (
   symbol: string,
-  auth?: BybitRequestAuth
+  auth?: BybitRequestAuth,
+  mode: MarketMode = "spot"
 ): Promise<MarketSummary | null> => {
   try {
-    const resolvedSymbol = resolveSymbol(symbol);
+    const fallbackSymbol = mode === "futures" ? DEFAULT_FUTURES_SYMBOL : DEFAULT_SYMBOL;
+    const resolvedSymbol = resolveSymbol(symbol, fallbackSymbol);
     const url = new URL("/v5/market/tickers", BYBIT_REST_URL);
-    url.searchParams.set("category", "spot");
+    url.searchParams.set("category", mode === "futures" ? "linear" : "spot");
     url.searchParams.set("symbol", resolvedSymbol);
 
     const response = await fetch(url, {
@@ -358,12 +389,14 @@ type BybitOrderBookResponse = {
 export const fetchBybitOrderBook = async (
   symbol: string,
   limit: number,
-  auth?: BybitRequestAuth
+  auth?: BybitRequestAuth,
+  mode: MarketMode = "spot"
 ): Promise<{ bids: OrderBookSide[]; asks: OrderBookSide[] }> => {
   try {
-    const resolvedSymbol = resolveSymbol(symbol);
+    const fallbackSymbol = mode === "futures" ? DEFAULT_FUTURES_SYMBOL : DEFAULT_SYMBOL;
+    const resolvedSymbol = resolveSymbol(symbol, fallbackSymbol);
     const url = new URL("/v5/market/orderbook", BYBIT_REST_URL);
-    url.searchParams.set("category", "spot");
+    url.searchParams.set("category", mode === "futures" ? "linear" : "spot");
     url.searchParams.set("symbol", resolvedSymbol);
     url.searchParams.set("limit", String(Math.min(Math.max(limit, 1), 200)));
 
@@ -399,7 +432,8 @@ export const fetchBybitOrderBook = async (
 
 export const formatBybitSummary = (
   summary: MarketSummary | null,
-  locale: Locale = "en"
+  locale: Locale = "en",
+  mode: MarketMode = "spot"
 ): string => {
   const providerLabel = translate(locale, "market.summary.providerLabel.bybit");
   if (!summary) {
@@ -421,7 +455,7 @@ export const formatBybitSummary = (
   const baseAsset = symbol.replace(/USDT$/i, "");
 
   return [
-    translate(locale, "market.summary.spotTitle", {
+    translate(locale, `market.summary.modeTitle.${mode}`, {
       symbol,
       provider: providerLabel,
     }),
@@ -448,17 +482,4 @@ export const formatBybitSummary = (
 };
 
 export const mapTimeframeToBybitIntervalSymbol = mapTimeframeToBybitInterval;
-
-
-
-
-
-
-
-
-
-
-
-
-
 

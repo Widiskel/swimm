@@ -8,10 +8,12 @@ import {
   useMemo,
   useState,
 } from "react";
+import { usePrivy } from "@privy-io/react-auth";
 
 import { useSession } from "./session-provider";
 
 export type UserSettings = {
+  displayName: string | null;
   binanceApiKey: string | null;
   binanceApiSecret: string | null;
   bybitApiKey: string | null;
@@ -28,6 +30,7 @@ type UserSettingsContextValue = {
 };
 
 const DEFAULT_SETTINGS: UserSettings = {
+  displayName: null,
   binanceApiKey: null,
   binanceApiSecret: null,
   bybitApiKey: null,
@@ -37,44 +40,45 @@ const DEFAULT_SETTINGS: UserSettings = {
 
 const UserSettingsContext = createContext<UserSettingsContextValue | null>(null);
 
-const fetchSettings = async () => {
-  const response = await fetch("/api/settings", {
-    method: "GET",
-    credentials: "include",
-    cache: "no-store",
-  });
-  if (response.status === 401) {
-    return null;
-  }
-  if (!response.ok) {
-    throw new Error(`Settings request failed with ${response.status}`);
-  }
-  const payload = (await response.json()) as {
-    settings?: {
-      binanceApiKey: string | null;
-      binanceApiSecret: string | null;
-      bybitApiKey: string | null;
-      bybitApiSecret: string | null;
-      updatedAt?: string;
-    } | null;
-  };
-  if (!payload.settings) {
-    return null;
-  }
-  return {
-    binanceApiKey: payload.settings.binanceApiKey ?? null,
-    binanceApiSecret: payload.settings.binanceApiSecret ?? null,
-    bybitApiKey: payload.settings.bybitApiKey ?? null,
-    bybitApiSecret: payload.settings.bybitApiSecret ?? null,
-    updatedAt: payload.settings.updatedAt ?? null,
-  } satisfies UserSettings;
-};
-
 export const UserSettingsProvider = ({ children }: { children: React.ReactNode }) => {
-  const { status: sessionStatus } = useSession();
+  const { status: sessionStatus, refresh: refreshSession } = useSession();
+  const { authenticated, user } = usePrivy();
   const [settings, setSettings] = useState<UserSettings | null>(null);
   const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
+
+  const ensureServerSession = useCallback(async () => {
+    if (!authenticated || !user?.id) {
+      return false;
+    }
+    try {
+      const email = user.email?.address ?? null;
+      const wallet = user.wallet?.address ?? null;
+      const derivedName = user.farcaster?.username ? `@${user.farcaster.username}` : email ?? wallet;
+      const response = await fetch("/api/session", {
+        method: "POST",
+        credentials: "include",
+        cache: "no-store",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          userId: user.id,
+          email,
+          name: derivedName ?? null,
+          wallet,
+        }),
+      });
+      if (!response.ok) {
+        return false;
+      }
+      await refreshSession();
+      return true;
+    } catch (ensureError) {
+      console.warn("Failed to ensure server session", ensureError);
+      return false;
+    }
+  }, [authenticated, refreshSession, user]);
 
   const refresh = useCallback(async () => {
     if (sessionStatus !== "authenticated") {
@@ -84,7 +88,45 @@ export const UserSettingsProvider = ({ children }: { children: React.ReactNode }
     setStatus("loading");
     setError(null);
     try {
-      const data = await fetchSettings();
+      const fetchData = async (): Promise<UserSettings | null> => {
+        const response = await fetch("/api/settings", {
+          method: "GET",
+          credentials: "include",
+          cache: "no-store",
+        });
+        if (response.status === 401) {
+          return null;
+        }
+        if (!response.ok) {
+          throw new Error(`Settings request failed with ${response.status}`);
+        }
+        const payload = (await response.json()) as {
+          settings?: {
+            displayName: string | null;
+            binanceApiKey: string | null;
+            binanceApiSecret: string | null;
+            bybitApiKey: string | null;
+            bybitApiSecret: string | null;
+            updatedAt?: string;
+          } | null;
+        };
+        if (!payload.settings) {
+          return null;
+        }
+        return {
+          displayName: payload.settings.displayName ?? null,
+          binanceApiKey: payload.settings.binanceApiKey ?? null,
+          binanceApiSecret: payload.settings.binanceApiSecret ?? null,
+          bybitApiKey: payload.settings.bybitApiKey ?? null,
+          bybitApiSecret: payload.settings.bybitApiSecret ?? null,
+          updatedAt: payload.settings.updatedAt ?? null,
+        } satisfies UserSettings;
+      };
+
+      let data = await fetchData();
+      if (!data && (await ensureServerSession())) {
+        data = await fetchData();
+      }
       setSettings(data ?? DEFAULT_SETTINGS);
       setStatus("idle");
     } catch (fetchError) {
@@ -92,7 +134,7 @@ export const UserSettingsProvider = ({ children }: { children: React.ReactNode }
       setError(fetchError instanceof Error ? fetchError.message : "Unknown error");
       setStatus("error");
     }
-  }, [sessionStatus]);
+  }, [ensureServerSession, sessionStatus]);
 
   useEffect(() => {
     if (sessionStatus === "authenticated") {

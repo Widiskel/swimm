@@ -3,63 +3,76 @@ import { ObjectId } from "mongodb";
 
 import type { AgentResponse } from "@/features/analysis/types";
 import { DEFAULT_PROVIDER, isCexProvider } from "@/features/market/exchanges";
+import {
+  DEFAULT_MARKET_MODE,
+  isMarketMode,
+  type MarketMode,
+} from "@/features/market/constants";
 import { getMongoDb } from "@/lib/mongodb";
 import { getSessionFromCookie, toSessionResponse } from "@/lib/session";
 
-const HISTORY_COLLECTION = "agent_history";
-const MAX_FEEDBACK_LENGTH = 2000;
-const ALLOWED_VERDICTS = new Set(["accurate", "inaccurate", "unknown"] as const);
+export const HISTORY_COLLECTION = "agent_history";
+export const MAX_FEEDBACK_LENGTH = 2000;
+export const ALLOWED_VERDICTS = new Set(["accurate", "inaccurate", "unknown"] as const);
 
-type Verdict = "accurate" | "inaccurate" | "unknown";
+export type Verdict = "accurate" | "inaccurate" | "unknown";
 
-type HistoryDocument = {
+export type HistoryDocument = {
   _id?: ObjectId;
   sessionId: string;
   userId: string;
   pair: string;
   timeframe: string;
   provider: string;
+  mode?: MarketMode;
   decision: AgentResponse["decision"] | null;
   summary: string;
   response: AgentResponse;
   verdict: Verdict;
   feedback?: string | null;
+  executed?: boolean | null;
   createdAt: Date;
   updatedAt: Date;
 };
 
-type HistoryResponseItem = {
+export type HistoryResponseItem = {
   id: string;
+  sessionId: string;
   session: ReturnType<typeof toSessionResponse>;
   pair: string;
   timeframe: string;
   provider: string;
+  mode: MarketMode;
   decision: AgentResponse["decision"] | null;
   summary: string;
   response: AgentResponse;
   verdict: Verdict;
   feedback?: string | null;
+  executed: boolean | null;
   createdAt: string;
   updatedAt: string;
 };
 
-const buildError = (message: string, status = 400) =>
+export const buildError = (message: string, status = 400) =>
   NextResponse.json({ error: message }, { status });
 
-const mapHistoryDoc = (
+export const mapHistoryDoc = (
   doc: HistoryDocument,
   sessionData: ReturnType<typeof toSessionResponse>
 ): HistoryResponseItem => ({
   id: doc._id ? doc._id.toHexString() : `${doc.sessionId}-${doc.createdAt.getTime()}`,
+  sessionId: doc.sessionId,
   session: sessionData,
   pair: doc.pair,
   timeframe: doc.timeframe,
   provider: doc.provider,
+  mode: isMarketMode(doc.mode) ? doc.mode : DEFAULT_MARKET_MODE,
   decision: doc.decision,
   summary: doc.summary,
   response: doc.response,
   verdict: doc.verdict,
   feedback: doc.feedback ?? null,
+  executed: typeof doc.executed === "boolean" ? doc.executed : null,
   createdAt: doc.createdAt.toISOString(),
   updatedAt: doc.updatedAt.toISOString(),
 });
@@ -70,9 +83,11 @@ type SanitizedHistoryPayload =
       pair: string;
       timeframe: string;
       provider: string;
+      mode: MarketMode;
       response: AgentResponse;
       verdict: Verdict;
       feedback: string | null;
+      executed: boolean | null;
     };
 
 const sanitizePayload = (payload: unknown): SanitizedHistoryPayload => {
@@ -84,16 +99,20 @@ const sanitizePayload = (payload: unknown): SanitizedHistoryPayload => {
     pair,
     timeframe,
     provider,
+    mode,
     response,
     verdict,
     feedback,
+    executed,
   } = payload as {
     pair?: string;
     timeframe?: string;
     provider?: string;
+    mode?: string;
     response?: AgentResponse;
     verdict?: string;
     feedback?: string;
+    executed?: unknown;
   };
 
   if (!pair || typeof pair !== "string") {
@@ -105,20 +124,32 @@ const sanitizePayload = (payload: unknown): SanitizedHistoryPayload => {
   if (!response || typeof response !== "object") {
     return { error: "Agent response is required." };
   }
-  if (!verdict || !ALLOWED_VERDICTS.has(verdict as Verdict)) {
-    return { error: "Verdict must be one of: accurate, inaccurate, unknown." };
-  }
-
   const normalizedProvider = isCexProvider(provider ?? null) ? provider! : DEFAULT_PROVIDER;
+  const normalizedMode = isMarketMode(mode ?? null) ? (mode as MarketMode) : DEFAULT_MARKET_MODE;
+  const normalizedVerdict = ALLOWED_VERDICTS.has((verdict ?? "unknown") as Verdict)
+    ? ((verdict ?? "unknown") as Verdict)
+    : "unknown";
   const sanitizedFeedback = feedback?.toString().slice(0, MAX_FEEDBACK_LENGTH) ?? null;
+  const normalizedExecuted =
+    typeof executed === "boolean"
+      ? executed
+      : typeof executed === "string"
+      ? executed.toLowerCase() === "true"
+        ? true
+        : executed.toLowerCase() === "false"
+        ? false
+        : null
+      : null;
 
   return {
     pair: pair.trim().toUpperCase(),
     timeframe: timeframe.trim(),
     provider: normalizedProvider,
+    mode: normalizedMode,
     response,
-    verdict: verdict as Verdict,
+    verdict: normalizedVerdict,
     feedback: sanitizedFeedback,
+    executed: normalizedExecuted,
   };
 };
 
@@ -175,11 +206,13 @@ export async function POST(request: NextRequest) {
       pair: validated.pair,
       timeframe: validated.timeframe,
       provider: validated.provider,
+      mode: validated.mode,
       decision: validated.response.decision ?? null,
       summary: validated.response.summary ?? "",
       response: validated.response,
       verdict: validated.verdict,
       feedback: validated.feedback,
+      executed: validated.executed ?? null,
       createdAt: now,
       updatedAt: now,
     };
@@ -215,5 +248,3 @@ export async function DELETE() {
     return buildError("Unable to clear history.", 500);
   }
 }
-
-

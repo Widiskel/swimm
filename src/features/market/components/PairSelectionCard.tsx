@@ -7,7 +7,12 @@ import Fuse from "fuse.js";
 import { motion } from "framer-motion";
 
 import { useLanguage } from "@/providers/language-provider";
-import { CEX_PROVIDERS, PROVIDER_ICON_MAP } from "@/features/market/constants";
+import {
+  CEX_PROVIDERS,
+  MARKET_MODES,
+  PROVIDER_ICON_MAP,
+  type MarketMode,
+} from "@/features/market/constants";
 import type { CexProvider } from "@/features/market/exchanges";
 
 type TradingPair = {
@@ -18,6 +23,8 @@ type TradingPair = {
 type PairSelectionCardProps = {
   provider: CexProvider;
   onProviderChange: (provider: CexProvider) => void;
+  mode: MarketMode;
+  onModeChange: (mode: MarketMode) => void;
   selectedPair: string;
   onPairChange: (symbol: string) => void;
   onShowChart: () => void;
@@ -30,6 +37,8 @@ const MotionDiv = motion.div;
 export function PairSelectionCard({
   provider,
   onProviderChange,
+  mode,
+  onModeChange,
   selectedPair,
   onPairChange,
   onShowChart,
@@ -47,6 +56,15 @@ export function PairSelectionCard({
         value,
         label: __("pairSelection.providerOptions." + value),
         icon: PROVIDER_ICON_MAP[value],
+      })),
+    [__]
+  );
+
+  const modeOptions = useMemo(
+    () =>
+      MARKET_MODES.map((value) => ({
+        value,
+        label: __("pairSelection.modeOptions." + value),
       })),
     [__]
   );
@@ -144,6 +162,39 @@ export function PairSelectionCard({
               </svg>
             </span>
           </button>
+        </div>
+        <div>
+          <label className="text-xs font-semibold uppercase tracking-wide text-[var(--swimm-neutral-500)]">
+            {__("pairSelection.modeLabel")}
+          </label>
+          <p className="mt-1 text-xs text-[var(--swimm-neutral-500)]">
+            {__("pairSelection.modeHint")}
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {modeOptions.map((option) => {
+              const isActive = option.value === mode;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => {
+                    if (option.value !== mode) {
+                      onModeChange(option.value);
+                    }
+                  }}
+                  title={option.label}
+                  aria-pressed={isActive}
+                  className={`rounded-full border px-4 py-2 text-sm font-semibold transition ${
+                    isActive
+                      ? "border-[var(--swimm-primary-500)] bg-[var(--swimm-primary-500)]/10 text-[var(--swimm-primary-700)]"
+                      : "border-[var(--swimm-neutral-300)] bg-white text-[var(--swimm-neutral-600)] hover:border-[var(--swimm-primary-500)]"
+                  }`}
+                >
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
         <div>
           <label className="text-xs font-semibold uppercase tracking-wide text-[var(--swimm-neutral-500)]">

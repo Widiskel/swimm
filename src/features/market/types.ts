@@ -76,6 +76,7 @@ export type MarketSnapshot = {
   symbol: string;
   interval: string;
   provider?: CexProvider;
+  mode?: "spot" | "futures";
   candles: MarketCandle[];
   orderBook: {
     bids: OrderBookEntry[];

@@ -6,30 +6,16 @@ import { motion } from "framer-motion";
 import { usePrivy } from "@privy-io/react-auth";
 
 import { useLanguage } from "@/providers/language-provider";
+import { useUserSettings } from "@/providers/user-settings-provider";
+import { resolveDisplayName } from "@/utils/resolve-display-name";
 
-const PRIVY_APP_ID = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
+const NEXT_PUBLIC_PRIVY_APP_ID = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
 
 type ButtonState = "idle" | "loading";
 
-type MaybeWalletAccount = {
-  address?: string | null;
-  type?: string | null;
-};
-
-type MaybeWalletUser = {
-  linkedAccounts?: MaybeWalletAccount[] | null;
-  wallets?: MaybeWalletAccount[] | null;
-};
-
-const shorten = (value: string) => {
-  if (value.length <= 10) {
-    return value;
-  }
-  return `${value.slice(0, 6)}...${value.slice(-4)}`;
-};
-
 const GuardedAuthControls = () => {
   const { ready, authenticated, user, login, logout } = usePrivy();
+  const { settings } = useUserSettings();
   const { messages } = useLanguage();
   const copy = messages.auth;
   const [state, setState] = useState<ButtonState>("idle");
@@ -38,27 +24,8 @@ const GuardedAuthControls = () => {
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   const displayName = useMemo(() => {
-    if (!user) {
-      return null;
-    }
-    if (user.email?.address) {
-      return user.email.address;
-    }
-    const extendedUser = user as MaybeWalletUser;
-    const linkedWallet = extendedUser.linkedAccounts?.find((account) => account?.type === "wallet");
-    const walletFallback = extendedUser.wallets?.[0]?.address ?? linkedWallet?.address ?? undefined;
-    const walletAddress = user.wallet?.address ?? walletFallback ?? undefined;
-    if (walletAddress) {
-      return shorten(walletAddress);
-    }
-    if (user.phone?.number) {
-      return user.phone.number;
-    }
-    if (user.farcaster?.username) {
-      return `@${user.farcaster.username}`;
-    }
-    return null;
-  }, [user]);
+    return resolveDisplayName(user, settings?.displayName);
+  }, [settings?.displayName, user]);
 
   const handleLogin = useCallback(async () => {
     setState("loading");
@@ -67,7 +34,9 @@ const GuardedAuthControls = () => {
       await login();
     } catch (authError) {
       console.error("Login failed", authError);
-      setError(authError instanceof Error ? authError.message : copy.loginError);
+      setError(
+        authError instanceof Error ? authError.message : copy.loginError
+      );
     } finally {
       setState("idle");
     }
@@ -81,7 +50,9 @@ const GuardedAuthControls = () => {
       setMenuOpen(false);
     } catch (authError) {
       console.error("Logout failed", authError);
-      setError(authError instanceof Error ? authError.message : copy.logoutError);
+      setError(
+        authError instanceof Error ? authError.message : copy.logoutError
+      );
     } finally {
       setState("idle");
     }
@@ -175,11 +146,17 @@ const GuardedAuthControls = () => {
             <p className="font-semibold text-[var(--swimm-navy-900)]">
               {displayName ?? copy.defaultUser}
             </p>
-            <p className="text-xs text-[var(--swimm-neutral-500)]">{copy.authenticatedLabel}</p>
+            <p className="text-xs text-[var(--swimm-neutral-500)]">
+              {copy.authenticatedLabel}
+            </p>
           </div>
           <ul className="flex flex-col gap-1 text-sm">
             <li>
-              <LinkButton href="/profile" label={messages.siteHeader.nav.profile} onNavigate={() => setMenuOpen(false)} />
+              <LinkButton
+                href="/profile"
+                label={messages.siteHeader.nav.profile}
+                onNavigate={() => setMenuOpen(false)}
+              />
             </li>
             <li>
               <button
@@ -188,12 +165,10 @@ const GuardedAuthControls = () => {
                 disabled={state === "loading"}
                 className="flex w-full items-center justify-between rounded-xl border border-[var(--swimm-neutral-200)] px-3 py-2 text-[var(--swimm-neutral-600)] transition hover:border-[var(--swimm-down)]/40 hover:bg-[var(--swimm-down)]/10 hover:text-[var(--swimm-down)] disabled:cursor-not-allowed disabled:opacity-60"
               >
-                <span>{state === "loading" ? copy.logoutProcessing : copy.logout}</span>
-                <svg
-                  viewBox="0 0 20 20"
-                  className="h-4 w-4"
-                  aria-hidden="true"
-                >
+                <span>
+                  {state === "loading" ? copy.logoutProcessing : copy.logout}
+                </span>
+                <svg viewBox="0 0 20 20" className="h-4 w-4" aria-hidden="true">
                   <path
                     d="M7 5V4a2 2 0 0 1 2-2h7v16H9a2 2 0 0 1-2-2v-1"
                     stroke="currentColor"
@@ -214,7 +189,9 @@ const GuardedAuthControls = () => {
               </button>
             </li>
           </ul>
-          {error ? <p className="mt-3 text-xs text-[var(--swimm-down)]">{error}</p> : null}
+          {error ? (
+            <p className="mt-3 text-xs text-[var(--swimm-down)]">{error}</p>
+          ) : null}
         </div>
       ) : null}
     </div>
@@ -238,11 +215,7 @@ const LinkButton = ({ href, label, onNavigate }: LinkButtonProps) => (
     className="flex items-center justify-between rounded-xl border border-[var(--swimm-neutral-200)] px-3 py-2 text-[var(--swimm-neutral-600)] transition hover:border-[var(--swimm-primary-500)]/50 hover:bg-[var(--swimm-primary-500)]/10 hover:text-[var(--swimm-primary-700)]"
   >
     <span>{label}</span>
-    <svg
-      viewBox="0 0 20 20"
-      className="h-4 w-4"
-      aria-hidden="true"
-    >
+    <svg viewBox="0 0 20 20" className="h-4 w-4" aria-hidden="true">
       <path
         d="m9 6 4 4-4 4"
         fill="none"
@@ -267,12 +240,14 @@ export function AuthSection() {
   const { messages } = useLanguage();
   const copy = messages.auth;
 
-  if (!PRIVY_APP_ID) {
+  if (!NEXT_PUBLIC_PRIVY_APP_ID) {
     const [prefix, suffix] = copy.envMissing.split("NEXT_PUBLIC_PRIVY_APP_ID");
     return (
       <div className="rounded-md border border-dashed border-[var(--swimm-neutral-300)] px-3 py-2 text-xs text-[var(--swimm-neutral-500)]">
         {prefix}
-        <code className="text-[var(--swimm-primary-700)]">NEXT_PUBLIC_PRIVY_APP_ID</code>
+        <code className="text-[var(--swimm-primary-700)]">
+          NEXT_PUBLIC_PRIVY_APP_ID
+        </code>
         {suffix}
       </div>
     );

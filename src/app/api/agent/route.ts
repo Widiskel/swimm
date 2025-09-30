@@ -17,6 +17,11 @@ import {
 } from "@/features/market/exchanges/bybit";
 import { DEFAULT_PROVIDER, isCexProvider, type CexProvider } from "@/features/market/exchanges";
 import {
+  DEFAULT_MARKET_MODE,
+  isMarketMode,
+  type MarketMode,
+} from "@/features/market/constants";
+import {
   fetchTavilyExtract,
   fetchTavilySearch,
   type TavilyExtractedArticle,
@@ -42,6 +47,7 @@ type AgentRequest = {
   pairSymbol?: string;
   provider?: string;
   locale?: string;
+  mode?: string;
 };
 
 type AgentDecision = "buy" | "sell" | "hold";
@@ -57,6 +63,7 @@ type MarketContext = {
   interval: string;
   candles: BinanceCandle[];
   lastPrice: number;
+  mode: MarketMode;
 };
 
 type TradePlan = {
@@ -1092,7 +1099,7 @@ const parseModelPayload = (content: string) => {
           secondaryError instanceof Error
             ? secondaryError.message
             : String(secondaryError ?? "unknown error");
-        console.warn("Fireworks JSON parse (after repair) failed", secondaryMessage);
+        console.warn("Sentient JSON parse (after repair) failed", secondaryMessage);
         const stripped = stripArrayField(repaired, "points");
         if (stripped !== repaired) {
           try {
@@ -1102,7 +1109,7 @@ const parseModelPayload = (content: string) => {
               tertiaryError instanceof Error
                 ? tertiaryError.message
                 : String(tertiaryError ?? "unknown error");
-            console.warn("Fireworks JSON parse (after strip) failed", tertiaryMessage);
+            console.warn("Sentient JSON parse (after strip) failed", tertiaryMessage);
           }
         }
       }
@@ -1117,13 +1124,13 @@ const parseModelPayload = (content: string) => {
           tertiaryError instanceof Error
             ? tertiaryError.message
             : String(tertiaryError ?? "unknown error");
-        console.warn("Fireworks JSON parse (original strip) failed", tertiaryMessage);
+        console.warn("Sentient JSON parse (original strip) failed", tertiaryMessage);
       }
     }
 
     const message = error instanceof Error ? error.message : String(error ?? "unknown error");
     console.warn(
-      "Fireworks JSON parse failed",
+      "Sentient JSON parse failed",
       message,
       jsonString.slice(0, 400),
       jsonString === originalJsonString ? undefined : originalJsonString.slice(0, 400)
@@ -1398,14 +1405,28 @@ export async function POST(request: Request) {
   const binanceAuth = settings?.binanceApiKey ? { apiKey: settings.binanceApiKey } : undefined;
   const bybitAuth = settings?.bybitApiKey ? { apiKey: settings.bybitApiKey } : undefined;
 
-  const requestedSymbol = body.pairSymbol?.toUpperCase() ?? process.env.BINANCE_SYMBOL ?? "BTCUSDT";
   const providerParam = typeof body.provider === "string" ? body.provider.toLowerCase() : DEFAULT_PROVIDER;
   const provider: CexProvider = isCexProvider(providerParam) ? providerParam : DEFAULT_PROVIDER;
+  const modeParam = typeof body.mode === "string" ? body.mode.toLowerCase() : DEFAULT_MARKET_MODE;
+  const mode: MarketMode = isMarketMode(modeParam) ? modeParam : DEFAULT_MARKET_MODE;
+
+  const requestedSymbol = (() => {
+    const explicit = body.pairSymbol?.toUpperCase();
+    if (explicit && explicit.trim().length > 0) {
+      return explicit;
+    }
+    if (provider === "bybit") {
+      return mode === "futures"
+        ? process.env.BYBIT_FUTURES_SYMBOL ?? process.env.BYBIT_SYMBOL ?? "BTCUSDT"
+        : process.env.BYBIT_SYMBOL ?? "BTCUSDT";
+    }
+    return "BTCUSDT";
+  })();
 
   const providerLabel = translate(locale, `market.summary.providerLabel.${provider}`);
   const isSupportedSymbol = provider === "bybit"
-    ? await isBybitPairTradable(requestedSymbol)
-    : await isPairTradable(requestedSymbol, binanceAuth);
+    ? await isBybitPairTradable(requestedSymbol, mode)
+    : await isPairTradable(requestedSymbol, binanceAuth, mode);
   if (!isSupportedSymbol) {
     return NextResponse.json(
       {
@@ -1444,7 +1465,7 @@ export async function POST(request: Request) {
   const apiKey = process.env.FIREWORKS_API_KEY;
   if (!apiKey) {
     return NextResponse.json(
-      { error: "Fireworks API key belum dikonfigurasi." },
+      { error: "Sentient Models API key belum dikonfigurasi." },
       { status: 500 }
     );
   }
@@ -1452,12 +1473,12 @@ export async function POST(request: Request) {
   const [[summaryData, candles], tavilySearch, tavilyArticles, historyInsights] = await Promise.all([
     (provider === "bybit"
       ? Promise.all([
-          fetchBybitMarketSummary(symbol, bybitAuth),
-          fetchBybitCandles(symbol, timeframe, 500, bybitAuth),
+          fetchBybitMarketSummary(symbol, bybitAuth, mode),
+          fetchBybitCandles(symbol, timeframe, 500, bybitAuth, mode),
         ])
       : Promise.all([
-          fetchBinanceMarketSummary(symbol, binanceAuth),
-          fetchBinanceCandles(symbol, CEX_INTERVAL_MAP[timeframe], 500, binanceAuth),
+          fetchBinanceMarketSummary(symbol, binanceAuth, mode),
+          fetchBinanceCandles(symbol, CEX_INTERVAL_MAP[timeframe], 500, binanceAuth, mode),
         ])),
     tavilySearchPromise,
     tavilyExtractPromise,
@@ -1466,8 +1487,8 @@ export async function POST(request: Request) {
   const resolvedSymbol = summaryData?.symbol ?? symbol;
   const marketSummary =
     provider === "bybit"
-      ? formatBybitSummary(summaryData, locale)
-      : formatBinanceSummary(summaryData, locale);
+      ? formatBybitSummary(summaryData, locale, mode)
+      : formatBinanceSummary(summaryData, locale, mode);
   const marketAnalytics = buildMarketAnalytics(candles, timeframe, locale);
   const resolvedLastPrice =
     (typeof marketAnalytics.lastClose === "number" && marketAnalytics.lastClose > 0
@@ -1482,6 +1503,7 @@ export async function POST(request: Request) {
         : CEX_INTERVAL_MAP[timeframe],
     candles,
     lastPrice: resolvedLastPrice,
+    mode,
   };
 
   const marketSupport = {
@@ -1540,7 +1562,7 @@ export async function POST(request: Request) {
     if (!response.ok) {
       const errorText = await response.text().catch(() => "");
       throw new Error(
-        `Fireworks API error (${response.status}): ${errorText || response.statusText}`
+        `Sentient Models error (${response.status}): ${errorText || response.statusText}`
       );
     }
 
@@ -1550,7 +1572,7 @@ export async function POST(request: Request) {
     const content = result.choices?.[0]?.message?.content;
 
     if (!content) {
-      throw new Error("Fireworks API tidak mengembalikan konten.");
+      throw new Error("Sentient Models API tidak mengembalikan konten.");
     }
 
     const draft = parseModelPayload(content);
@@ -1560,10 +1582,10 @@ export async function POST(request: Request) {
   } catch (error) {
     const message =
       error instanceof Error && error.name === "AbortError"
-        ? "Permintaan ke Fireworks melewati batas waktu."
+        ? "Permintaan ke Sentient Models melewati batas waktu."
         : error instanceof Error
         ? error.message
-        : "Integrasi Fireworks gagal.";
+        : "Integrasi Sentient Models gagal.";
 
     return NextResponse.json(
       {
@@ -1575,13 +1597,6 @@ export async function POST(request: Request) {
     clearTimeout(timeout);
   }
 }
-
-
-
-
-
-
-
 
 
 

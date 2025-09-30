@@ -1,13 +1,12 @@
 ﻿"use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 
 import { SiteHeader } from "@/components/SiteHeader";
 import { useHistory, type HistoryEntry, type HistoryVerdict } from "@/providers/history-provider";
 import { useLanguage } from "@/providers/language-provider";
-import { HistoryEntryAnalysis } from "@/features/history/components/HistoryEntryAnalysis";
 
 type DayGroup = {
   key: string;
@@ -22,7 +21,7 @@ type DayGroup = {
 
 export default function HistoryPage() {
   const { ready, authenticated, login } = usePrivy();
-  const { entries, clearEntries, isLoading, error } = useHistory();
+  const { entries, isLoading, error } = useHistory();
   const { messages, languageTag } = useLanguage();
   const historyCopy = messages.history;
 
@@ -33,7 +32,7 @@ export default function HistoryPage() {
   const [decisionFilter, setDecisionFilter] = useState<DecisionFilter>("all");
   const [verdictFilter, setVerdictFilter] = useState<VerdictFilter>("all");
   const [pairFilter, setPairFilter] = useState<string>("all");
-  const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
+  const [dateFilter, setDateFilter] = useState<string>("");
 
   const pairOptions = useMemo(() => {
     const unique = new Set<string>();
@@ -63,6 +62,12 @@ export default function HistoryPage() {
           return false;
         }
       }
+      if (dateFilter) {
+        const entryDate = entry.createdAt.slice(0, 10);
+        if (entryDate !== dateFilter) {
+          return false;
+        }
+      }
       if (!normalizedQuery) {
         return true;
       }
@@ -79,13 +84,7 @@ export default function HistoryPage() {
         .toLowerCase();
       return haystack.includes(normalizedQuery);
     });
-  }, [entries, searchQuery, decisionFilter, verdictFilter, pairFilter]);
-
-  useEffect(() => {
-    if (selectedEntryId && !filteredEntries.some((entry) => entry.id === selectedEntryId)) {
-      setSelectedEntryId(null);
-    }
-  }, [filteredEntries, selectedEntryId]);
+  }, [entries, searchQuery, decisionFilter, verdictFilter, pairFilter, dateFilter]);
 
   const totalBuy = useMemo(
     () => filteredEntries.filter((item) => item.decision?.action === "buy").length,
@@ -144,10 +143,6 @@ export default function HistoryPage() {
     });
     return result;
   }, [filteredEntries, languageTag]);
-
-  const handleSelectEntry = (entryId: string) => {
-    setSelectedEntryId((prev) => (prev === entryId ? null : entryId));
-  };
 
   if (!ready) {
     return (
@@ -226,60 +221,67 @@ export default function HistoryPage() {
     const decisionLabel = decision ? decision.toUpperCase() : historyCopy.summaryRow.noDecision;
     const verdictKey = (entry.verdict ?? "unknown") as keyof typeof historyCopy.entryCard.verdict;
     const verdictLabel = historyCopy.entryCard.verdict[verdictKey] ?? historyCopy.summaryRow.noVerdict;
-    const summaryText = historyCopy.summaryRow.format
-      .replace("{decision}", decisionLabel)
-      .replace("{verdict}", verdictLabel);
+    const hasVerdict = verdictKey !== "unknown";
+    const summaryText = hasVerdict
+      ? historyCopy.summaryRow.format
+          .replace("{decision}", decisionLabel)
+          .replace("{verdict}", verdictLabel)
+      : decisionLabel;
     const entryLabel = historyCopy.summaryRow.entry
       .replace("{pair}", entry.pair)
       .replace("{timeframe}", entry.timeframe.toUpperCase());
-    const isActive = selectedEntryId === entry.id;
+    const entryHref = `/history/${entry.id}`;
 
     const decisionBadgeClass: Record<string, string> = {
-      buy: "border-[var(--swimm-up)] bg-[var(--swimm-up)]/10 text-[var(--swimm-up)]",
-      sell: "border-[var(--swimm-down)] bg-[var(--swimm-down)]/10 text-[var(--swimm-down)]",
+      buy: "bg-[var(--swimm-up)]/10 text-[var(--swimm-up)] ring-1 ring-[var(--swimm-up)]/30",
+      sell: "bg-[var(--swimm-down)]/10 text-[var(--swimm-down)] ring-1 ring-[var(--swimm-down)]/30",
     };
 
     const verdictBadgeClass: Record<string, string> = {
-      accurate: "border-[var(--swimm-up)] bg-[var(--swimm-up)]/10 text-[var(--swimm-up)]",
-      inaccurate: "border-[var(--swimm-down)] bg-[var(--swimm-down)]/10 text-[var(--swimm-down)]",
-      unknown: "border-[var(--swimm-neutral-300)] bg-[var(--swimm-neutral-100)] text-[var(--swimm-neutral-500)]",
+      accurate: "bg-[var(--swimm-up)]/10 text-[var(--swimm-up)] ring-1 ring-[var(--swimm-up)]/30",
+      inaccurate: "bg-[var(--swimm-down)]/10 text-[var(--swimm-down)] ring-1 ring-[var(--swimm-down)]/30",
+      unknown: "bg-[var(--swimm-neutral-100)] text-[var(--swimm-neutral-500)] ring-1 ring-[var(--swimm-neutral-200)]",
     };
+    const wasExecuted = entry.executed === true;
 
     return (
-      <li key={entry.id} className="rounded-2xl border border-[var(--swimm-neutral-300)] bg-[var(--swimm-neutral-100)]">
-        <button
-          type="button"
-          onClick={() => handleSelectEntry(entry.id)}
-          className={`flex w-full flex-col gap-3 px-4 py-4 text-left transition hover:bg-white ${
-            isActive ? "border-l-4 border-[var(--swimm-primary-500)] bg-white" : ""
-          }`}
+      <li key={entry.id}>
+        <Link
+          href={entryHref}
+          className="group block rounded-2xl bg-white/90 p-5 shadow-sm ring-1 ring-[var(--swimm-neutral-200)] transition hover:-translate-y-0.5 hover:shadow-lg hover:ring-[var(--swimm-primary-500)]"
         >
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <span
-              className={`inline-flex items-center justify-center rounded-2xl border px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] ${
-                decisionBadgeClass[decisionKey] ?? "border-[var(--swimm-neutral-300)] bg-white text-[var(--swimm-neutral-500)]"
-              }`}
-            >
-              {decisionLabel}
-            </span>
-            <span
-              className={`inline-flex min-w-[8rem] items-center justify-center rounded-2xl border px-5 py-2 text-sm font-semibold uppercase tracking-[0.25em] ${
-                verdictBadgeClass[verdictKey] ?? verdictBadgeClass.unknown
-              }`}
-            >
-              {verdictLabel}
-            </span>
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <span
+                className={`inline-flex items-center justify-center rounded-full px-4 py-1.5 text-[11px] font-semibold uppercase tracking-[0.25em] ${
+                  decisionBadgeClass[decisionKey] ?? "bg-[var(--swimm-neutral-100)] text-[var(--swimm-neutral-500)] ring-1 ring-[var(--swimm-neutral-200)]"
+                }`}
+              >
+                {decisionLabel}
+              </span>
+              <div className="flex flex-wrap items-center gap-2">
+                {verdictKey !== "unknown" ? (
+                  <span
+                    className={`inline-flex min-w-[7rem] items-center justify-center rounded-full px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.2em] ${
+                      verdictBadgeClass[verdictKey] ?? verdictBadgeClass.unknown
+                    }`}
+                  >
+                    {verdictLabel}
+                  </span>
+                ) : null}
+                {wasExecuted ? (
+                  <span className="inline-flex items-center justify-center rounded-full bg-[var(--swimm-primary-500)]/15 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.35em] text-[var(--swimm-primary-700)] ring-1 ring-[var(--swimm-primary-500)]/40">
+                    {historyCopy.executionBadge.executed}
+                  </span>
+                ) : null}
+              </div>
+            </div>
+            <div className="flex flex-col gap-1">
+              <span className="text-sm font-semibold text-[var(--swimm-navy-900)]">{entryLabel}</span>
+              <span className="text-xs text-[var(--swimm-neutral-500)]">{summaryText}</span>
+            </div>
           </div>
-          <div className="flex flex-col gap-1">
-            <span className="text-sm font-semibold text-[var(--swimm-navy-900)]">{entryLabel}</span>
-            <span className="text-xs text-[var(--swimm-neutral-500)]">{summaryText}</span>
-          </div>
-        </button>
-        {isActive ? (
-          <div className="border-t border-[var(--swimm-neutral-200)] bg-white px-4 py-4">
-            <HistoryEntryAnalysis entry={entry} languageTag={languageTag} />
-          </div>
-        ) : null}
+        </Link>
       </li>
     );
   };
@@ -296,14 +298,9 @@ export default function HistoryPage() {
             </h2>
             <p className="mt-2 text-sm text-[var(--swimm-neutral-500)]">{historyCopy.subtitle}</p>
           </div>
-          <button
-            type="button"
-            onClick={clearEntries}
-            disabled={entries.length === 0 || isLoading}
-            className="self-start rounded-full border border-[var(--swimm-down)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-[var(--swimm-down)] transition hover:-translate-y-0.5 disabled:opacity-40"
-          >
-            {historyCopy.clearButton}
-          </button>
+          <p className="text-xs text-[var(--swimm-neutral-400)] max-w-xs text-right">
+            {historyCopy.retentionNote}
+          </p>
         </div>
 
         {error ? (
@@ -312,18 +309,18 @@ export default function HistoryPage() {
           </div>
         ) : null}
 
-        <div className="grid gap-4 lg:grid-cols-[1.5fr_repeat(3,minmax(0,1fr))]">
+        <div className="grid gap-4 lg:grid-cols-[1.5fr_repeat(4,minmax(0,1fr))]">
           <input
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
             type="search"
             placeholder={historyCopy.filters.searchPlaceholder}
-            className="h-10 rounded-full border border-[var(--swimm-neutral-300)] bg-white px-4 text-sm text-[var(--swimm-neutral-600)] outline-none transition focus:border-[var(--swimm-primary-500)] focus:ring-2 focus:ring-[var(--swimm-primary-500)]/30"
+            className="h-10 rounded-full bg-white/90 px-4 text-sm text-[var(--swimm-neutral-600)] shadow-sm ring-1 ring-[var(--swimm-neutral-200)] outline-none transition focus:ring-2 focus:ring-[var(--swimm-primary-500)]"
           />
           <select
             value={pairFilter}
             onChange={(event) => setPairFilter(event.target.value)}
-            className="h-10 rounded-full border border-[var(--swimm-neutral-300)] bg-white px-4 text-sm text-[var(--swimm-neutral-600)] outline-none transition focus:border-[var(--swimm-primary-500)] focus:ring-2 focus:ring-[var(--swimm-primary-500)]/30"
+            className="h-10 rounded-full bg-white/90 px-4 text-sm text-[var(--swimm-neutral-600)] shadow-sm ring-1 ring-[var(--swimm-neutral-200)] outline-none transition focus:ring-2 focus:ring-[var(--swimm-primary-500)]"
           >
             <option value="all">{historyCopy.filters.allOption}</option>
             {pairOptions.map((pair) => (
@@ -335,7 +332,7 @@ export default function HistoryPage() {
           <select
             value={decisionFilter}
             onChange={(event) => setDecisionFilter(event.target.value as DecisionFilter)}
-            className="h-10 rounded-full border border-[var(--swimm-neutral-300)] bg-white px-4 text-sm text-[var(--swimm-neutral-600)] outline-none transition focus:border-[var(--swimm-primary-500)] focus:ring-2 focus:ring-[var(--swimm-primary-500)]/30"
+            className="h-10 rounded-full bg-white/90 px-4 text-sm text-[var(--swimm-neutral-600)] shadow-sm ring-1 ring-[var(--swimm-neutral-200)] outline-none transition focus:ring-2 focus:ring-[var(--swimm-primary-500)]"
           >
             {decisionOptions.map((option) => (
               <option key={option.value} value={option.value}>
@@ -346,7 +343,7 @@ export default function HistoryPage() {
           <select
             value={verdictFilter}
             onChange={(event) => setVerdictFilter(event.target.value as VerdictFilter)}
-            className="h-10 rounded-full border border-[var(--swimm-neutral-300)] bg-white px-4 text-sm text-[var(--swimm-neutral-600)] outline-none transition focus:border-[var(--swimm-primary-500)] focus:ring-2 focus:ring-[var(--swimm-primary-500)]/30"
+            className="h-10 rounded-full bg-white/90 px-4 text-sm text-[var(--swimm-neutral-600)] shadow-sm ring-1 ring-[var(--swimm-neutral-200)] outline-none transition focus:ring-2 focus:ring-[var(--swimm-primary-500)]"
           >
             {verdictOptions.map((option) => (
               <option key={option.value} value={option.value}>
@@ -354,13 +351,20 @@ export default function HistoryPage() {
               </option>
             ))}
           </select>
+          <input
+            type="date"
+            value={dateFilter}
+            onChange={(event) => setDateFilter(event.target.value)}
+            aria-label={historyCopy.filters.dateLabel}
+            className="h-10 rounded-full bg-white/90 px-4 text-sm text-[var(--swimm-neutral-600)] shadow-sm ring-1 ring-[var(--swimm-neutral-200)] outline-none transition focus:ring-2 focus:ring-[var(--swimm-primary-500)]"
+          />
         </div>
 
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {metrics.map((metric) => (
             <div
               key={metric.label}
-              className="rounded-3xl border border-[var(--swimm-neutral-300)] bg-white p-6 shadow-sm shadow-[var(--swimm-neutral-300)]/40"
+              className="rounded-3xl bg-white/90 p-6 shadow-sm ring-1 ring-[var(--swimm-neutral-200)]"
             >
               <p className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--swimm-neutral-300)]">
                 {metric.label}
@@ -397,7 +401,7 @@ export default function HistoryPage() {
             {groupedDays.map((day) => (
               <section
                 key={day.key}
-                className="rounded-3xl border border-[var(--swimm-neutral-300)] bg-white p-6 shadow-sm shadow-[var(--swimm-neutral-300)]/30"
+                className="rounded-3xl bg-white/90 p-6 shadow-sm ring-1 ring-[var(--swimm-neutral-200)]"
               >
                 <header className="flex flex-col gap-3 border-b border-[var(--swimm-neutral-200)] pb-4 sm:flex-row sm:items-center sm:justify-between">
                   <div>
