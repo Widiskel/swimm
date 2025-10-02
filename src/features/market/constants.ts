@@ -4,6 +4,7 @@ export { CEX_PROVIDERS, DEFAULT_PROVIDER } from "@/features/market/exchanges";
 export const PROVIDER_ICON_MAP: Record<CexProvider, string> = {
   binance: "/cex/binance.png",
   bybit: "/cex/bybit.webp",
+  gold: "/logo/branding.png",
 };
 
 export const TIMEFRAME_OPTIONS = ["1m", "5m", "15m", "1h", "4h", "1d"] as const;
@@ -79,3 +80,6 @@ export const INDICATOR_CONFIG: IndicatorConfigItem[] = [
 export const TARGET_LABELS = ["TP1", "TP2", "TP3", "TP4", "TP5"] as const;
 
 export const DEFAULT_PAIR_SYMBOL = process.env.BINANCE_SYMBOL ?? "BTCUSDT";
+
+
+

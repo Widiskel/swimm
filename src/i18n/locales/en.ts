@@ -19,6 +19,7 @@ const en = {
       analysis: "Analysis",
       history: "History",
       profile: "Profile",
+      gold: "Gold (XAUUSD)",
     },
     mobileMenuLabel: "Open navigation menu",
     mobileMenuCloseLabel: "Close navigation menu",
@@ -56,6 +57,7 @@ const en = {
     providerOptions: {
       binance: "Binance",
       bybit: "Bybit",
+      gold: "Gold (XAUUSD)",
     },
     button: "Show chart",
     loading: "Loading pairs...",
@@ -514,4 +516,8 @@ const en = {
 };
 
 export default en;
+
+
+
+
 

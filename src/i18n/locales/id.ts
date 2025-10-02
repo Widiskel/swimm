@@ -19,6 +19,7 @@ const id = {
       analysis: "Analisis",
       history: "Riwayat",
       profile: "Profil",
+      gold: "Emas (XAUUSD)",
     },
     mobileMenuLabel: "Buka menu navigasi",
     mobileMenuCloseLabel: "Tutup menu navigasi",
@@ -57,6 +58,7 @@ const id = {
     providerOptions: {
       binance: "Binance",
       bybit: "Bybit",
+      gold: "Emas (XAUUSD)",
     },
     button: "Tampilkan chart",
     loading: "Memuat daftar pair...",
@@ -500,3 +502,7 @@ const id = {
 };
 
 export default id;
+
+
+
+

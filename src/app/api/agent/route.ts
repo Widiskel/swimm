@@ -16,6 +16,7 @@ import {
   isBybitPairTradable,
 } from "@/features/market/exchanges/bybit";
 import { DEFAULT_PROVIDER, isCexProvider, type CexProvider } from "@/features/market/exchanges";
+import { fetchGoldCandles, fetchGoldMarketSummary } from "@/features/market/exchanges/gold";
 import {
   fetchTavilyExtract,
   fetchTavilySearch,
@@ -1403,9 +1404,9 @@ export async function POST(request: Request) {
   const provider: CexProvider = isCexProvider(providerParam) ? providerParam : DEFAULT_PROVIDER;
 
   const providerLabel = translate(locale, `market.summary.providerLabel.${provider}`);
-  const isSupportedSymbol = provider === "bybit"
-    ? await isBybitPairTradable(requestedSymbol)
-    : await isPairTradable(requestedSymbol, binanceAuth);
+  const isSupportedSymbol = provider === "gold" ? requestedSymbol.toUpperCase() === "XAUUSD" : (provider === "bybit" ? await isBybitPairTradable(requestedSymbol) : await isPairTradable(requestedSymbol, binanceAuth));
+
+
   if (!isSupportedSymbol) {
     return NextResponse.json(
       {
@@ -1449,37 +1450,51 @@ export async function POST(request: Request) {
     );
   }
 
-  const [[summaryData, candles], tavilySearch, tavilyArticles, historyInsights] = await Promise.all([
-    (provider === "bybit"
-      ? Promise.all([
-          fetchBybitMarketSummary(symbol, bybitAuth),
-          fetchBybitCandles(symbol, timeframe, 500, bybitAuth),
-        ])
-      : Promise.all([
-          fetchBinanceMarketSummary(symbol, binanceAuth),
-          fetchBinanceCandles(symbol, CEX_INTERVAL_MAP[timeframe], 500, binanceAuth),
-        ])),
+  // Provider-specific data fetch
+  let summaryData: unknown;
+  let candles: BinanceCandle[] = [];
+  if (provider === "bybit") {
+    [summaryData, candles] = await Promise.all([
+      fetchBybitMarketSummary(symbol, bybitAuth),
+      fetchBybitCandles(symbol, timeframe, 500, bybitAuth),
+    ]);
+  } else if (provider === "gold") {
+    const [goldInfo, goldCandles] = await Promise.all([
+      fetchGoldMarketSummary(symbol, locale),
+      fetchGoldCandles(symbol, timeframe, 500),
+    ]);
+    summaryData = { symbol, lastPrice: goldInfo.stats?.lastPrice ?? 0, summaryText: goldInfo.summary };
+    candles = goldCandles as unknown as BinanceCandle[];
+  } else {
+    [summaryData, candles] = await Promise.all([
+      fetchBinanceMarketSummary(symbol, binanceAuth),
+      fetchBinanceCandles(symbol, CEX_INTERVAL_MAP[timeframe], 500, binanceAuth),
+    ]);
+  }
+  const [tavilySearch, tavilyArticles, historyInsights] = await Promise.all([
     tavilySearchPromise,
     tavilyExtractPromise,
     historyInsightsPromise,
   ]);
-  const resolvedSymbol = summaryData?.symbol ?? symbol;
+  const resolvedSymbol = provider === "gold" ? symbol : (summaryData?.symbol ?? symbol);
   const marketSummary =
     provider === "bybit"
       ? formatBybitSummary(summaryData, locale)
+      : provider === "gold"
+      ? (summaryData as { summaryText?: string }).summaryText as string
       : formatBinanceSummary(summaryData, locale);
   const marketAnalytics = buildMarketAnalytics(candles, timeframe, locale);
   const resolvedLastPrice =
     (typeof marketAnalytics.lastClose === "number" && marketAnalytics.lastClose > 0
       ? marketAnalytics.lastClose
-      : undefined) ?? (summaryData?.lastPrice && summaryData.lastPrice > 0 ? summaryData.lastPrice : 0);
+      : undefined) ?? (((summaryData as { lastPrice?: number }).lastPrice ?? 0) > 0 ? (summaryData as { lastPrice?: number }).lastPrice! : 0);
   const marketContext: MarketContext = {
     symbol: resolvedSymbol,
     timeframe,
     interval:
       provider === "bybit"
         ? mapTimeframeToBybitIntervalSymbol(timeframe)
-        : CEX_INTERVAL_MAP[timeframe],
+        : provider === "gold" ? timeframe : CEX_INTERVAL_MAP[timeframe],
     candles,
     lastPrice: resolvedLastPrice,
   };
@@ -1575,6 +1590,8 @@ export async function POST(request: Request) {
     clearTimeout(timeout);
   }
 }
+
+
 
 
 

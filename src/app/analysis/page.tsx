@@ -268,14 +268,7 @@ export default function AnalysisPage() {
     setSaveError(null);
 
     try {
-      await saveEntry({
-        pair: selectedPair,
-        timeframe,
-        provider,
-        response,
-        verdict: saveVerdict,
-        feedback: saveFeedback.trim() || undefined,
-      });
+      await saveEntry({\n        pair: selectedPair,\n        timeframe,\n        provider,\n        response,\n        verdict: saveVerdict,\n        feedback: saveFeedback.trim() || undefined,\n        snapshot: {\n          timeframe,\n          at: (analysisCandles.length ? new Date((analysisCandles[analysisCandles.length - 1].time as number) * 1000).toISOString() : new Date().toISOString()),\n          candles: analysisCandles.map(c => ({\n            openTime: Number((c.time as number) * 1000),\n            open: c.open,\n            high: c.high,\n            low: c.low,\n            close: c.close,\n            volume: 0,\n            closeTime: Number((c.time as number) * 1000)\n          }))\n        }\n      });
       setSaveStatus("success");
     } catch (saveException) {
       const message =
@@ -486,4 +479,5 @@ export default function AnalysisPage() {
     </div>
   );
 }
+
 

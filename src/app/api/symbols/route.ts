@@ -9,13 +9,15 @@ import { translate } from "@/i18n/translate";
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const providerParam = searchParams.get("provider")?.toLowerCase() ?? DEFAULT_PROVIDER;
-  const provider = isCexProvider(providerParam) ? providerParam : DEFAULT_PROVIDER;
+  const provider = isCexProvider(providerParam) ? providerParam : providerParam === "gold" ? "gold" : (DEFAULT_PROVIDER as "binance" | "bybit" | "gold");
   const localeParam = searchParams.get("locale") ?? "";
   const locale: Locale = localeParam && isLocale(localeParam) ? localeParam : "en";
 
   try {
-    const pairs =
-      provider === "bybit" ? await fetchBybitTradablePairs() : await fetchBinanceTradablePairs();
+    if (provider === "gold") {
+      return NextResponse.json({ symbols: [{ symbol: "XAUUSD", label: "XAU / USD" }], provider });
+    }
+    const pairs = provider === "bybit" ? await fetchBybitTradablePairs() : await fetchBinanceTradablePairs();
     const symbols = pairs.map(({ symbol, label }) => ({ symbol, label }));
     return NextResponse.json({ symbols, provider });
   } catch (error) {
@@ -26,3 +28,5 @@ export async function GET(request: NextRequest) {
     );
   }
 }
+
+

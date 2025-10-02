@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CandlestickData } from "lightweight-charts";
@@ -58,36 +58,58 @@ export function HistoryEntryAnalysis({ entry, languageTag }: HistoryEntryAnalysi
 
   const sectionRef = useRef<HTMLElement | null>(null);
 
-  const timeframe = (entry.decision?.timeframe ?? entry.timeframe ?? "1h").toLowerCase();
+  const originalTimeframe = (entry.decision?.timeframe ?? entry.timeframe ?? "1h").toLowerCase();
+  const [viewTimeframe, setViewTimeframe] = useState<string>(originalTimeframe);
+  const timeframe = viewTimeframe;
   const interval = mapTimeframeToInterval(timeframe);
   const symbol = entry.pair ?? entry.response.market?.pair ?? "BTCUSDT";
 
   useEffect(() => {
     let cancelled = false;
-    const loadCandles = async () => {
+
+    const resample = (source: CandlestickData[], from: string, to: string) => {
+      const unit = (s: string) => ({ "1m":1, "5m":5, "15m":15, "1h":60, "4h":240, "1d":1440 }[s] ?? 60);
+      const fm = unit(from); const tm = unit(to);
+      if (fm === tm) return source;
+      if (tm % fm !== 0 || tm < fm) return source;
+      const factor = tm / fm;
+      const out: CandlestickData[] = [];
+      const arr = [...source].sort((a,b) => (a.time as number) - (b.time as number));
+      for (let i=0;i<arr.length;i+=factor){
+        const chunk = arr.slice(i, i+factor); if (chunk.length === 0) continue;
+        const open = chunk[0].open; const close = chunk[chunk.length-1].close;
+        const high = Math.max(...chunk.map(c=>c.high));
+        const low = Math.min(...chunk.map(c=>c.low));
+        out.push({ time: chunk[0].time, open, high, low, close });
+      }
+      return out;
+    };
+
+    const load = async () => {
       setIsFetching(true);
       try {
-        const params = new URLSearchParams();
-        params.set("symbol", symbol);
-        params.set("interval", interval);
-        params.set("limit", "300");
-        const response = await fetch(`/api/market?${params.toString()}`);
-        if (!response.ok) {
-          throw new Error(`Market request failed with ${response.status}`);
-        }
-        const payload = (await response.json()) as {
-          candles?: {
-            openTime: number;
-            open: number;
-            high: number;
-            low: number;
-            close: number;
-            volume: number;
-          }[];
-        };
-        if (cancelled) {
+        if (entry.snapshot && entry.snapshot.candles && entry.snapshot.candles.length) {
+          const base = entry.snapshot.timeframe?.toLowerCase?.() || originalTimeframe;
+          const candles: CandlestickData[] = entry.snapshot.candles.map(k => ({
+            time: (k.openTime/1000) as CandlestickData["time"],
+            open: Number(k.open.toFixed(2)),
+            high: Number(k.high.toFixed(2)),
+            low: Number(k.low.toFixed(2)),
+            close: Number(k.close.toFixed(2)),
+          }));
+          const reshaped = resample(candles, base, timeframe).slice(-220);
+          if (!cancelled) {
+            setAnalysisCandles(reshaped);
+            const [startLabel, endLabel] = buildChartRangeLabels(reshaped.map(item => ({ time: new Date((item.time as number)*1000).toISOString(), close: item.close })), languageTag);
+            setChartStart(startLabel); setChartEnd(endLabel);
+          }
           return;
         }
+        const params = new URLSearchParams();
+        params.set("symbol", symbol); params.set("interval", interval); params.set("limit","300");
+        const response = await fetch(`/api/market?${params.toString()}`);
+        if (!response.ok) throw new Error(`Market request failed with ${response.status}`);
+        const payload = (await response.json()) as { candles?: { openTime:number; open:number; high:number; low:number; close:number; volume:number; }[]; };
         const candles: CandlestickData[] = (payload.candles ?? []).map((item) => ({
           time: (item.openTime / 1000) as CandlestickData["time"],
           open: Number(item.open.toFixed(2)),
@@ -95,35 +117,19 @@ export function HistoryEntryAnalysis({ entry, languageTag }: HistoryEntryAnalysi
           low: Number(item.low.toFixed(2)),
           close: Number(item.close.toFixed(2)),
         }));
-        setAnalysisCandles(candles.slice(-220));
-        if (candles.length) {
-          const [startLabel, endLabel] = buildChartRangeLabels(
-            candles.map((item) => ({
-              time: new Date((item.time as number) * 1000).toISOString(),
-              close: item.close,
-            })),
-            languageTag
-          );
-          setChartStart(startLabel);
-          setChartEnd(endLabel);
-        } else {
-          setChartStart("-");
-          setChartEnd("-");
-        }
-      } catch (error) {
-        console.error("Failed to load market data for history entry", error);
-      } finally {
         if (!cancelled) {
-          setIsFetching(false);
+          setAnalysisCandles(candles.slice(-220));
+          if (candles.length) {
+            const [startLabel, endLabel] = buildChartRangeLabels(candles.map((item) => ({ time: new Date((item.time as number) * 1000).toISOString(), close: item.close })), languageTag);
+            setChartStart(startLabel); setChartEnd(endLabel);
+          } else { setChartStart("-"); setChartEnd("-"); }
         }
-      }
+      } finally { if (!cancelled) setIsFetching(false); }
     };
 
-    void loadCandles();
-    return () => {
-      cancelled = true;
-    };
-  }, [symbol, interval, languageTag]);
+    void load();
+    return () => { cancelled = true; };
+  }, [entry, symbol, interval, timeframe, languageTag, originalTimeframe]);
 
   const priceFormatter = useMemo(
     () =>

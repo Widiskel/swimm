@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
@@ -19,7 +19,7 @@ export type HistoryEntry = {
   summary: string;
   response: AgentResponse;
   verdict: HistoryVerdict;
-  feedback: string | null;
+  feedback: string | null;\r\n  snapshot?: {\r\n    timeframe: string;\r\n    at: string;\r\n    candles: Array<{\r\n      openTime: number;\r\n      open: number;\r\n      high: number;\r\n      low: number;\r\n      close: number;\r\n      volume?: number;\r\n      closeTime?: number;\r\n    }>;\r\n  } | null;
 };
 
 type SaveHistoryPayload = {
@@ -29,7 +29,7 @@ type SaveHistoryPayload = {
   response: AgentResponse;
   verdict: HistoryVerdict;
   feedback?: string;
-};
+  snapshot?: {\r\n    timeframe: string;\r\n    at: string;\r\n    candles: Array<{\r\n      openTime: number;\r\n      open: number;\r\n      high: number;\r\n      low: number;\r\n      close: number;\r\n      volume?: number;\r\n      closeTime?: number;\r\n    }>;\r\n  };\r\n};
 
 type HistoryContextValue = {
   entries: HistoryEntry[];
@@ -107,8 +107,7 @@ export function HistoryProvider({ children }: { children: React.ReactNode }) {
         provider,
         response,
         verdict,
-        feedback,
-      };
+        feedback,\r\n        snapshot,\r\n      };
 
       const request = await fetch("/api/history", {
         method: "POST",

@@ -25,7 +25,7 @@ type HistoryDocument = {
   verdict: Verdict;
   feedback?: string | null;
   createdAt: Date;
-  updatedAt: Date;
+  updatedAt: Date;\n  snapshot?: {\n    timeframe: string;\n    at: Date;\n    candles: Array<{ openTime: number; open: number; high: number; low: number; close: number; volume?: number; closeTime?: number }>;\n  } | null;
 };
 
 type HistoryResponseItem = {
@@ -40,7 +40,7 @@ type HistoryResponseItem = {
   verdict: Verdict;
   feedback?: string | null;
   createdAt: string;
-  updatedAt: string;
+  updatedAt: string;\n  snapshot?: {\n    timeframe: string;\n    at: string;\n    candles: Array<{ openTime: number; open: number; high: number; low: number; close: number; volume?: number; closeTime?: number }>;\n  } | null;
 };
 
 const buildError = (message: string, status = 400) =>
@@ -61,7 +61,7 @@ const mapHistoryDoc = (
   verdict: doc.verdict,
   feedback: doc.feedback ?? null,
   createdAt: doc.createdAt.toISOString(),
-  updatedAt: doc.updatedAt.toISOString(),
+  updatedAt: doc.updatedAt.toISOString(),\n  snapshot: doc.snapshot ? { timeframe: doc.snapshot.timeframe, at: doc.snapshot.at.toISOString(), candles: doc.snapshot.candles } : null,
 });
 
 type SanitizedHistoryPayload =
@@ -73,7 +73,7 @@ type SanitizedHistoryPayload =
       response: AgentResponse;
       verdict: Verdict;
       feedback: string | null;
-    };
+    \n      snapshot?: {\n        timeframe: string;\n        at: string;\n        candles: Array<{ openTime: number; open: number; high: number; low: number; close: number; volume?: number; closeTime?: number }>;\n      };\n    };
 
 const sanitizePayload = (payload: unknown): SanitizedHistoryPayload => {
   if (!payload || typeof payload !== "object") {
@@ -87,14 +87,7 @@ const sanitizePayload = (payload: unknown): SanitizedHistoryPayload => {
     response,
     verdict,
     feedback,
-  } = payload as {
-    pair?: string;
-    timeframe?: string;
-    provider?: string;
-    response?: AgentResponse;
-    verdict?: string;
-    feedback?: string;
-  };
+  } = payload as {\n    pair?: string;\n    timeframe?: string;\n    provider?: string;\n    response?: AgentResponse;\n    verdict?: string;\n    feedback?: string;\n    snapshot?: { timeframe: string; at: string; candles: Array<{ openTime: number; open: number; high: number; low: number; close: number; volume?: number; closeTime?: number }> };\n  };
 
   if (!pair || typeof pair !== "string") {
     return { error: "Pair is required." };
@@ -118,7 +111,7 @@ const sanitizePayload = (payload: unknown): SanitizedHistoryPayload => {
     provider: normalizedProvider,
     response,
     verdict: verdict as Verdict,
-    feedback: sanitizedFeedback,
+    feedback: sanitizedFeedback,\n    snapshot: (payload as any).snapshot && typeof (payload as any).snapshot === "object" ? {\n      timeframe: String((payload as any).snapshot.timeframe ?? timeframe).trim(),\n      at: new Date(String((payload as any).snapshot.at ?? new Date())).toISOString(),\n      candles: Array.isArray((payload as any).snapshot.candles) ? (payload as any).snapshot.candles.map((k: any) => ({\n        openTime: Number(k.openTime ?? 0), open: Number(k.open ?? 0), high: Number(k.high ?? 0), low: Number(k.low ?? 0), close: Number(k.close ?? 0), volume: Number(k.volume ?? 0), closeTime: Number(k.closeTime ?? k.openTime ?? 0)\n      })) : []\n    } : undefined,
   };
 };
 
@@ -177,7 +170,7 @@ export async function POST(request: NextRequest) {
       provider: validated.provider,
       decision: validated.response.decision ?? null,
       summary: validated.response.summary ?? "",
-      response: validated.response,
+      response: validated.response,\n      snapshot: (validated as any).snapshot ? { timeframe: (validated as any).snapshot.timeframe, at: new Date((validated as any).snapshot.at), candles: (validated as any).snapshot.candles } : null,
       verdict: validated.verdict,
       feedback: validated.feedback,
       createdAt: now,
