@@ -213,6 +213,7 @@ const id = {
         "Feedback membantu memperkaya ringkasan berikutnya dan jurnal trading Anda. Anda bisa menambahkannya nanti dari halaman Riwayat.",
       saveButton: "Simpan ke riwayat",
       savingButton: "Menyimpan...",
+      savedButton: "Tersimpan",
       successMessage: "Laporan tersimpan di riwayat Anda. Update verdict kapan saja dari halaman Riwayat.",
       loginPrompt: "Masuk untuk menyimpan analisa ke akun SWIMM Anda.",
       loginRequired: "Masuk untuk menyimpan analisa ke akun SWIMM Anda.",
@@ -495,6 +496,8 @@ const id = {
       loading: "Memuat chart live...",
       empty: "Data market live belum tersedia.",
       error: "Chart live tidak dapat dimuat.",
+      timeframeLabel: "Timeframe",
+      indicatorsLabel: "Indikator",
     },
   },
   language: {

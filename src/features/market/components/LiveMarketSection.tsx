@@ -132,8 +132,8 @@ export const LiveMarketSection = forwardRef<
   const priceFormatter = useMemo(
     () =>
       new Intl.NumberFormat(languageTag, {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
+        minimumFractionDigits: 4,
+        maximumFractionDigits: 4,
       }),
     [languageTag]
   );

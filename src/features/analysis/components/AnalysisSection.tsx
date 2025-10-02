@@ -14,6 +14,8 @@ import {
   type IChartApi,
   type IPriceLine,
   type ISeriesApi,
+  type Time,
+  type UTCTimestamp,
 } from "lightweight-charts";
 
 import type { AgentResponse } from "../types";
@@ -33,6 +35,74 @@ import type {
 import { formatPairLabel } from "@/features/market/utils/format";
 
 const SNAPSHOT_LIMIT = 220;
+const ZONE_LOOKAHEAD_BARS = 6;
+const EXECUTION_WINDOW_OFFSET_MINUTES = 7 * 60;
+
+type OverlayZone = {
+  top: number;
+  bottom: number;
+  label: string;
+  color: string;
+  border: string;
+};
+
+const mapTimeframeToSeconds = (value: string) => {
+  const normalized = value.trim().toLowerCase();
+  const map: Record<string, number> = {
+    "1m": 60,
+    "5m": 300,
+    "15m": 900,
+    "30m": 1800,
+    "1h": 3600,
+    "2h": 7200,
+    "4h": 14400,
+    "6h": 21600,
+    "8h": 28800,
+    "12h": 43200,
+    "1d": 86400,
+    "1w": 604800,
+  };
+  return map[normalized] ?? 3600;
+};
+
+const formatExecutionWindowLabel = (raw: string): string => {
+  if (!raw?.trim()) {
+    return "-";
+  }
+
+  const parts = raw.split(/[\s]*[-–—][\s]*/).filter((part) => part.trim().length > 0);
+  const formatPart = (value: string) => {
+    const parsed = Date.parse(value);
+    if (Number.isNaN(parsed)) {
+      return null;
+    }
+    const offsetMs = EXECUTION_WINDOW_OFFSET_MINUTES * 60 * 1000;
+    const adjusted = parsed + offsetMs;
+    const date = new Date(adjusted);
+    const pad = (input: number) => String(input).padStart(2, "0");
+    const year = date.getUTCFullYear();
+    const month = pad(date.getUTCMonth() + 1);
+    const day = pad(date.getUTCDate());
+    const hours = pad(date.getUTCHours());
+    const minutes = pad(date.getUTCMinutes());
+    return `${year}-${month}-${day} ${hours}:${minutes}`;
+  };
+
+  if (parts.length === 1) {
+    const formatted = formatPart(parts[0]);
+    return formatted ? `${formatted} (GMT + 7)` : raw;
+  }
+
+  if (parts.length >= 2) {
+    const start = formatPart(parts[0]);
+    const end = formatPart(parts[1]);
+    if (start && end) {
+      return `${start} - ${end} (GMT + 7)`;
+    }
+  }
+
+  return raw;
+};
 
 type AnalysisSectionProps = {
   response: AgentResponse | null;
@@ -54,6 +124,7 @@ type AnalysisSectionProps = {
   canSaveReport: boolean;
   isSessionSyncing: boolean;
   saveFeedback: string;
+  onFeedbackChange?: (value: string) => void;
   onSaveReport: () => void;
   isSavingReport: boolean;
   saveStatus: "idle" | "success" | "error";
@@ -86,6 +157,7 @@ export function AnalysisSection({
   canSaveReport,
   isSessionSyncing,
   saveFeedback,
+  onFeedbackChange: _onFeedbackChange,
   onSaveReport,
   isSavingReport,
   saveStatus,
@@ -125,6 +197,7 @@ export function AnalysisSection({
   const indicatorSeriesRef = useRef<IndicatorSeriesMap>({});
   const overlayPriceLinesRef = useRef<IPriceLine[]>([]);
   const [snapshotReady, setSnapshotReady] = useState(false);
+  const overlayCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
     if (!response || !analysisCandles.length) {
@@ -151,7 +224,9 @@ export function AnalysisSection({
       overlayPriceLinesRef.current = [];
     }
 
-    const chart = createChart(chartContainerRef.current, {
+    const chartRoot = chartContainerRef.current;
+
+    const chart = createChart(chartRoot, {
       layout: {
         background: { color: "#020617" },
         textColor: "#cbd5f5",
@@ -159,10 +234,6 @@ export function AnalysisSection({
       grid: {
         vertLines: { color: "#0f172a" },
         horzLines: { color: "#0f172a" },
-      },
-      crosshair: {
-        vertLine: { visible: false },
-        horzLine: { visible: false },
       },
       rightPriceScale: {
         borderColor: "#1e293b",
@@ -172,8 +243,8 @@ export function AnalysisSection({
         secondsVisible: false,
       },
       autoSize: true,
-      handleScroll: false,
-      handleScale: false,
+      handleScroll: true,
+      handleScale: true,
     });
 
     const candleSeries = chart.addCandlestickSeries({
@@ -198,6 +269,157 @@ export function AnalysisSection({
     const limitedCandles = analysisCandles.slice(-SNAPSHOT_LIMIT);
     candleSeries.setData(limitedCandles);
 
+    const timeframeSeconds = mapTimeframeToSeconds(timeframe);
+    const entryPrices = entryZoneValues.length ? entryZoneValues : [];
+    const entryMin = entryPrices.length ? Math.min(...entryPrices) : null;
+    const entryMax = entryPrices.length ? Math.max(...entryPrices) : null;
+    const stopPrice =
+      typeof tradeStopLoss === "number" && Number.isFinite(tradeStopLoss)
+        ? Number(tradeStopLoss.toFixed(2))
+        : null;
+
+    const zones: OverlayZone[] = [];
+    if (entryMin !== null && entryMax !== null) {
+      if (stopPrice !== null) {
+        zones.push({
+          top: Math.max(entryMax, stopPrice),
+          bottom: Math.min(entryMin, stopPrice),
+          label: `SL ${formatPrice(stopPrice)}`,
+          color: "rgba(239,68,68,0.16)",
+          border: "rgba(239,68,68,0.65)",
+        });
+      }
+
+      paddedTargets.forEach((target, index) => {
+        if (target === null) {
+          return;
+        }
+        const formattedTarget = formatPrice(target);
+        zones.push({
+          top: Math.max(entryMax, target),
+          bottom: Math.min(entryMin, target),
+          label: `${TARGET_LABELS[index]} ${formattedTarget}`,
+          color: "rgba(34,197,94,0.18)",
+          border: "rgba(34,197,94,0.65)",
+        });
+      });
+    }
+
+    const toTimestamp = (
+      time: CandlestickData["time"] | undefined
+    ): UTCTimestamp | null => {
+      if (typeof time === "number") {
+        return time as UTCTimestamp;
+      }
+      if (!time) {
+        return null;
+      }
+      if (typeof time === "object") {
+        if ("timestamp" in time && typeof time.timestamp === "number") {
+          return time.timestamp as UTCTimestamp;
+        }
+        const year = "year" in time ? Number(time.year) : 1970;
+        const month = "month" in time ? Number(time.month) - 1 : 0;
+        const day = "day" in time ? Number(time.day) : 1;
+        return Math.floor(
+          new Date(year, month, day).getTime() / 1000
+        ) as UTCTimestamp;
+      }
+      return null;
+    };
+
+    const renderOverlay = () => {
+      const chartRoot = chartContainerRef.current;
+      const overlayCanvas = overlayCanvasRef.current;
+      if (!chartRoot || !overlayCanvas) {
+        return;
+      }
+      const ctx = overlayCanvas.getContext("2d");
+      if (!ctx) {
+        return;
+      }
+
+      const { width, height } = chartRoot.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      overlayCanvas.width = Math.max(1, Math.floor(width * dpr));
+      overlayCanvas.height = Math.max(1, Math.floor(height * dpr));
+      overlayCanvas.style.width = `${width}px`;
+      overlayCanvas.style.height = `${height}px`;
+      ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+      ctx.save();
+      ctx.scale(dpr, dpr);
+
+      if (!zones.length) {
+        ctx.restore();
+        return;
+      }
+
+      const timeScale = chart.timeScale();
+
+      const lastTime = toTimestamp(
+        limitedCandles[limitedCandles.length - 1]?.time
+      );
+      if (lastTime === null) {
+        ctx.restore();
+        return;
+      }
+
+      const futureTime = (lastTime + timeframeSeconds * ZONE_LOOKAHEAD_BARS) as UTCTimestamp;
+      const priceScale = chart.priceScale("right");
+      const priceToCoordinate =
+        priceScale && "priceToCoordinate" in priceScale
+          ? (
+              priceScale as unknown as {
+                priceToCoordinate: (price: number) => number | null;
+              }
+            ).priceToCoordinate.bind(priceScale)
+          : candleSeries.priceToCoordinate.bind(candleSeries);
+
+      const safeStartTime = lastTime as Time;
+      const safeFutureTime = futureTime as Time;
+
+      const startX = timeScale.timeToCoordinate(safeStartTime);
+      const endX = timeScale.timeToCoordinate(safeFutureTime);
+      if (startX === null || endX === null) {
+        ctx.restore();
+        return;
+      }
+
+      const left = Math.min(startX, endX);
+      const right = Math.max(startX, endX);
+
+      zones.forEach((zone) => {
+        const topCoord = priceToCoordinate(zone.top);
+        const bottomCoord = priceToCoordinate(zone.bottom);
+        if (topCoord === null || bottomCoord === null) {
+          return;
+        }
+        const zoneTop = Math.min(topCoord, bottomCoord);
+        const zoneHeight = Math.abs(bottomCoord - topCoord);
+        ctx.fillStyle = zone.color;
+        ctx.fillRect(left, zoneTop, right - left, zoneHeight);
+        ctx.strokeStyle = zone.border;
+        ctx.lineWidth = 1;
+        ctx.strokeRect(left, zoneTop, right - left, zoneHeight);
+
+        const labelPadding = 4;
+        const labelHeight = 16;
+        ctx.font = "10px 'Inter', sans-serif";
+        const textWidth = ctx.measureText(zone.label).width;
+        const labelWidth = textWidth + labelPadding * 2;
+        const labelX = right - labelWidth - 6;
+        const labelY = zoneTop + labelPadding;
+        ctx.fillStyle = "rgba(15,23,42,0.92)";
+        ctx.fillRect(labelX, labelY - labelPadding, labelWidth, labelHeight);
+        ctx.strokeStyle = zone.border;
+        ctx.strokeRect(labelX, labelY - labelPadding, labelWidth, labelHeight);
+        ctx.fillStyle = "#e2e8f0";
+        ctx.fillText(zone.label, labelX + labelPadding, labelY + 2);
+      });
+
+      ctx.restore();
+    };
+
     const indicatorData = buildIndicatorData(limitedCandles, INDICATOR_CONFIG);
     updateIndicatorSeries(
       indicatorSeriesRef.current,
@@ -208,17 +430,61 @@ export function AnalysisSection({
 
     updateOverlayPriceLines(candleSeries, overlayLevels, overlayPriceLinesRef);
 
+    chart.timeScale().applyOptions({ rightOffset: ZONE_LOOKAHEAD_BARS + 2 });
+
+    renderOverlay();
+
+    const resizeObserver =
+      typeof ResizeObserver !== "undefined"
+        ? new ResizeObserver(() => renderOverlay())
+        : null;
+    if (chartRoot && resizeObserver) {
+      resizeObserver.observe(chartRoot);
+    }
+
+    const rangeHandler = () => {
+      renderOverlay();
+    };
+    chart.timeScale().subscribeVisibleLogicalRangeChange(rangeHandler);
+    const priceScale = chart.priceScale("right");
+    const priceScaleHandler = () => renderOverlay();
+    if (priceScale && "subscribePriceScaleChange" in priceScale) {
+      (priceScale as unknown as {
+        subscribePriceScaleChange: (handler: () => void) => void;
+      }).subscribePriceScaleChange(priceScaleHandler);
+    }
+
     chart.timeScale().fitContent();
+    renderOverlay();
     setSnapshotReady(true);
 
     return () => {
       chart.remove();
+      chart.timeScale().unsubscribeVisibleLogicalRangeChange(rangeHandler);
+      if (priceScale && "unsubscribePriceScaleChange" in priceScale) {
+        (priceScale as unknown as {
+          unsubscribePriceScaleChange: (handler: () => void) => void;
+        }).unsubscribePriceScaleChange(priceScaleHandler);
+      }
       chartRef.current = null;
       seriesRef.current = null;
       indicatorSeriesRef.current = {};
       overlayPriceLinesRef.current = [];
+      if (chartRoot && resizeObserver) {
+        resizeObserver.disconnect();
+      }
     };
-  }, [analysisCandles, indicatorVisibility, overlayLevels, response]);
+  }, [
+    analysisCandles,
+    indicatorVisibility,
+    overlayLevels,
+    response,
+    entryZoneValues,
+    paddedTargets,
+    tradeStopLoss,
+    timeframe,
+    formatPrice,
+  ]);
 
   if (!response) {
     return null;
@@ -229,8 +495,9 @@ export function AnalysisSection({
   const isHoldSignal = actionKey === "hold";
 
   const showSavePanel = canSaveReport && !isHoldSignal;
+  const isSaved = canSaveReport && saveStatus === "success";
   const disableSaveButton =
-    !canSaveReport || isSessionSyncing || isSavingReport;
+    !canSaveReport || isSessionSyncing || isSavingReport || isSaved;
   const showSaveSuccess = canSaveReport && saveStatus === "success";
   const showSaveError =
     canSaveReport && saveStatus === "error" && Boolean(saveError);
@@ -239,6 +506,7 @@ export function AnalysisSection({
     : isSessionSyncing
     ? saveCopy.syncing
     : saveCopy.hint;
+  const executionWindowLabel = formatExecutionWindowLabel(tradeExecutionWindow);
 
   return (
     <MotionSection
@@ -284,15 +552,19 @@ export function AnalysisSection({
             {analysisCopy.snapshot.description}
           </p>
           <div className="relative mt-4 h-64 w-full overflow-hidden rounded-2xl border border-[var(--swimm-neutral-300)] bg-white">
-            <div
-              ref={chartContainerRef}
-              className="pointer-events-none h-full w-full"
-            />
-            {!snapshotReady && (
-              <div className="absolute inset-0 flex items-center justify-center text-xs text-[var(--swimm-neutral-300)]">
-                {analysisCopy.snapshot.placeholder}
-              </div>
-            )}
+          <div
+            ref={chartContainerRef}
+            className="h-full w-full"
+          />
+          <canvas
+            ref={overlayCanvasRef}
+            className="pointer-events-none absolute inset-0"
+          />
+          {!snapshotReady && (
+            <div className="absolute inset-0 flex items-center justify-center text-xs text-[var(--swimm-neutral-300)]">
+              {analysisCopy.snapshot.placeholder}
+            </div>
+          )}
           </div>
           <div className="mt-3 flex flex-wrap items-center gap-3 text-[11px] text-[var(--swimm-neutral-300)]">
             <span className="rounded-full border border-[var(--swimm-primary-500)]/40 px-2 py-1 text-[var(--swimm-primary-700)]">
@@ -481,7 +753,7 @@ export function AnalysisSection({
                     {analysisCopy.tradePlan.executionWindow}
                   </div>
                   <div className="mt-1 text-[11px] text-[var(--swimm-neutral-500)]">
-                    {tradeExecutionWindow}
+                    {executionWindowLabel}
                   </div>
                 </div>
                 <div className="rounded-lg border border-[var(--swimm-neutral-300)] bg-white px-3 py-3">
@@ -557,7 +829,11 @@ export function AnalysisSection({
                 disabled={disableSaveButton}
                 className="inline-flex items-center justify-center rounded-full border border-[var(--swimm-primary-700)] bg-[var(--swimm-primary-500)]/15 px-5 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-[var(--swimm-primary-700)] transition hover:bg-[var(--swimm-primary-500)]/25 disabled:cursor-not-allowed disabled:border-[var(--swimm-neutral-300)] disabled:bg-[var(--swimm-neutral-200)]/60 disabled:text-[var(--swimm-neutral-400)]"
               >
-                {isSavingReport ? saveCopy.savingButton : saveCopy.saveButton}
+                {isSavingReport
+                  ? saveCopy.savingButton
+                  : isSaved
+                  ? saveCopy.savedButton
+                  : saveCopy.saveButton}
               </button>
             </div>
           </div>

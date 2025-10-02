@@ -1,19 +1,40 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   createChart,
   type CandlestickData,
   type IChartApi,
   type ISeriesApi,
+  type MouseEventParams,
 } from "lightweight-charts";
 
 import type { CexProvider } from "@/features/market/exchanges";
-import type { MarketMode } from "@/features/market/constants";
-import { DEFAULT_MARKET_MODE } from "@/features/market/constants";
+import type {
+  HoverData,
+  IndicatorKey,
+  IndicatorSeriesMap,
+  MarketSnapshot,
+  OrderBookEntry,
+} from "@/features/market/types";
+import {
+  DEFAULT_MARKET_MODE,
+  INDICATOR_CONFIG,
+  PROVIDER_ICON_MAP,
+  TIMEFRAME_OPTIONS,
+  type MarketMode,
+} from "@/features/market/constants";
+import {
+  buildIndicatorData,
+  createIndicatorSeries,
+  updateIndicatorSeries,
+} from "@/features/market/utils/indicators";
+import { formatPairLabel, withAlpha } from "@/features/market/utils/format";
 import { useLanguage } from "@/providers/language-provider";
 
 const REFRESH_INTERVAL_MS = 60_000;
+const ORDERBOOK_LIMIT = 50;
 
 const mapTimeframeToInterval = (value: string): string => {
   const normalized = value.trim().toLowerCase();
@@ -44,191 +65,644 @@ export function HistoryLiveChart({
   mode,
   timeframe,
 }: HistoryLiveChartProps) {
-  const { languageTag, messages } = useLanguage();
-  const copy = messages.history.liveComparison;
+  const { languageTag, messages, __, locale } = useLanguage();
+  const historyCopy = messages.history.liveComparison;
+  const liveCopy = messages.live;
+
+  const providerLabel = useMemo(
+    () => __("pairSelection.providerOptions." + provider),
+    [__, provider]
+  );
+  const formattedPair = useMemo(() => formatPairLabel(symbol), [symbol]);
+
   const chartContainerRef = useRef<HTMLDivElement | null>(null);
-  const chartRef = useRef<IChartApi | null>(null);
-  const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
+  const chartApiRef = useRef<IChartApi | null>(null);
+  const candleSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
+  const indicatorSeriesRef = useRef<IndicatorSeriesMap>({});
+  const crosshairHandlerRef = useRef<
+    ((param: MouseEventParams) => void) | null
+  >(null);
+  const hoverDataRef = useRef<HoverData | null>(null);
+
   const [candles, setCandles] = useState<CandlestickData[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [indicatorVisibility, setIndicatorVisibility] =
+    useState<Record<IndicatorKey, boolean>>(() => {
+      const initial: Record<IndicatorKey, boolean> = {} as Record<
+        IndicatorKey,
+        boolean
+      >;
+      for (const indicator of INDICATOR_CONFIG) {
+        initial[indicator.key] = indicator.defaultVisible;
+      }
+      return initial;
+    });
+  const [hoverData, setHoverData] = useState<HoverData | null>(null);
+  const [chartMeta, setChartMeta] = useState<{
+    orderBook: { bids: OrderBookEntry[]; asks: OrderBookEntry[] };
+    summaryStats: MarketSnapshot["summaryStats"];
+    updatedAt: string | null;
+  } | null>(null);
+  const [isChartLoading, setIsChartLoading] = useState(false);
+  const [chartError, setChartError] = useState<string | null>(null);
+  const [isChartVisible, setIsChartVisible] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
-  const effectiveTimeframe = timeframe && timeframe.trim().length ? timeframe : "1h";
-  const interval = useMemo(() => mapTimeframeToInterval(effectiveTimeframe), [effectiveTimeframe]);
-  const displayTimeframe = effectiveTimeframe.toUpperCase();
+  const [activeTimeframe, setActiveTimeframe] = useState(
+    timeframe && timeframe.trim().length ? timeframe : "1h"
+  );
+  const interval = useMemo(
+    () => mapTimeframeToInterval(activeTimeframe),
+    [activeTimeframe]
+  );
 
   useEffect(() => {
-    let isMounted = true;
-    const fetchCandles = async (silent = false) => {
+    if (timeframe && timeframe.trim().length) {
+      setActiveTimeframe(timeframe);
+    }
+  }, [timeframe]);
+
+  const hoverDateFormatter = useMemo(
+    () =>
+      new Intl.DateTimeFormat(languageTag, {
+        day: "2-digit",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+    [languageTag]
+  );
+
+  const priceFormatter = useMemo(
+    () =>
+      new Intl.NumberFormat(languageTag, {
+        minimumFractionDigits: 4,
+        maximumFractionDigits: 4,
+      }),
+    [languageTag]
+  );
+
+  const simpleNumberFormatter = useMemo(
+    () =>
+      new Intl.NumberFormat(languageTag, {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }),
+    [languageTag]
+  );
+
+  const setHoverState = useCallback((value: HoverData | null) => {
+    hoverDataRef.current = value;
+    setHoverData(value);
+  }, []);
+
+  const resetChart = useCallback(() => {
+    if (chartApiRef.current && crosshairHandlerRef.current) {
+      chartApiRef.current.unsubscribeCrosshairMove(
+        crosshairHandlerRef.current
+      );
+    }
+    if (chartApiRef.current) {
+      chartApiRef.current.remove();
+    }
+    chartApiRef.current = null;
+    candleSeriesRef.current = null;
+    indicatorSeriesRef.current = {};
+    crosshairHandlerRef.current = null;
+    hoverDataRef.current = null;
+    setHoverState(null);
+  }, [setHoverState]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const load = async (silent = false) => {
       if (!silent) {
-        setIsLoading(true);
+        setIsChartLoading(true);
       }
       try {
         const params = new URLSearchParams({
           symbol,
           interval,
-          limit: "300",
+          limit: "500",
           provider,
-          mode: mode ?? DEFAULT_MARKET_MODE,
+          locale,
         });
+        const resolvedMode = mode ?? DEFAULT_MARKET_MODE;
+        if (resolvedMode) {
+          params.set("mode", resolvedMode);
+        }
+
         const response = await fetch(`/api/market?${params.toString()}`);
         if (!response.ok) {
-          throw new Error(copy.error);
+          throw new Error(historyCopy.error);
         }
-        const payload = (await response.json()) as {
-          candles?: {
-            openTime: number;
-            open: number;
-            high: number;
-            low: number;
-            close: number;
-          }[];
-        };
-        if (!isMounted) {
+        const payload = (await response.json()) as MarketSnapshot;
+        if (cancelled) {
           return;
         }
-        const parsed = (payload.candles ?? []).map<CandlestickData>((item) => ({
-          time: (item.openTime / 1000) as CandlestickData["time"],
-          open: Number(item.open.toFixed(2)),
-          high: Number(item.high.toFixed(2)),
-          low: Number(item.low.toFixed(2)),
-          close: Number(item.close.toFixed(2)),
-        }));
-        setCandles(parsed);
-        setError(null);
-        setLastUpdated(new Date());
-      } catch (fetchError) {
-        if (!isMounted) {
+
+        const parsedCandles = (payload.candles ?? []).map<CandlestickData>(
+          (item) => ({
+            time: (item.openTime / 1000) as CandlestickData["time"],
+            open: Number(item.open.toFixed(2)),
+            high: Number(item.high.toFixed(2)),
+            low: Number(item.low.toFixed(2)),
+            close: Number(item.close.toFixed(2)),
+          })
+        );
+
+        setChartMeta({
+          orderBook: {
+            bids: payload.orderBook?.bids ?? [],
+            asks: payload.orderBook?.asks ?? [],
+          },
+          summaryStats: payload.summaryStats ?? null,
+          updatedAt: payload.updatedAt ?? null,
+        });
+        setLastUpdated(
+          payload.updatedAt ? new Date(payload.updatedAt) : new Date()
+        );
+
+        if (!parsedCandles.length) {
+          setCandles([]);
+          setIsChartVisible(false);
+          setChartError(historyCopy.empty);
+          resetChart();
+          setHoverState(null);
           return;
         }
-        setError(fetchError instanceof Error ? fetchError.message : copy.error);
+
+        setCandles(parsedCandles);
+        setIsChartVisible(true);
+        setChartError(null);
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+        setCandles([]);
+        setChartMeta(null);
+        setIsChartVisible(false);
+        resetChart();
+        setHoverState(null);
+        setChartError(
+          error instanceof Error ? error.message : historyCopy.error
+        );
       } finally {
-        if (isMounted) {
-          setIsLoading(false);
+        if (!cancelled && !silent) {
+          setIsChartLoading(false);
         }
       }
     };
 
-    void fetchCandles();
+    void load(false);
     const timer = setInterval(() => {
-      void fetchCandles(true);
+      void load(true);
     }, REFRESH_INTERVAL_MS);
 
     return () => {
-      isMounted = false;
+      cancelled = true;
       clearInterval(timer);
     };
-  }, [copy.error, interval, mode, provider, symbol]);
+  }, [
+    historyCopy.empty,
+    historyCopy.error,
+    interval,
+    locale,
+    mode,
+    provider,
+    resetChart,
+    setHoverState,
+    symbol,
+  ]);
+
+  useEffect(() => () => resetChart(), [resetChart]);
 
   useEffect(() => {
-    if (!chartContainerRef.current) {
+    if (!chartContainerRef.current || !candles.length) {
       return;
     }
-    if (!candles.length) {
+
+    if (!chartApiRef.current) {
+      const chart = createChart(chartContainerRef.current, {
+        layout: {
+          background: { color: "#020617" },
+          textColor: "#cbd5f5",
+        },
+        grid: {
+          vertLines: { color: "#0f172a" },
+          horzLines: { color: "#0f172a" },
+        },
+        crosshair: {
+          mode: 1,
+        },
+        rightPriceScale: {
+          borderColor: "#1e293b",
+        },
+        timeScale: {
+          borderColor: "#1e293b",
+          secondsVisible: false,
+        },
+        autoSize: true,
+      });
+
+      const candleSeries = chart.addCandlestickSeries({
+        upColor: "#22c55e",
+        borderUpColor: "#22c55e",
+        wickUpColor: "#22c55e",
+        downColor: "#ef4444",
+        borderDownColor: "#ef4444",
+        wickDownColor: "#ef4444",
+      });
+
+      indicatorSeriesRef.current = createIndicatorSeries(
+        chart,
+        indicatorVisibility,
+        INDICATOR_CONFIG
+      );
+
+      chartApiRef.current = chart;
+      candleSeriesRef.current = candleSeries;
+
+      const handler = (param: MouseEventParams) => {
+        const targetSeries = candleSeriesRef.current;
+        if (!param?.time || !targetSeries) {
+          setHoverState(null);
+          return;
+        }
+        const candleData = param.seriesData.get(targetSeries) as
+          | CandlestickData
+          | undefined;
+        if (!candleData) {
+          setHoverState(null);
+          return;
+        }
+        const timeValue =
+          typeof param.time === "number"
+            ? param.time * 1000
+            : param.time instanceof Date
+            ? param.time.getTime()
+            : Date.parse(String(param.time));
+        setHoverState({
+          timeLabel: hoverDateFormatter.format(new Date(timeValue)),
+          open: candleData.open,
+          high: candleData.high,
+          low: candleData.low,
+          close: candleData.close,
+        });
+      };
+
+      chart.subscribeCrosshairMove(handler);
+      crosshairHandlerRef.current = handler;
+    }
+
+    const chartInstance = chartApiRef.current;
+    const candleSeries = candleSeriesRef.current;
+
+    if (!chartInstance || !candleSeries) {
       return;
     }
-    if (chartRef.current) {
-      chartRef.current.remove();
-      chartRef.current = null;
-      seriesRef.current = null;
+
+    candleSeries.setData(candles);
+
+    const indicatorData = buildIndicatorData(candles, INDICATOR_CONFIG);
+    updateIndicatorSeries(
+      indicatorSeriesRef.current,
+      indicatorData,
+      indicatorVisibility,
+      INDICATOR_CONFIG
+    );
+
+    const latest = candles[candles.length - 1];
+    if (latest && !hoverDataRef.current) {
+      setHoverState({
+        timeLabel: hoverDateFormatter.format(
+          new Date((latest.time as number) * 1000)
+        ),
+        open: latest.open,
+        high: latest.high,
+        low: latest.low,
+        close: latest.close,
+      });
     }
-    const chart = createChart(chartContainerRef.current, {
-      layout: {
-        background: { color: "#020617" },
-        textColor: "#cbd5f5",
-      },
-      grid: {
-        vertLines: { color: "#0f172a" },
-        horzLines: { color: "#0f172a" },
-      },
-      crosshair: {
-        vertLine: { visible: true, color: "#64748b" },
-        horzLine: { visible: true, color: "#64748b" },
-      },
-      rightPriceScale: {
-        borderColor: "#1e293b",
-      },
-      timeScale: {
-        borderColor: "#1e293b",
-        secondsVisible: false,
-      },
-      autoSize: true,
-      handleScroll: true,
-      handleScale: true,
-    });
 
-    const series = chart.addCandlestickSeries({
-      upColor: "#22c55e",
-      borderUpColor: "#22c55e",
-      wickUpColor: "#22c55e",
-      downColor: "#ef4444",
-      borderDownColor: "#ef4444",
-      wickDownColor: "#ef4444",
-    });
+    chartInstance.timeScale().fitContent();
 
-    series.setData(candles);
-    chart.timeScale().fitContent();
+    const handleResize = () => {
+      if (!chartContainerRef.current || !chartApiRef.current) {
+        return;
+      }
+      const { width, height } =
+        chartContainerRef.current.getBoundingClientRect();
+      chartApiRef.current.applyOptions({ width, height });
+    };
 
-    chartRef.current = chart;
-    seriesRef.current = series;
+    handleResize();
+    window.addEventListener("resize", handleResize);
 
     return () => {
-      chart.remove();
-      chartRef.current = null;
-      seriesRef.current = null;
+      window.removeEventListener("resize", handleResize);
     };
-  }, [candles]);
+  }, [candles, hoverDateFormatter, indicatorVisibility, setHoverState]);
 
-  const formattedUpdated = useMemo(() => {
-    if (!lastUpdated) {
-      return "-";
-    }
-    return new Intl.DateTimeFormat(languageTag, {
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-    }).format(lastUpdated);
-  }, [languageTag, lastUpdated]);
+  const handleTimeframeChange = (next: (typeof TIMEFRAME_OPTIONS)[number]) => {
+    setActiveTimeframe(next);
+    setHoverState(null);
+    hoverDataRef.current = null;
+  };
+
+  const toggleIndicator = (key: IndicatorKey) => {
+    setIndicatorVisibility((prev) => ({
+      ...prev,
+      [key]: !prev[key],
+    }));
+  };
+
+  const summaryStats = chartMeta?.summaryStats ?? null;
+  const baseAssetSymbol = summaryStats
+    ? summaryStats.symbol.replace(/USDT$/i, "")
+    : formattedPair.split("/")[0] ?? "";
+
+  const priceChangePct = summaryStats?.priceChangePercent ?? null;
+  const changeBadgeClass =
+    priceChangePct === null
+      ? "border-[var(--swimm-neutral-300)] bg-white text-[var(--swimm-neutral-500)]"
+      : priceChangePct >= 0
+      ? "border-[var(--swimm-up)]/40 bg-[var(--swimm-up)]/10 text-[var(--swimm-up)]"
+      : "border-[var(--swimm-down)]/40 bg-[var(--swimm-down)]/10 text-[var(--swimm-down)]";
+  const priceChangeLabel =
+    priceChangePct !== null
+      ? `${priceChangePct >= 0 ? "+" : ""}${priceChangePct.toFixed(2)}%`
+      : "-";
+  const lastPriceLabel = summaryStats
+    ? simpleNumberFormatter.format(summaryStats.lastPrice)
+    : "-";
+  const volumeLabelBase = summaryStats
+    ? `${simpleNumberFormatter.format(summaryStats.volume)} ${
+        baseAssetSymbol || summaryStats.symbol
+      }`
+    : "-";
+  const volumeLabelQuote = summaryStats
+    ? `${simpleNumberFormatter.format(summaryStats.quoteVolume)} USDT`
+    : "-";
+  const highLowLabel = summaryStats
+    ? `${simpleNumberFormatter.format(summaryStats.highPrice)} / ${simpleNumberFormatter.format(
+        summaryStats.lowPrice
+      )}`
+    : "-";
+  const formattedUpdatedAt = chartMeta?.updatedAt
+    ? hoverDateFormatter.format(new Date(chartMeta.updatedAt))
+    : lastUpdated
+    ? hoverDateFormatter.format(lastUpdated)
+    : "-";
+  const orderBookBids = chartMeta?.orderBook.bids ?? [];
+  const orderBookAsks = chartMeta?.orderBook.asks ?? [];
 
   return (
-    <section className="mt-6 rounded-3xl border border-[var(--swimm-neutral-300)] bg-white p-6 shadow-sm shadow-[var(--swimm-neutral-300)]/40">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h4 className="text-lg font-semibold text-[var(--swimm-navy-900)]">
-            {copy.title}
-          </h4>
-          <p className="text-sm text-[var(--swimm-neutral-500)]">
-            {copy.subtitle
-              .replace("{pair}", symbol)
-              .replace("{timeframe}", displayTimeframe)
-              .replace("{provider}", provider.toUpperCase())}
-          </p>
+    <section className="space-y-6">
+      <div className="rounded-3xl border border-[var(--swimm-neutral-300)] bg-white p-6 shadow-sm shadow-[var(--swimm-neutral-300)]/40">
+        <div className="space-y-4">
+          <div className="rounded-2xl border border-[var(--swimm-neutral-300)] bg-white/85 p-4">
+            <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+              <div className="space-y-2">
+                <div className="text-xs font-semibold uppercase tracking-wide text-[var(--swimm-neutral-500)]">
+                  {liveCopy.card.title}
+                </div>
+                <div className="flex flex-wrap items-baseline gap-3">
+                  <h3 className="text-2xl font-semibold text-[var(--swimm-navy-900)]">
+                    {formattedPair}
+                  </h3>
+                  <span className="rounded-full border border-[var(--swimm-primary-700)]/40 bg-[var(--swimm-primary-500)]/15 px-3 py-1 text-xs font-semibold uppercase text-[var(--swimm-primary-700)]">
+                    {activeTimeframe.toUpperCase()}
+                  </span>
+                  <span className="flex items-center gap-2 rounded-full border border-[var(--swimm-neutral-300)] bg-white px-3 py-1">
+                    <Image
+                      src={PROVIDER_ICON_MAP[provider]}
+                      alt={providerLabel}
+                      width={18}
+                      height={18}
+                      className="h-4 w-4"
+                    />
+                    <span className="sr-only">{providerLabel}</span>
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-3 text-sm text-[var(--swimm-neutral-500)]">
+                  <span className="text-lg font-semibold text-[var(--swimm-navy-900)]">
+                    {lastPriceLabel}
+                  </span>
+                  {priceChangePct !== null && (
+                    <span
+                      className={`rounded-full px-3 py-1 text-xs font-semibold ${changeBadgeClass}`}
+                    >
+                      {priceChangeLabel}
+                    </span>
+                  )}
+                  {isChartLoading && (
+                    <span className="inline-flex items-center gap-2 rounded-full border border-[var(--swimm-neutral-300)] bg-white px-3 py-1 text-xs font-medium text-[var(--swimm-neutral-400)]">
+                      <span className="inline-block h-3 w-3 animate-spin rounded-full border border-[var(--swimm-neutral-300)] border-t-[var(--swimm-primary-500)]" />
+                      {liveCopy.card.loading}
+                    </span>
+                  )}
+                  <div className="ml-auto flex flex-wrap items-center gap-2 text-xs text-[var(--swimm-neutral-500)]">
+                    <span>
+                      {liveCopy.stats.volumeBase}:
+                      <span className="ml-1 text-[var(--swimm-navy-900)]">
+                        {volumeLabelBase}
+                      </span>
+                    </span>
+                    {summaryStats && (
+                      <span className="ml-2 text-[var(--swimm-neutral-300)]">
+                        ({volumeLabelQuote})
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  {liveCopy.stats.highLow}:
+                  <span className="ml-1 text-[var(--swimm-navy-900)]">{highLowLabel}</span>
+                </div>
+                <div>
+                  {liveCopy.stats.lastUpdate}:
+                  <span className="ml-1 text-[var(--swimm-navy-900)]">
+                    {formattedUpdatedAt}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {TIMEFRAME_OPTIONS.map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={() => handleTimeframeChange(option)}
+                  className={`rounded-full border px-4 py-2 text-xs font-semibold transition ${
+                    activeTimeframe === option
+                      ? "border-[var(--swimm-primary-700)] bg-[var(--swimm-primary-500)]/20 text-[var(--swimm-primary-700)]"
+                      : "border-[var(--swimm-neutral-300)] bg-white text-[var(--swimm-neutral-500)] hover:border-[var(--swimm-primary-500)] hover:text-[var(--swimm-primary-700)]"
+                  }`}
+                >
+                  {option.toUpperCase()}
+                </button>
+              ))}
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <div className="rounded-xl border border-[var(--swimm-neutral-300)] bg-white px-4 py-3 text-xs text-[var(--swimm-neutral-500)]">
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--swimm-neutral-500)]">
+                  {liveCopy.card.indicatorsTitle}
+                </div>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {INDICATOR_CONFIG.map((indicator) => {
+                    const active = indicatorVisibility[indicator.key];
+                    const baseColor = indicator.colors[0];
+                    const activeStyle = active
+                      ? {
+                          borderColor: baseColor,
+                          backgroundColor: withAlpha(baseColor, 0.18),
+                          color: baseColor,
+                        }
+                      : undefined;
+                    return (
+                      <button
+                        key={indicator.key}
+                        type="button"
+                        onClick={() => toggleIndicator(indicator.key)}
+                        className={`rounded-full border px-3 py-1 text-[11px] font-semibold transition ${
+                          active
+                            ? "bg-transparent"
+                            : "border-[var(--swimm-neutral-300)] bg-white text-[var(--swimm-neutral-500)] hover:border-[var(--swimm-primary-500)] hover:text-[var(--swimm-primary-700)]"
+                        }`}
+                        style={activeStyle}
+                      >
+                        {indicator.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+            <div className="mt-4 grid gap-2 rounded-xl border border-[var(--swimm-neutral-300)] bg-[var(--swimm-neutral-100)] px-4 py-3 text-xs text-[var(--swimm-neutral-500)] sm:grid-cols-2">
+              {hoverData ? (
+                <>
+                  <div className="font-semibold text-[var(--swimm-navy-900)]">
+                    {hoverData.timeLabel}
+                  </div>
+                  <div className="text-right">
+                    {liveCopy.card.hoverClose}: {priceFormatter.format(hoverData.close)}
+                  </div>
+                  <div>
+                    {liveCopy.card.hoverOpen}: {priceFormatter.format(hoverData.open)}
+                  </div>
+                  <div className="text-right">
+                    {liveCopy.card.hoverHigh}: {priceFormatter.format(hoverData.high)}
+                  </div>
+                  <div>
+                    {liveCopy.card.hoverLow}: {priceFormatter.format(hoverData.low)}
+                  </div>
+                  <div className="text-right text-[var(--swimm-neutral-300)]">
+                    {liveCopy.card.indicatorHint}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="font-semibold text-[var(--swimm-neutral-500)]">
+                    {liveCopy.card.hoverPrompt}
+                  </div>
+                  <div className="text-right text-[var(--swimm-neutral-300)]">
+                    {liveCopy.card.hoverClose}: -
+                  </div>
+                  <div>{liveCopy.card.hoverOpen}: -</div>
+                  <div className="text-right">{liveCopy.card.hoverHigh}: -</div>
+                  <div>{liveCopy.card.hoverLow}: -</div>
+                  <div className="text-right text-[var(--swimm-neutral-300)]">
+                    {liveCopy.card.indicatorHint}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-6 lg:grid-cols-[2fr_1fr] lg:items-stretch">
+            <div className="relative h-full min-h-[20rem] md:min-h-[26rem]">
+              <div
+                className={`absolute inset-0 overflow-hidden rounded-3xl border border-[var(--swimm-neutral-300)] bg-white transition-all duration-500 ${
+                  isChartVisible
+                    ? "opacity-100 translate-y-0"
+                    : "pointer-events-none opacity-0 -translate-y-4"
+                }`}
+              >
+                <div ref={chartContainerRef} className="h-full w-full" />
+                {isChartLoading && (
+                  <div className="absolute inset-0 flex items-center justify-center rounded-3xl bg-[var(--swimm-neutral-100)]/80 text-sm text-[var(--swimm-neutral-500)]">
+                    {liveCopy.card.loading}
+                  </div>
+                )}
+              </div>
+              {!isChartVisible && !isChartLoading && (
+                <div className="absolute inset-0 flex items-center justify-center rounded-3xl border border-dashed border-[var(--swimm-neutral-300)] bg-white text-sm text-[var(--swimm-neutral-500)]">
+                  {liveCopy.card.emptyState}
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-4 lg:flex lg:h-full lg:flex-col">
+              <div
+                className={`flex h-full min-h-[20rem] md:h-[26rem] flex-col overflow-hidden rounded-2xl border border-[var(--swimm-neutral-300)] bg-white p-4 transition-all duration-500 ${
+                  isChartVisible
+                    ? "opacity-100 translate-y-0"
+                    : "pointer-events-none opacity-0 -translate-y-4"
+                }`}
+              >
+                <div className="text-xs font-semibold uppercase tracking-wide text-[var(--swimm-neutral-500)]">
+                  {liveCopy.orderBook.title}
+                </div>
+                <div className="mt-3 grid flex-1 grid-cols-2 gap-3 overflow-hidden text-xs text-[var(--swimm-neutral-500)]">
+                  <div className="flex flex-col overflow-hidden">
+                    <div>{liveCopy.orderBook.bids}</div>
+                    <ul className="mt-2 flex-1 space-y-1 overflow-y-auto pr-1">
+                      {orderBookBids.slice(0, ORDERBOOK_LIMIT).map((bid, index) => (
+                        <li
+                          key={`bid-${bid.price}-${index}`}
+                          className="flex items-center justify-between gap-3 rounded-lg border border-[var(--swimm-up)]/30 bg-[var(--swimm-up)]/10 px-3 py-2"
+                        >
+                          <span className="min-w-0 flex-1 truncate font-mono text-[0.75rem] tabular-nums text-[var(--swimm-navy-900)]">
+                            {simpleNumberFormatter.format(bid.price)}
+                          </span>
+                          <span className="flex-shrink-0 font-mono text-[0.75rem] tabular-nums text-[var(--swimm-up)]">
+                            {bid.quantity.toFixed(4)}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div className="flex flex-col overflow-hidden">
+                    <div>{liveCopy.orderBook.asks}</div>
+                    <ul className="mt-2 flex-1 space-y-1 overflow-y-auto pl-1">
+                      {orderBookAsks.slice(0, ORDERBOOK_LIMIT).map((ask, index) => (
+                        <li
+                          key={`ask-${ask.price}-${index}`}
+                          className="flex items-center justify-between gap-3 rounded-lg border border-[var(--swimm-down)]/30 bg-[var(--swimm-down)]/10 px-3 py-2"
+                        >
+                          <span className="min-w-0 flex-1 truncate font-mono text-[0.75rem] tabular-nums text-[var(--swimm-navy-900)]">
+                            {simpleNumberFormatter.format(ask.price)}
+                          </span>
+                          <span className="flex-shrink-0 font-mono text-[0.75rem] tabular-nums text-[var(--swimm-down)]">
+                            {ask.quantity.toFixed(4)}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {chartError && (
+            <div className="rounded-2xl border border-[var(--swimm-down)]/30 bg-[var(--swimm-down)]/10 px-4 py-3 text-sm text-[var(--swimm-down)]">
+              {chartError}
+            </div>
+          )}
         </div>
-        <span className="text-xs text-[var(--swimm-neutral-400)]">
-          {copy.lastUpdated.replace("{time}", formattedUpdated)}
-        </span>
       </div>
-
-      <div className="relative mt-4 h-72 w-full overflow-hidden rounded-2xl border border-[var(--swimm-neutral-300)] bg-white">
-        <div ref={chartContainerRef} className="h-full w-full" />
-        {isLoading && (
-          <div className="absolute inset-0 flex items-center justify-center text-xs text-[var(--swimm-neutral-300)]">
-            {copy.loading}
-          </div>
-        )}
-        {!isLoading && !candles.length ? (
-          <div className="absolute inset-0 flex items-center justify-center text-xs text-[var(--swimm-neutral-300)]">
-            {copy.empty}
-          </div>
-        ) : null}
-      </div>
-
-      {error ? (
-        <p className="mt-3 rounded-xl border border-[var(--swimm-down)] bg-[var(--swimm-down)]/10 px-4 py-2 text-xs text-[var(--swimm-down)]">
-          {error}
-        </p>
-      ) : null}
     </section>
   );
 }

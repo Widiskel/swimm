@@ -227,6 +227,8 @@ const en = {
 
       savingButton: "Saving...",
 
+      savedButton: "Saved",
+
       successMessage: "Report stored in your history. Update the verdict anytime from History.",
 
       loginPrompt: "Sign in to save analyses to your SWIMM account.",
@@ -510,6 +512,8 @@ const en = {
       loading: "Loading live chart...",
       empty: "Live market data is unavailable.",
       error: "Unable to load live chart.",
+      timeframeLabel: "Timeframe",
+      indicatorsLabel: "Indicators",
     },
   },
   language: {

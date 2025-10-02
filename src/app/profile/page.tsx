@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactElement } from "react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 
@@ -32,39 +33,19 @@ const AccountTabIcon = ({ className }: IconProps) => (
   </svg>
 );
 
-const ApiKeyTabIcon = ({ className }: IconProps) => (
-  <svg
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.8"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    className={className}
-    aria-hidden="true"
-  >
-    <circle cx="16" cy="7" r="3" />
-    <path d="M3 7h9" />
-    <path d="M3 12h7" />
-    <path d="M3 17h5" />
-    <path d="M19 10v7h-4" />
-  </svg>
-);
-
-const buildInitialState = (settings: UserSettings | null, fallbackDisplayName: string) => ({
+const buildInitialState = (
+  settings: UserSettings | null,
+  fallbackDisplayName: string
+) => ({
   displayName: settings?.displayName ?? fallbackDisplayName ?? "",
-  binanceApiKey: settings?.binanceApiKey ?? "",
-  binanceApiSecret: settings?.binanceApiSecret ?? "",
-  bybitApiKey: settings?.bybitApiKey ?? "",
-  bybitApiSecret: settings?.bybitApiSecret ?? "",
 });
 
-type TabId = "account" | "apiKey";
+type TabId = "account";
 
 type TabDefinition = {
   id: TabId;
   label: string;
-  icon: (props: IconProps) => JSX.Element;
+  icon: (props: IconProps) => ReactElement;
 };
 
 type ConnectorDescriptor = {
@@ -116,12 +97,8 @@ export default function ProfilePage() {
   const [activeTab, setActiveTab] = useState<TabId>("account");
   const [accountState, setAccountState] = useState<"idle" | "saving" | "success" | "error">("idle");
   const [accountError, setAccountError] = useState<string | null>(null);
-  const [apiSubmitState, setApiSubmitState] = useState<"idle" | "saving" | "success" | "error">("idle");
-  const [apiSubmitError, setApiSubmitError] = useState<string | null>(null);
   const [connectorBusy, setConnectorBusy] = useState<string | null>(null);
   const [connectorError, setConnectorError] = useState<string | null>(null);
-
-  const isSavingApiKeys = apiSubmitState === "saving";
 
   useEffect(() => {
     setForm(buildInitialState(settings, fallbackDisplayName));
@@ -133,35 +110,6 @@ export default function ProfilePage() {
     if (accountState === "success" || accountState === "error") {
       setAccountState("idle");
       setAccountError(null);
-    }
-    if (apiSubmitState === "success" || apiSubmitState === "error") {
-      setApiSubmitState("idle");
-      setApiSubmitError(null);
-    }
-  };
-
-  const handleApiSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!authenticated) {
-      setApiSubmitState("error");
-      setApiSubmitError(profileCopy.errors.sessionRequired);
-      return;
-    }
-    setApiSubmitState("saving");
-    setApiSubmitError(null);
-    try {
-      await save({
-        displayName: form.displayName.trim() ? form.displayName.trim() : null,
-        binanceApiKey: form.binanceApiKey.trim() ? form.binanceApiKey.trim() : null,
-        binanceApiSecret: form.binanceApiSecret.trim() ? form.binanceApiSecret.trim() : null,
-        bybitApiKey: form.bybitApiKey.trim() ? form.bybitApiKey.trim() : null,
-        bybitApiSecret: form.bybitApiSecret.trim() ? form.bybitApiSecret.trim() : null,
-        updatedAt: settings?.updatedAt ?? null,
-      });
-      setApiSubmitState("success");
-    } catch (saveError) {
-      setApiSubmitState("error");
-      setApiSubmitError(saveError instanceof Error ? saveError.message : profileCopy.errors.saveFailed);
     }
   };
 
@@ -194,9 +142,8 @@ export default function ProfilePage() {
   const tabs = useMemo<TabDefinition[]>(
     () => [
       { id: "account", label: profileCopy.tabs.account, icon: AccountTabIcon },
-      { id: "apiKey", label: profileCopy.tabs.apiKey, icon: ApiKeyTabIcon },
     ],
-    [profileCopy.tabs.account, profileCopy.tabs.apiKey]
+    [profileCopy.tabs.account]
   );
 
   const handleTabClick = (tabId: TabId) => {
@@ -244,7 +191,11 @@ export default function ProfilePage() {
         connected: Boolean(emailDetail),
         detail: emailDetail,
         connect: linkEmail,
-        disconnect: emailDetail ? () => unlinkEmail(emailDetail) : null,
+        disconnect: emailDetail
+          ? async () => {
+              await unlinkEmail(emailDetail);
+            }
+          : undefined,
       },
       {
         id: "google",
@@ -252,7 +203,11 @@ export default function ProfilePage() {
         connected: googleConnected,
         detail: googleDetail,
         connect: linkGoogle,
-        disconnect: googleSubject ? () => unlinkGoogle(googleSubject) : null,
+        disconnect: googleSubject
+          ? async () => {
+              await unlinkGoogle(googleSubject);
+            }
+          : undefined,
       },
       {
         id: "discord",
@@ -260,7 +215,11 @@ export default function ProfilePage() {
         connected: discordConnected,
         detail: discordDetail,
         connect: linkDiscord,
-        disconnect: discordSubject ? () => unlinkDiscord(discordSubject) : null,
+        disconnect: discordSubject
+          ? async () => {
+              await unlinkDiscord(discordSubject);
+            }
+          : undefined,
       },
     ];
   }, [
@@ -472,89 +431,6 @@ export default function ProfilePage() {
                 </form>
               ) : null}
 
-              {activeTab === "apiKey" ? (
-                <form className="space-y-8" onSubmit={handleApiSubmit}>
-                  <section className="grid gap-6 rounded-3xl border border-[var(--swimm-neutral-300)] bg-white p-8 md:grid-cols-2">
-                    <div className="space-y-4">
-                      <h2 className="text-lg font-semibold text-[var(--swimm-navy-900)]">{profileCopy.binance.title}</h2>
-                      <p className="text-sm text-[var(--swimm-neutral-500)]">{profileCopy.binance.description}</p>
-                      <label className="block text-sm text-[var(--swimm-neutral-600)]">
-                        <span className="font-medium text-[var(--swimm-neutral-700)]">{profileCopy.binance.apiKey}</span>
-                        <input
-                          type="text"
-                          value={form.binanceApiKey}
-                          onChange={handleChange("binanceApiKey")}
-                          placeholder={profileCopy.placeholders.apiKey}
-                          className="mt-2 h-11 w-full rounded-2xl border border-[var(--swimm-neutral-300)] bg-white px-4 text-sm text-[var(--swimm-neutral-700)] outline-none transition focus:border-[var(--swimm-primary-600)] focus:ring-2 focus:ring-[var(--swimm-primary-500)]/30"
-                          autoComplete="off"
-                        />
-                      </label>
-                      <label className="block text-sm text-[var(--swimm-neutral-600)]">
-                        <span className="font-medium text-[var(--swimm-neutral-700)]">{profileCopy.binance.apiSecret}</span>
-                        <input
-                          type="password"
-                          value={form.binanceApiSecret}
-                          onChange={handleChange("binanceApiSecret")}
-                          placeholder={profileCopy.placeholders.apiSecret}
-                          className="mt-2 h-11 w-full rounded-2xl border border-[var(--swimm-neutral-300)] bg-white px-4 text-sm text-[var(--swimm-neutral-700)] outline-none transition focus:border-[var(--swimm-primary-600)] focus:ring-2 focus:ring-[var(--swimm-primary-500)]/30"
-                          autoComplete="off"
-                        />
-                      </label>
-                    </div>
-
-                    <div className="space-y-4">
-                      <h2 className="text-lg font-semibold text-[var(--swimm-navy-900)]">{profileCopy.bybit.title}</h2>
-                      <p className="text-sm text-[var(--swimm-neutral-500)]">{profileCopy.bybit.description}</p>
-                      <label className="block text-sm text-[var(--swimm-neutral-600)]">
-                        <span className="font-medium text-[var(--swimm-neutral-700)]">{profileCopy.bybit.apiKey}</span>
-                        <input
-                          type="text"
-                          value={form.bybitApiKey}
-                          onChange={handleChange("bybitApiKey")}
-                          placeholder={profileCopy.placeholders.apiKey}
-                          className="mt-2 h-11 w-full rounded-2xl border border-[var(--swimm-neutral-300)] bg-white px-4 text-sm text-[var(--swimm-neutral-700)] outline-none transition focus:border-[var(--swimm-primary-600)] focus:ring-2 focus:ring-[var(--swimm-primary-500)]/30"
-                          autoComplete="off"
-                        />
-                      </label>
-                      <label className="block text-sm text-[var(--swimm-neutral-600)]">
-                        <span className="font-medium text-[var(--swimm-neutral-700)]">{profileCopy.bybit.apiSecret}</span>
-                        <input
-                          type="password"
-                          value={form.bybitApiSecret}
-                          onChange={handleChange("bybitApiSecret")}
-                          placeholder={profileCopy.placeholders.apiSecret}
-                          className="mt-2 h-11 w-full rounded-2xl border border-[var(--swimm-neutral-300)] bg-white px-4 text-sm text-[var(--swimm-neutral-700)] outline-none transition focus:border-[var(--swimm-primary-600)] focus:ring-2 focus:ring-[var(--swimm-primary-500)]/30"
-                          autoComplete="off"
-                        />
-                      </label>
-                    </div>
-                  </section>
-
-                  <div className="rounded-2xl border border-dashed border-[var(--swimm-neutral-300)] bg-[var(--swimm-neutral-100)] px-4 py-3 text-sm text-[var(--swimm-neutral-500)]">
-                    {profileCopy.disclaimer}
-                  </div>
-
-                  {apiSubmitError ? (
-                    <div className="rounded-2xl border border-[var(--swimm-down)]/30 bg-[var(--swimm-down)]/10 px-4 py-3 text-sm text-[var(--swimm-down)]">{apiSubmitError}</div>
-                  ) : apiSubmitState === "success" ? (
-                    <div className="rounded-2xl border border-[var(--swimm-up)]/30 bg-[var(--swimm-up)]/10 px-4 py-3 text-sm text-[var(--swimm-up)]">{profileCopy.success}</div>
-                  ) : null}
-
-                  {error && apiSubmitState !== "error" ? (
-                    <div className="rounded-2xl border border-[var(--swimm-down)]/30 bg-[var(--swimm-down)]/10 px-4 py-3 text-sm text-[var(--swimm-down)]">{error}</div>
-                  ) : null}
-
-                  <div className="flex justify-end">
-                    <button
-                      type="submit"
-                      disabled={isSavingApiKeys}
-                      className="inline-flex items-center justify-center rounded-full border border-[var(--swimm-primary-500)] bg-[var(--swimm-primary-500)] px-6 py-3 text-sm font-semibold text-[var(--swimm-navy-900)] shadow-[var(--swimm-glow)] transition hover:bg-[var(--swimm-primary-700)] hover:text-white disabled:cursor-not-allowed disabled:border-[var(--swimm-neutral-300)] disabled:bg-[var(--swimm-neutral-300)]/40 disabled:text-[var(--swimm-neutral-500)]"
-                    >
-                      {isSavingApiKeys ? profileCopy.actions.saving : profileCopy.actions.save}
-                    </button>
-                  </div>
-                </form>
-              ) : null}
             </div>
           </div>
         )}
