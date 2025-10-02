@@ -58,6 +58,7 @@ export type LiveMarketSectionProps = {
   indicatorVisibility: Record<IndicatorKey, boolean>;
   onToggleIndicator: (key: IndicatorKey) => void;
   onCandlesChange: (candles: CandlestickData[]) => void;
+  onLastClosedTimeChange?: (closeTimeSec: number | null) => void;
   canRunAnalysis: boolean;
   onAnalyze: () => void;
   isRunningAnalysis: boolean;
@@ -78,6 +79,7 @@ export const LiveMarketSection = forwardRef<
     indicatorVisibility,
     onToggleIndicator,
     onCandlesChange,
+    onLastClosedTimeChange,
     canRunAnalysis,
     onAnalyze,
     isRunningAnalysis,
@@ -207,6 +209,9 @@ export const LiveMarketSection = forwardRef<
           setChartData(null);
           setIsChartActive(false);
           setChartError(null);
+          if (onLastClosedTimeChange) {
+            onLastClosedTimeChange(null);
+          }
           return;
         }
 
@@ -227,6 +232,11 @@ export const LiveMarketSection = forwardRef<
         const payload = (await res.json()) as MarketSnapshot;
         setChartData(payload);
         setIsChartActive(true);
+        if (onLastClosedTimeChange) {
+          const last = payload.candles?.length ? payload.candles[payload.candles.length - 1] : null;
+          const closeTimeSec = last ? Math.floor(last.closeTime / 1000) : null;
+          onLastClosedTimeChange(closeTimeSec);
+        }
 
         if (!payload.candles?.length) {
           const message =
@@ -336,10 +346,13 @@ export const LiveMarketSection = forwardRef<
         setIsChartVisible(false);
         setHoverState(null);
         notificationKeyRef.current = null;
+        if (onLastClosedTimeChange) {
+          onLastClosedTimeChange(null);
+        }
         resetChart();
       },
     }),
-    [provider, marketMode, resetChart, setHoverState, startChartPolling]
+    [provider, marketMode, resetChart, setHoverState, startChartPolling, onLastClosedTimeChange]
   );
 
   useEffect(
@@ -806,16 +819,24 @@ export const LiveMarketSection = forwardRef<
                 provider: providerLabel,
               })}
             </div>
-            <button
+            <motion.button
               type="button"
               onClick={onAnalyze}
               disabled={!canRunAnalysis}
               className="inline-flex items-center justify-center rounded-full border border-[var(--swimm-primary-500)] bg-[var(--swimm-primary-500)] px-6 py-3 text-sm font-semibold text-[var(--swimm-navy-900)] shadow-[var(--swimm-glow)] transition hover:bg-[var(--swimm-primary-700)] hover:text-white disabled:cursor-not-allowed disabled:border-[var(--swimm-neutral-300)] disabled:bg-[var(--swimm-neutral-300)]/40 disabled:text-[var(--swimm-neutral-500)]"
+              whileHover={{ y: -2 }}
+              whileTap={{ scale: 0.97 }}
+              transition={{ type: "spring", stiffness: 260, damping: 20 }}
             >
-              {isRunningAnalysis
-                ? liveCopy.analyzingButton
-                : liveCopy.analyzeButton}
-            </button>
+              {isRunningAnalysis && (
+                <motion.span
+                  className="mr-2 inline-block h-4 w-4 rounded-full border-2 border-[var(--swimm-primary-700)] border-t-transparent"
+                  animate={{ rotate: 360 }}
+                  transition={{ repeat: Infinity, ease: "linear", duration: 0.9 }}
+                />
+              )}
+              {isRunningAnalysis ? liveCopy.analyzingButton : liveCopy.analyzeButton}
+            </motion.button>
           </div>
           {analysisError && (
             <div className="mt-4 rounded-2xl border border-[var(--swimm-down)]/30 bg-[var(--swimm-down)]/10 px-4 py-3 text-sm text-[var(--swimm-down)]">

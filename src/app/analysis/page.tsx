@@ -103,6 +103,12 @@ export default function AnalysisPage() {
   const [isSavingReport, setIsSavingReport] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"idle" | "success" | "error">("idle");
   const [saveError, setSaveError] = useState<string | null>(null);
+  // Auto-refresh after first manual analyze
+  const hasUserAnalyzedRef = useRef(false);
+  const lastAnalyzedClosedRef = useRef<number | null>(null);
+  const [showUpdatedToast, setShowUpdatedToast] = useState(false);
+  const [lastUpdatedLabel, setLastUpdatedLabel] = useState("");
+  const [lastClosedTimeSec, setLastClosedTimeSec] = useState<number | null>(null);
 
   const liveMarketRef = useRef<LiveMarketHandle | null>(null);
   const chartSectionRef = useRef<HTMLElement | null>(null);
@@ -303,6 +309,8 @@ export default function AnalysisPage() {
     setLatestCandles([]);
     setAnalysisError(null);
     liveMarketRef.current?.startChart({ mode: marketMode });
+    // Reset last analyzed candle so the next closed candle on the new timeframe triggers a fresh analyze
+    lastAnalyzedClosedRef.current = null;
   };
 
   const handleIndicatorToggle = (key: IndicatorKey) => {
@@ -415,6 +423,19 @@ export default function AnalysisPage() {
       setSaveFeedback("");
       setSaveStatus("idle");
       setSaveError(null);
+      // Mark that user has started analysis and capture last closed-candle time
+      if (lastClosedTimeSec !== null) {
+        lastAnalyzedClosedRef.current = lastClosedTimeSec;
+      }
+      hasUserAnalyzedRef.current = true;
+      // Show a lightweight update toast
+      const now = new Date();
+      const hh = String(now.getHours()).padStart(2, "0");
+      const mm = String(now.getMinutes()).padStart(2, "0");
+      const ss = String(now.getSeconds()).padStart(2, "0");
+      setLastUpdatedLabel(`${hh}:${mm}:${ss}`);
+      setShowUpdatedToast(true);
+      window.setTimeout(() => setShowUpdatedToast(false), 2500);
       if (typeof window !== "undefined") {
         window.requestAnimationFrame(() => {
           analysisSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -431,6 +452,28 @@ export default function AnalysisPage() {
       setIsRunning(false);
     }
   };
+
+  // Auto-run analyze when a new candle closes for the selected timeframe (strict closed-candle)
+  useEffect(() => {
+    if (!hasUserAnalyzedRef.current) {
+      return;
+    }
+    if (isRunning || !ready || !authenticated) {
+      return;
+    }
+    if (lastClosedTimeSec === null) {
+      return;
+    }
+    if (lastAnalyzedClosedRef.current === null) {
+      // First observation after enabling auto-refresh
+      lastAnalyzedClosedRef.current = lastClosedTimeSec;
+      return;
+    }
+    if (lastClosedTimeSec !== lastAnalyzedClosedRef.current) {
+      // New candle detected -> refresh analysis
+      void handleAnalyze();
+    }
+  }, [authenticated, lastClosedTimeSec, isRunning, ready]);
 
   if (!ready) {
     return (
@@ -529,6 +572,7 @@ export default function AnalysisPage() {
           indicatorVisibility={indicatorVisibility}
           onToggleIndicator={handleIndicatorToggle}
           onCandlesChange={setLatestCandles}
+          onLastClosedTimeChange={setLastClosedTimeSec}
           canRunAnalysis={canRunAnalysis}
           onAnalyze={handleAnalyze}
           isRunningAnalysis={isRunning}
@@ -563,6 +607,14 @@ export default function AnalysisPage() {
           saveStatus={saveStatus}
           saveError={saveError}
         />
+        {/* Update ticker */}
+        {showUpdatedToast && (
+          <div className="fixed bottom-4 right-4 z-50">
+            <div className="rounded-full border border-[var(--swimm-primary-500)]/40 bg-[var(--swimm-primary-500)]/10 px-4 py-2 text-xs font-semibold text-[var(--swimm-primary-700)] shadow-[var(--swimm-glow)]">
+              Analisa diperbarui · {lastUpdatedLabel}
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );
