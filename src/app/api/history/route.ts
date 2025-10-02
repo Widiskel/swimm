@@ -48,7 +48,7 @@ export type HistoryDocument = {
   executed?: boolean | null;
   snapshot?: HistorySnapshotDocument | null;
   createdAt: Date;
-  updatedAt: Date;\n  snapshot?: {timeframe: string;at: Date;candles: Array<{ openTime: number; open: number; high: number; low: number; close: number; volume?: number; closeTime?: number }>;\n  } | null;
+  updatedAt: Date;
 };
 
 export type HistoryResponseItem = {
@@ -67,7 +67,7 @@ export type HistoryResponseItem = {
   executed: boolean | null;
   snapshot: HistorySnapshot | null;
   createdAt: string;
-  updatedAt: string;\n  snapshot?: {timeframe: string;at: string;candles: Array<{ openTime: number; open: number; high: number; low: number; close: number; volume?: number; closeTime?: number }>;\n  } | null;
+  updatedAt: string;
 };
 
 export const buildError = (message: string, status = 400) =>
@@ -100,7 +100,7 @@ export const mapHistoryDoc = (
       }
     : null,
   createdAt: doc.createdAt.toISOString(),
-  updatedAt: doc.updatedAt.toISOString(),\n  snapshot: doc.snapshot ? { timeframe: doc.snapshot.timeframe, at: doc.snapshot.at.toISOString(), candles: doc.snapshot.candles } : null,
+  updatedAt: doc.updatedAt.toISOString(),
 });
 
 type SanitizedHistoryPayload =
@@ -113,16 +113,19 @@ type SanitizedHistoryPayload =
       response: AgentResponse;
       verdict: HistoryVerdict;
       feedback: string | null;
-      snapshot?: {    timeframe: string;    at: string;    candles: Array<{ openTime: number; open: number; high: number; low: number; close: number; volume?: number; closeTime?: number }>;  };};
+      executed: boolean | null;
+      snapshot: HistorySnapshotDocument | null;
+    };
 
 const sanitizeSnapshot = (value: unknown): HistorySnapshotDocument | null => {
   if (!value || typeof value !== "object") {
     return null;
   }
 
-  const { timeframe, capturedAt, candles } = value as {
+  const { timeframe, capturedAt, at, candles } = value as {
     timeframe?: unknown;
     capturedAt?: unknown;
+    at?: unknown;
     candles?: unknown;
   };
 
@@ -135,14 +138,20 @@ const sanitizeSnapshot = (value: unknown): HistorySnapshotDocument | null => {
     if (!raw || typeof raw !== "object") {
       continue;
     }
-    const { time, open, high, low, close } = raw as {
+    const { time, open, high, low, close, openTime } = raw as {
       time?: unknown;
       open?: unknown;
       high?: unknown;
       low?: unknown;
       close?: unknown;
+      openTime?: unknown;
     };
-    const timestamp = typeof time === "number" && Number.isFinite(time) ? Math.floor(time) : null;
+    const tsFromTime = typeof time === "number" && Number.isFinite(time) ? Math.floor(time) : null;
+    const tsFromOpenTime =
+      typeof openTime === "number" && Number.isFinite(openTime)
+        ? Math.floor(openTime / 1000)
+        : null;
+    const timestamp = tsFromTime ?? tsFromOpenTime;
     const openValue = typeof open === "number" && Number.isFinite(open) ? Number(open.toFixed(2)) : null;
     const highValue = typeof high === "number" && Number.isFinite(high) ? Number(high.toFixed(2)) : null;
     const lowValue = typeof low === "number" && Number.isFinite(low) ? Number(low.toFixed(2)) : null;
@@ -169,12 +178,13 @@ const sanitizeSnapshot = (value: unknown): HistorySnapshotDocument | null => {
     return null;
   }
 
-  const timeframeLabel = typeof timeframe === "string" && timeframe.trim().length > 0
-    ? timeframe.trim()
-    : "";
-  const capturedDate = typeof capturedAt === "string" || capturedAt instanceof Date
-    ? new Date(capturedAt)
-    : new Date(normalizedCandles[normalizedCandles.length - 1].time * 1000);
+  const timeframeLabel =
+    typeof timeframe === "string" && timeframe.trim().length > 0 ? timeframe.trim() : "";
+  const capturedRaw = capturedAt ?? at;
+  const capturedDate =
+    typeof capturedRaw === "string" || capturedRaw instanceof Date
+      ? new Date(capturedRaw as string | Date)
+      : new Date(normalizedCandles[normalizedCandles.length - 1].time * 1000);
   const capturedAtDate = Number.isNaN(capturedDate.getTime())
     ? new Date(normalizedCandles[normalizedCandles.length - 1].time * 1000)
     : capturedDate;
@@ -199,39 +209,54 @@ const sanitizePayload = (payload: unknown): SanitizedHistoryPayload => {
     response,
     verdict,
     feedback,
-  } = payload as {pair?: string;timeframe?: string;provider?: string;response?: AgentResponse;verdict?: string;feedback?: string;snapshot?: { timeframe: string; at: string; candles: Array<{ openTime: number; open: number; high: number; low: number; close: number; volume?: number; closeTime?: number }> };\n  };
+    executed,
+    snapshot,
+  } = payload as {
+    pair?: unknown;
+    timeframe?: unknown;
+    provider?: unknown;
+    mode?: unknown;
+    response?: unknown;
+    verdict?: unknown;
+    feedback?: unknown;
+    executed?: unknown;
+    snapshot?: unknown;
+  };
 
-  if (!pair || typeof pair !== "string") {
+  if (typeof pair !== "string" || pair.trim().length === 0) {
     return { error: "Pair is required." };
   }
-  if (!timeframe || typeof timeframe !== "string") {
+  if (typeof timeframe !== "string" || timeframe.trim().length === 0) {
     return { error: "Timeframe is required." };
   }
   if (!response || typeof response !== "object") {
     return { error: "Agent response is required." };
   }
-  const normalizedProvider = isCexProvider(provider ?? null)
-    ? provider!
+
+  const normalizedProvider = isCexProvider((provider as string) ?? null)
+    ? (provider as string)
     : DEFAULT_PROVIDER;
-  const normalizedMode = isMarketMode(mode ?? null)
+  const normalizedMode = isMarketMode((mode as MarketMode) ?? null)
     ? (mode as MarketMode)
     : DEFAULT_MARKET_MODE;
-  const normalizedVerdict = ALLOWED_VERDICTS.has(
-    (verdict ?? "unknown") as HistoryVerdict
-  )
-    ? ((verdict ?? "unknown") as HistoryVerdict)
+  const normalizedVerdict = ALLOWED_VERDICTS.has((verdict as HistoryVerdict) ?? "unknown")
+    ? ((verdict as HistoryVerdict) ?? "unknown")
     : "unknown";
   const sanitizedFeedback =
-    feedback?.toString().slice(0, MAX_FEEDBACK_LENGTH) ?? null;
+    typeof feedback === "string"
+      ? feedback.slice(0, MAX_FEEDBACK_LENGTH)
+      : feedback != null
+      ? String(feedback).slice(0, MAX_FEEDBACK_LENGTH)
+      : null;
   const normalizedExecuted =
     typeof executed === "boolean"
       ? executed
       : typeof executed === "string"
       ? executed.toLowerCase() === "true"
-      ? true
-      : executed.toLowerCase() === "false"
-      ? false
-      : null
+        ? true
+        : executed.toLowerCase() === "false"
+        ? false
+        : null
       : null;
   const normalizedSnapshot = sanitizeSnapshot(snapshot);
 
@@ -240,9 +265,11 @@ const sanitizePayload = (payload: unknown): SanitizedHistoryPayload => {
     timeframe: timeframe.trim(),
     provider: normalizedProvider,
     mode: normalizedMode,
-    response,
-    verdict: verdict as Verdict,
-    feedback: sanitizedFeedback,snapshot: (payload as any).snapshot && typeof (payload as any).snapshot === "object" ? {  timeframe: String((payload as any).snapshot.timeframe ?? timeframe).trim(),  at: new Date(String((payload as any).snapshot.at ?? new Date())).toISOString(),  candles: Array.isArray((payload as any).snapshot.candles) ? (payload as any).snapshot.candles.map((k: any) => ({    openTime: Number(k.openTime ?? 0), open: Number(k.open ?? 0), high: Number(k.high ?? 0), low: Number(k.low ?? 0), close: Number(k.close ?? 0), volume: Number(k.volume ?? 0), closeTime: Number(k.closeTime ?? k.openTime ?? 0)  })) : []} : undefined,
+    response: response as AgentResponse,
+    verdict: normalizedVerdict,
+    feedback: sanitizedFeedback,
+    executed: normalizedExecuted,
+    snapshot: normalizedSnapshot,
   };
 };
 
@@ -304,7 +331,7 @@ export async function POST(request: NextRequest) {
       mode: validated.mode,
       decision: validated.response.decision ?? null,
       summary: validated.response.summary ?? "",
-      response: validated.response,  snapshot: (validated as any).snapshot ? { timeframe: (validated as any).snapshot.timeframe, at: new Date((validated as any).snapshot.at), candles: (validated as any).snapshot.candles } : null,
+      response: validated.response,
       verdict: validated.verdict,
       feedback: validated.feedback,
       executed: validated.executed ?? null,

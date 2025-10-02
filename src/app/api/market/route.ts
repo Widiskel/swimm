@@ -6,6 +6,7 @@ import {
   fetchBinanceTradablePairs,
   formatBinanceSummary,
   isPairTradable,
+  type BinanceMarketSummary,
 } from "@/features/market/exchanges/binance";
 import {
   fetchBybitCandles,
@@ -14,6 +15,11 @@ import {
   formatBybitSummary,
 } from "@/features/market/exchanges/bybit";
 import { DEFAULT_PROVIDER, isCexProvider } from "@/features/market/exchanges";
+import {
+  DEFAULT_MARKET_MODE,
+  isMarketMode,
+  type MarketMode,
+} from "@/features/market/constants";
 import { fetchGoldCandles, fetchGoldMarketSummary } from "@/features/market/exchanges/gold";
 import { isLocale, type Locale } from "@/i18n/messages";
 import { translate } from "@/i18n/translate";
@@ -135,7 +141,7 @@ export async function GET(request: NextRequest) {
   const [candles, summary, rawOrderBook] = await Promise.all(
     provider === "bybit"
       ? [
-          fetchBybitCandles(symbolParam, intervalParam, limit),
+          fetchBybitCandles(symbolParam, intervalParam, { limit }),
           fetchBybitMarketSummary(symbolParam),
           fetchBybitOrderBook(symbolParam, 50),
         ]
@@ -146,7 +152,7 @@ export async function GET(request: NextRequest) {
           Promise.resolve({ bids: [], asks: [] }),
         ]
       : [
-          fetchBinanceCandles(symbolParam, intervalParam, limit),
+          fetchBinanceCandles(symbolParam, intervalParam, { limit }),
           fetchBinanceMarketSummary(symbolParam),
           fetchBinanceOrderBook(symbolParam, 50),
         ]
@@ -170,10 +176,10 @@ export async function GET(request: NextRequest) {
     orderBook: computedOrderBook,
     summary:
       provider === "bybit"
-        ? formatBybitSummary(summary, locale)
+        ? formatBybitSummary(summary as BinanceMarketSummary | null, locale)
         : provider === "gold"
         ? (summary as { summary: string; stats: unknown }).summary
-        : formatBinanceSummary(summary, locale),
+        : formatBinanceSummary(summary as BinanceMarketSummary | null, locale),
     summaryStats: provider === "gold" ? (summary as { summary: string; stats: unknown }).stats : summary,
     updatedAt: new Date().toISOString(),
   });

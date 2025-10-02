@@ -1,0 +1,321 @@
+"use client";
+
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+
+import { usePrivy } from "@privy-io/react-auth";
+
+import type { AgentResponse } from "@/features/analysis/types";
+import { DEFAULT_PROVIDER, type CexProvider } from "@/features/market/exchanges";
+import { DEFAULT_MARKET_MODE, type MarketMode } from "@/features/market/constants";
+import { useSession } from "@/providers/session-provider";
+import type { HistorySnapshot, HistoryVerdict } from "@/features/history/types";
+export type { HistoryVerdict, HistorySnapshot } from "@/features/history/types";
+
+export type HistoryEntry = {
+  id: string;
+  sessionId: string;
+  createdAt: string;
+  updatedAt: string;
+  pair: string;
+  timeframe: string;
+  provider: CexProvider;
+  mode: MarketMode;
+  decision: AgentResponse["decision"] | null;
+  summary: string;
+  response: AgentResponse;
+  verdict: HistoryVerdict;
+  feedback: string | null;snapshot?: {  timeframe: string;  at: string;  candles: Array<{    openTime: number;    open: number;    high: number;    low: number;    close: number;    volume?: number;    closeTime?: number;  }>;} | null;
+};
+
+type SaveHistoryPayload = {
+  pair: string;
+  timeframe: string;
+  provider?: CexProvider;
+  mode?: MarketMode;
+  response: AgentResponse;
+  verdict: HistoryVerdict;
+  feedback?: string;
+  snapshot?: {  timeframe: string;  at: string;  candles: Array<{    openTime: number;    open: number;    high: number;    low: number;    close: number;    volume?: number;    closeTime?: number;  }>;};};
+
+type HistoryContextValue = {
+  entries: HistoryEntry[];
+  isLoading: boolean;
+  error: string | null;
+  refresh: () => Promise<void>;
+  saveEntry: (payload: SaveHistoryPayload) => Promise<HistoryEntry>;
+  updateEntry: (id: string, payload: UpdateHistoryPayload) => Promise<HistoryEntry>;
+  clearEntries: () => Promise<void>;
+};
+
+const HistoryContext = createContext<HistoryContextValue | null>(null);
+
+const buildError = (error: unknown, fallback: string) => {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+  return fallback;
+};
+
+export function HistoryProvider({ children }: { children: React.ReactNode }) {
+  const { status, refresh: refreshSession } = useSession();
+  const { authenticated, user } = usePrivy();
+  const [entries, setEntries] = useState<HistoryEntry[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const refreshHistory = useCallback(async () => {
+    if (status !== "authenticated") {
+      setEntries([]);
+      setError(null);
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/history", {
+        method: "GET",
+        credentials: "include",
+        cache: "no-store",
+      });
+      if (!response.ok) {
+        throw new Error(`History request failed with ${response.status}`);
+      }
+      const payload = (await response.json()) as { entries?: HistoryEntry[] };
+      setEntries(payload.entries ?? []);
+    } catch (fetchError) {
+      const message = buildError(fetchError, "Unable to load history.");
+      setError(message);
+      setEntries([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [status]);
+
+  useEffect(() => {
+    void refreshHistory();
+  }, [refreshHistory]);
+
+  const ensureServerSession = useCallback(async () => {
+    if (!authenticated || !user?.id) {
+      return false;
+    }
+
+      const body = {
+        pair,
+        timeframe,
+        provider,
+        response,
+        verdict,
+        feedback,      snapshot,    };
+
+      const response = await fetch("/api/session", {
+        method: "POST",
+        credentials: "include",
+        cache: "no-store",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          userId: user.id,
+          email,
+          name: derivedName ?? null,
+          wallet,
+        }),
+      });
+
+      if (!response.ok) {
+        return false;
+      }
+
+      await refreshSession();
+      return true;
+    } catch (error) {
+      console.warn("Failed to ensure server session", error);
+      return false;
+    }
+  }, [authenticated, refreshSession, user]);
+
+  const saveEntry = useCallback(
+    async ({
+      pair,
+      timeframe,
+      provider = DEFAULT_PROVIDER,
+      mode = DEFAULT_MARKET_MODE,
+      response,
+      verdict,
+      feedback,
+      executed,
+      snapshot,
+    }: SaveHistoryPayload) => {
+      if (status !== "authenticated") {
+        throw new Error("Session required.");
+      }
+
+      const execute = async (hasRetried: boolean): Promise<HistoryEntry> => {
+        const body = {
+          pair,
+          timeframe,
+          provider,
+          mode,
+          response,
+          verdict,
+          feedback,
+          executed: typeof executed === "boolean" ? executed : null,
+          snapshot: snapshot ?? null,
+        };
+
+        const request = await fetch("/api/history", {
+          method: "POST",
+          credentials: "include",
+          cache: "no-store",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(body),
+        });
+
+        if (!request.ok) {
+          if (!hasRetried && request.status === 401 && (await ensureServerSession())) {
+            return execute(true);
+          }
+          let message = `Failed to save history entry (${request.status})`;
+          try {
+            const payload = (await request.json()) as { error?: string };
+            if (payload.error) {
+              message = payload.error;
+            }
+          } catch (parseError) {
+            console.warn("Failed to parse history save error", parseError);
+          }
+          throw new Error(message);
+        }
+
+        const payload = (await request.json()) as { entry: HistoryEntry };
+        const entry = payload.entry;
+        setEntries((prev) => [entry, ...prev]);
+        setError(null);
+        return entry;
+      };
+
+      return execute(false);
+    },
+    [ensureServerSession, status]
+  );
+
+  const updateEntry = useCallback(
+    async (
+      id: string,
+      { verdict, feedback, executed, sessionId: sessionIdHint, createdAt: createdAtHint }: UpdateHistoryPayload
+    ) => {
+      if (status !== "authenticated") {
+        throw new Error("Session required.");
+      }
+
+      const body: Record<string, unknown> = {};
+      if (typeof verdict !== "undefined") {
+        body.verdict = verdict;
+      }
+      if (typeof feedback !== "undefined") {
+        body.feedback = feedback;
+      }
+      if (typeof executed !== "undefined") {
+        body.executed = executed;
+      }
+      if (sessionIdHint) {
+        body.sessionId = sessionIdHint;
+      }
+      if (createdAtHint) {
+        body.createdAt = createdAtHint;
+      }
+
+      if (Object.keys(body).length === 0) {
+        throw new Error("Nothing to update.");
+      }
+
+      const execute = async (hasRetried: boolean): Promise<HistoryEntry> => {
+        const request = await fetch(`/api/history/${id}`, {
+          method: "PUT",
+          credentials: "include",
+          cache: "no-store",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(body),
+        });
+
+        if (!request.ok) {
+          if (!hasRetried && request.status === 401 && (await ensureServerSession())) {
+            return execute(true);
+          }
+          let message = `Failed to update history entry (${request.status})`;
+          try {
+            const payload = (await request.json()) as { error?: string };
+            if (payload.error) {
+              message = payload.error;
+            }
+          } catch (parseError) {
+            console.warn("Failed to parse history update error", parseError);
+          }
+          throw new Error(message);
+        }
+
+        const payload = (await request.json()) as { entry: HistoryEntry };
+        const updated = payload.entry;
+        setEntries((prev) => prev.map((entry) => (entry.id === updated.id ? updated : entry)));
+        setError(null);
+        return updated;
+      };
+
+      return execute(false);
+    },
+    [ensureServerSession, status]
+  );
+
+  const clearEntries = useCallback(async () => {
+    if (status !== "authenticated") {
+      setEntries([]);
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/history", {
+        method: "DELETE",
+        credentials: "include",
+        cache: "no-store",
+      });
+      if (!response.ok) {
+        throw new Error(`Failed to clear history (${response.status})`);
+      }
+      setEntries([]);
+      setError(null);
+    } catch (clearError) {
+      const message = buildError(clearError, "Unable to clear history.");
+      setError(message);
+    }
+  }, [status]);
+
+  const value = useMemo<HistoryContextValue>(
+    () => ({
+      entries,
+      isLoading,
+      error,
+      refresh: refreshHistory,
+      saveEntry,
+      updateEntry,
+      clearEntries,
+    }),
+    [entries, isLoading, error, refreshHistory, saveEntry, updateEntry, clearEntries]
+  );
+
+  return <HistoryContext.Provider value={value}>{children}</HistoryContext.Provider>;
+}
+
+export const useHistory = () => {
+  const context = useContext(HistoryContext);
+  if (!context) {
+    throw new Error("useHistory must be used within HistoryProvider");
+  }
+  return context;
+};
+

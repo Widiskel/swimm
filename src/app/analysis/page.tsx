@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
@@ -77,53 +77,7 @@ const toUnixSeconds = (time: CandlestickData["time"]): number | null => {
   return null;
 };
 
-const buildSnapshotPayload = (
-  candles: CandlestickData[],
-  timeframe: string
-): HistorySnapshot | null => {
-  if (!candles.length) {
-    return null;
-  }
-
-  const limitedCandles = candles.slice(-MAX_SNAPSHOT_CANDLES);
-  const sanitized = limitedCandles
-    .map((candle) => {
-      const timestamp = toUnixSeconds(candle.time);
-      if (timestamp === null) {
-        return null;
-      }
-      const open = Number(candle.open);
-      const high = Number(candle.high);
-      const low = Number(candle.low);
-      const close = Number(candle.close);
-      if ([open, high, low, close].every((value) => Number.isFinite(value))) {
-        return {
-          time: timestamp,
-          open: Number(open.toFixed(2)),
-          high: Number(high.toFixed(2)),
-          low: Number(low.toFixed(2)),
-          close: Number(close.toFixed(2)),
-        };
-      }
-      return null;
-    })
-    .filter((item): item is NonNullable<typeof item> => Boolean(item));
-
-  if (!sanitized.length) {
-    return null;
-  }
-
-  const last = sanitized[sanitized.length - 1];
-  const capturedAt = Number.isFinite(last.time)
-    ? new Date(last.time * 1000).toISOString()
-    : new Date().toISOString();
-
-  return {
-    timeframe,
-    capturedAt,
-    candles: sanitized,
-  };
-};
+  
 
 export default function AnalysisPage() {
   const { messages, languageTag, __, locale } = useLanguage();
@@ -162,6 +116,10 @@ export default function AnalysisPage() {
       bybit: {
         spot: "BTCUSDT",
         futures: "BTCUSDT",
+      },
+      gold: {
+        spot: "XAUUSD",
+        futures: "XAUUSD",
       },
     }
   );
@@ -373,7 +331,31 @@ export default function AnalysisPage() {
     setSaveError(null);
 
     try {
-      await saveEntry({pair: selectedPair,timeframe,provider,response,verdict: saveVerdict,feedback: saveFeedback.trim() || undefined,snapshot: {  timeframe,  at: (analysisCandles.length ? new Date((analysisCandles[analysisCandles.length - 1].time as number) * 1000).toISOString() : new Date().toISOString()),  candles: analysisCandles.map(c => ({    openTime: Number((c.time as number) * 1000),    open: c.open,    high: c.high,    low: c.low,    close: c.close,    volume: 0,    closeTime: Number((c.time as number) * 1000)  }))}\n      });
+      await saveEntry({
+        pair: selectedPair,
+        timeframe,
+        provider,
+        response,
+        verdict: "unknown",
+        feedback: saveFeedback.trim() || undefined,
+        snapshot: {
+          timeframe,
+          capturedAt: (
+            analysisCandles.length
+              ? new Date((analysisCandles[analysisCandles.length - 1].time as number) * 1000).toISOString()
+              : new Date().toISOString()
+          ),
+          candles: analysisCandles.map((c) => ({
+            openTime: Number((c.time as number) * 1000),
+            open: c.open,
+            high: c.high,
+            low: c.low,
+            close: c.close,
+            volume: 0,
+            closeTime: Number((c.time as number) * 1000),
+          })),
+        },
+      });
       setSaveStatus("success");
     } catch (saveException) {
       const message =

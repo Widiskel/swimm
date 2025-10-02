@@ -7,6 +7,7 @@ import {
   formatBinanceSummary,
   isPairTradable,
   type BinanceCandle,
+  type BinanceMarketSummary,
 } from "@/features/market/exchanges/binance";
 import {
   fetchBybitCandles,
@@ -1473,7 +1474,7 @@ export async function POST(request: Request) {
 
   try {
     body = await request.json();
-  } catch {
+  } catch (_err) {
     return NextResponse.json(
       { error: tAgent("en", "errors.invalidJson") },
       { status: 400 }
@@ -1569,7 +1570,7 @@ export async function POST(request: Request) {
   if (provider === "bybit") {
     [summaryData, candles] = await Promise.all([
       fetchBybitMarketSummary(symbol, bybitAuth),
-      fetchBybitCandles(symbol, timeframe, 500, bybitAuth),
+      fetchBybitCandles(symbol, timeframe, { limit: 500 }, bybitAuth),
     ]);
   } else if (provider === "gold") {
     const [goldInfo, goldCandles] = await Promise.all([
@@ -1581,7 +1582,12 @@ export async function POST(request: Request) {
   } else {
     [summaryData, candles] = await Promise.all([
       fetchBinanceMarketSummary(symbol, binanceAuth),
-      fetchBinanceCandles(symbol, CEX_INTERVAL_MAP[timeframe], 500, binanceAuth),
+      fetchBinanceCandles(
+        symbol,
+        CEX_INTERVAL_MAP[timeframe],
+        { limit: 500 },
+        binanceAuth
+      ),
     ]);
   }
   const [tavilySearch, tavilyArticles, historyInsights] = await Promise.all([
@@ -1589,13 +1595,16 @@ export async function POST(request: Request) {
     tavilyExtractPromise,
     historyInsightsPromise,
   ]);
-  const resolvedSymbol = provider === "gold" ? symbol : (summaryData?.symbol ?? symbol);
+  const resolvedSymbol =
+    provider === "gold"
+      ? symbol
+      : ((summaryData as { symbol?: string } | null)?.symbol ?? symbol);
   const marketSummary =
     provider === "bybit"
-      ? formatBybitSummary(summaryData, locale)
+      ? formatBybitSummary(summaryData as BinanceMarketSummary | null, locale)
       : provider === "gold"
-      ? (summaryData as { summaryText?: string }).summaryText as string
-      : formatBinanceSummary(summaryData, locale);
+      ? ((summaryData as { summaryText?: string }).summaryText as string)
+      : formatBinanceSummary(summaryData as BinanceMarketSummary | null, locale);
   const marketAnalytics = buildMarketAnalytics(candles, timeframe, locale);
   const resolvedLastPrice =
     (typeof marketAnalytics.lastClose === "number" && marketAnalytics.lastClose > 0

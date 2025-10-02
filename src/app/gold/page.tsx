@@ -27,25 +27,25 @@ export default function GoldLandingPage() {
             <h2 className="text-lg font-semibold">Recommended providers</h2>
             <ul className="list-disc space-y-2 pl-5 text-sm text-[var(--swimm-neutral-600)]">
               <li>
-                Twelve Data — time series for XAU/USD. Free tier, simple REST. <code>symbol=XAU/USD</code>.
+                Twelve Data - time series for XAU/USD. Free tier, simple REST. <code>symbol=XAU/USD</code>.
               </li>
               <li>
-                Alpha Vantage — FX/commodities via FX endpoints. Free keys, strict rate limits.
+                Alpha Vantage - FX/commodities via FX endpoints. Free keys, strict rate limits.
               </li>
               <li>
-                Finnhub — Metals and forex candles, generous developer plan.
+                Finnhub - Metals and forex candles, generous developer plan.
               </li>
               <li>
-                GoldAPI / MetalpriceAPI — purpose-built gold spot and historical, paid tiers.
+                GoldAPI / MetalpriceAPI - purpose-built gold spot and historical, paid tiers.
               </li>
             </ul>
             <p className="text-sm text-[var(--swimm-neutral-500)]">
-              Prefer another API? Share the docs — SWIMM can plug it in.
+              Prefer another API? Share the docs - SWIMM can plug it in.
             </p>
           </div>
 
           <div className="space-y-4 rounded-3xl border border-[var(--swimm-neutral-300)] bg-white p-6">
-            <h2 className="text-lg font-semibold">How we’ll integrate</h2>
+            <h2 className="text-lg font-semibold">How we&#39;ll integrate</h2>
             <ol className="list-decimal space-y-2 pl-5 text-sm text-[var(--swimm-neutral-600)]">
               <li>Set your provider key in env or Profile (coming for gold).</li>
               <li>Backend adds /api/market support for provider <code>gold</code> with XAUUSD candles.</li>
@@ -63,7 +63,7 @@ GOLD_API_KEY=your_key_here`}</pre>
         <section className="rounded-3xl border border-[var(--swimm-neutral-300)] bg-white p-6">
           <h2 className="text-lg font-semibold">Next step</h2>
           <p className="mt-2 text-sm text-[var(--swimm-neutral-600)]">
-            Tell me which provider you prefer. I’ll wire it so XAUUSD appears in the pair selector and works end-to-end in the agent.
+            Tell me which provider you prefer. I&#39;ll wire it so XAUUSD appears in the pair selector and works end-to-end in the agent.
           </p>
           <div className="mt-4 flex gap-3">
             <Link
