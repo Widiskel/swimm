@@ -14,6 +14,7 @@ const id = {
     tagline: "Soon you Will Make Money",
     logoAlt: "Lambang SWIMM",
     brandingAlt: "Logo SWIMM dengan teks",
+    goldLiveBadge: "Pasar XAU live",
     nav: {
       home: "Beranda",
       analysis: "Analisis",
@@ -774,6 +775,13 @@ const id = {
           description: "Ikuti entry, target, dan parameter risiko berbasis AI.",
         },
       ],
+    },
+    goldSpotlight: {
+      badge: "Sorotan Emas",
+      title: "Pasar XAU live",
+      description:
+        "Analisa emas spot (XAUUSD) dengan agent SWIMM yang sama — stream candlestick lalu hasilkan entry, target, stop, dan narasi.",
+      cta: "Buka analisa Emas",
     },
     footer: {
       copyright: "Soon you Will Make Money",

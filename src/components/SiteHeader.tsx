@@ -92,6 +92,14 @@ export function SiteHeader() {
               priority
             />
           </MotionLink>
+          <MotionLink
+            href="/analysis"
+            className="hidden items-center sm:inline-flex rounded-full border border-[var(--swimm-primary-500)] bg-[var(--swimm-primary-500)]/10 px-3 py-1 text-xs font-semibold text-[var(--swimm-primary-700)]"
+            whileHover={{ y: -2 }}
+            transition={{ type: "spring", stiffness: 280, damping: 20 }}
+          >
+            {header.goldLiveBadge}
+          </MotionLink>
         </div>
         <nav className="hidden items-center gap-6 text-sm text-[var(--swimm-neutral-500)] md:flex">
           {navItems.map((item) => (

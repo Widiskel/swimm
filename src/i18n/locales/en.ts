@@ -14,6 +14,7 @@ const en = {
     tagline: "Soon You Will Make Money",
     logoAlt: "SWIMM emblem",
     brandingAlt: "SWIMM wordmark",
+    goldLiveBadge: "Live XAU market",
     nav: {
       home: "Home",
       analysis: "Analysis",
@@ -791,6 +792,13 @@ const en = {
             "Follow AI-backed entries, targets, and risk parameters.",
         },
       ],
+    },
+    goldSpotlight: {
+      badge: "Gold Spotlight",
+      title: "Live XAU market",
+      description:
+        "Analyze spot gold (XAUUSD) with the same SWIMM agent — stream candles, then generate entries, targets, stops, and narrative.",
+      cta: "Open Gold analysis",
     },
     footer: {
       copyright: "Soon You Will Make Money",
