@@ -464,10 +464,27 @@ const parseTicker = (data: BinanceTicker24hResponse): BinanceMarketSummary => ({
   closeTime: new Date(data.closeTime).toISOString(),
 });
 
+const INTERVAL_MS_MAP: Record<string, number> = {
+  "1m": 60_000,
+  "5m": 5 * 60_000,
+  "15m": 15 * 60_000,
+  "1h": 60 * 60_000,
+  "4h": 4 * 60 * 60_000,
+  "1d": 24 * 60 * 60_000,
+};
+
+export type BinanceCandleQueryOptions = {
+  limit?: number;
+  startTime?: number;
+  endTime?: number;
+};
+
+const getIntervalMs = (value: string) => INTERVAL_MS_MAP[value] ?? INTERVAL_MS_MAP["1h"];
+
 export const fetchBinanceCandles = async (
   symbol: string = DEFAULT_SYMBOL,
   interval: string = "5m",
-  limit = 120,
+  options: BinanceCandleQueryOptions = {},
   auth?: BinanceRequestAuth,
   mode: MarketMode = "spot"
 ): Promise<BinanceCandle[]> => {
@@ -476,30 +493,94 @@ export const fetchBinanceCandles = async (
       mode === "futures" ? DEFAULT_FUTURES_SYMBOL : DEFAULT_SYMBOL;
     const resolvedSymbol = resolveSymbol(symbol || fallbackSymbol);
     const endpoint = mode === "futures" ? "/fapi/v1/klines" : "/api/v3/klines";
-    const response = await requestBinance(endpoint, {
-      auth,
-      mode,
-      searchParams: {
+    const intervalMs = getIntervalMs(interval);
+    const maxPerRequest = 1000;
+    const startTimeMs = options.startTime ?? null;
+    const endTimeMs = options.endTime ?? null;
+    const targetLimit = (() => {
+      if (options.limit && options.limit > 0) {
+        return options.limit;
+      }
+      if (startTimeMs !== null && endTimeMs !== null) {
+        const estimated = Math.ceil((endTimeMs - startTimeMs) / intervalMs) + 2;
+        return Math.max(estimated, 100);
+      }
+      if (startTimeMs !== null && endTimeMs === null) {
+        const estimated = Math.ceil((Date.now() - startTimeMs) / intervalMs) + 2;
+        return Math.max(estimated, 120);
+      }
+      return 120;
+    })();
+
+    const candles: BinanceCandle[] = [];
+    let nextStart = startTimeMs;
+    let safety = 0;
+
+    while (candles.length < targetLimit && safety < 20) {
+      safety += 1;
+      const remaining = targetLimit - candles.length;
+      const requestLimit = Math.min(Math.max(remaining, 1), maxPerRequest);
+      const searchParams: Record<string, string> = {
         symbol: resolvedSymbol,
         interval,
-        limit: String(limit),
-      },
-    });
+        limit: String(requestLimit),
+      };
+      if (nextStart !== null && Number.isFinite(nextStart)) {
+        searchParams.startTime = String(nextStart);
+      }
+      if (endTimeMs !== null && Number.isFinite(endTimeMs)) {
+        searchParams.endTime = String(endTimeMs);
+      }
 
-    if (!response.ok) {
-      throw new Error(`Binance API responded with ${response.status}`);
+      const response = await requestBinance(endpoint, {
+        auth,
+        mode,
+        searchParams,
+      });
+
+      if (!response.ok) {
+        throw new Error(`Binance API responded with ${response.status}`);
+      }
+
+      const payload = (await response.json()) as unknown[];
+      const batch = (payload as (readonly unknown[])[]).map((row) => ({
+        openTime: Number(row[0]),
+        open: Number.parseFloat(String(row[1])),
+        high: Number.parseFloat(String(row[2])),
+        low: Number.parseFloat(String(row[3])),
+        close: Number.parseFloat(String(row[4])),
+        volume: Number.parseFloat(String(row[5])),
+        closeTime: Number(row[6]),
+      }));
+
+      if (!batch.length) {
+        break;
+      }
+
+      candles.push(...batch);
+
+      if (nextStart === null || !Number.isFinite(nextStart)) {
+        break;
+      }
+
+      const last = batch[batch.length - 1];
+      const nextCandidate = last.closeTime + 1;
+      if (
+        (endTimeMs !== null && nextCandidate >= endTimeMs) ||
+        batch.length < requestLimit
+      ) {
+        break;
+      }
+      nextStart = nextCandidate;
     }
 
-    const payload = (await response.json()) as unknown[];
-    return (payload as (readonly unknown[])[]).map((row) => ({
-      openTime: Number(row[0]),
-      open: Number.parseFloat(String(row[1])),
-      high: Number.parseFloat(String(row[2])),
-      low: Number.parseFloat(String(row[3])),
-      close: Number.parseFloat(String(row[4])),
-      volume: Number.parseFloat(String(row[5])),
-      closeTime: Number(row[6]),
-    }));
+    const filtered = candles.filter((item) => {
+      const afterStart = startTimeMs === null || item.openTime >= startTimeMs;
+      const beforeEnd = endTimeMs === null || item.openTime <= endTimeMs;
+      return afterStart && beforeEnd;
+    });
+
+    return filtered.slice(-targetLimit);
   } catch (error) {
     console.error("Failed to fetch Binance candles", error);
     return [];

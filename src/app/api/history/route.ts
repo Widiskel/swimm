@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 
 import type { AgentResponse } from "@/features/analysis/types";
+import type {
+  HistorySnapshot,
+  HistorySnapshotCandle,
+  HistoryVerdict,
+} from "@/features/history/types";
 import { DEFAULT_PROVIDER, isCexProvider } from "@/features/market/exchanges";
 import {
   DEFAULT_MARKET_MODE,
@@ -13,9 +18,19 @@ import { getSessionFromCookie, toSessionResponse } from "@/lib/session";
 
 export const HISTORY_COLLECTION = "agent_history";
 export const MAX_FEEDBACK_LENGTH = 2000;
-export const ALLOWED_VERDICTS = new Set(["accurate", "inaccurate", "unknown"] as const);
+export const ALLOWED_VERDICTS = new Set<HistoryVerdict>([
+  "accurate",
+  "inaccurate",
+  "unknown",
+]);
 
-export type Verdict = "accurate" | "inaccurate" | "unknown";
+const SNAPSHOT_MAX_CANDLES = 240;
+
+type HistorySnapshotDocument = {
+  timeframe: string;
+  capturedAt: Date;
+  candles: HistorySnapshotCandle[];
+};
 
 export type HistoryDocument = {
   _id?: ObjectId;
@@ -28,9 +43,10 @@ export type HistoryDocument = {
   decision: AgentResponse["decision"] | null;
   summary: string;
   response: AgentResponse;
-  verdict: Verdict;
+  verdict: HistoryVerdict;
   feedback?: string | null;
   executed?: boolean | null;
+  snapshot?: HistorySnapshotDocument | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -46,9 +62,10 @@ export type HistoryResponseItem = {
   decision: AgentResponse["decision"] | null;
   summary: string;
   response: AgentResponse;
-  verdict: Verdict;
+  verdict: HistoryVerdict;
   feedback?: string | null;
   executed: boolean | null;
+  snapshot: HistorySnapshot | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -60,7 +77,9 @@ export const mapHistoryDoc = (
   doc: HistoryDocument,
   sessionData: ReturnType<typeof toSessionResponse>
 ): HistoryResponseItem => ({
-  id: doc._id ? doc._id.toHexString() : `${doc.sessionId}-${doc.createdAt.getTime()}`,
+  id: doc._id
+    ? doc._id.toHexString()
+    : `${doc.sessionId}-${doc.createdAt.getTime()}`,
   sessionId: doc.sessionId,
   session: sessionData,
   pair: doc.pair,
@@ -73,6 +92,13 @@ export const mapHistoryDoc = (
   verdict: doc.verdict,
   feedback: doc.feedback ?? null,
   executed: typeof doc.executed === "boolean" ? doc.executed : null,
+  snapshot: doc.snapshot
+    ? {
+        timeframe: doc.snapshot.timeframe,
+        capturedAt: doc.snapshot.capturedAt.toISOString(),
+        candles: doc.snapshot.candles,
+      }
+    : null,
   createdAt: doc.createdAt.toISOString(),
   updatedAt: doc.updatedAt.toISOString(),
 });
@@ -85,10 +111,82 @@ type SanitizedHistoryPayload =
       provider: string;
       mode: MarketMode;
       response: AgentResponse;
-      verdict: Verdict;
+      verdict: HistoryVerdict;
       feedback: string | null;
       executed: boolean | null;
+      snapshot: HistorySnapshotDocument | null;
     };
+
+const sanitizeSnapshot = (value: unknown): HistorySnapshotDocument | null => {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const { timeframe, capturedAt, candles } = value as {
+    timeframe?: unknown;
+    capturedAt?: unknown;
+    candles?: unknown;
+  };
+
+  if (!Array.isArray(candles) || candles.length === 0) {
+    return null;
+  }
+
+  const normalizedCandles: HistorySnapshotCandle[] = [];
+  for (const raw of candles.slice(-SNAPSHOT_MAX_CANDLES)) {
+    if (!raw || typeof raw !== "object") {
+      continue;
+    }
+    const { time, open, high, low, close } = raw as {
+      time?: unknown;
+      open?: unknown;
+      high?: unknown;
+      low?: unknown;
+      close?: unknown;
+    };
+    const timestamp = typeof time === "number" && Number.isFinite(time) ? Math.floor(time) : null;
+    const openValue = typeof open === "number" && Number.isFinite(open) ? Number(open.toFixed(2)) : null;
+    const highValue = typeof high === "number" && Number.isFinite(high) ? Number(high.toFixed(2)) : null;
+    const lowValue = typeof low === "number" && Number.isFinite(low) ? Number(low.toFixed(2)) : null;
+    const closeValue = typeof close === "number" && Number.isFinite(close) ? Number(close.toFixed(2)) : null;
+    if (
+      timestamp === null ||
+      openValue === null ||
+      highValue === null ||
+      lowValue === null ||
+      closeValue === null
+    ) {
+      continue;
+    }
+    normalizedCandles.push({
+      time: timestamp,
+      open: openValue,
+      high: highValue,
+      low: lowValue,
+      close: closeValue,
+    });
+  }
+
+  if (!normalizedCandles.length) {
+    return null;
+  }
+
+  const timeframeLabel = typeof timeframe === "string" && timeframe.trim().length > 0
+    ? timeframe.trim()
+    : "";
+  const capturedDate = typeof capturedAt === "string" || capturedAt instanceof Date
+    ? new Date(capturedAt)
+    : new Date(normalizedCandles[normalizedCandles.length - 1].time * 1000);
+  const capturedAtDate = Number.isNaN(capturedDate.getTime())
+    ? new Date(normalizedCandles[normalizedCandles.length - 1].time * 1000)
+    : capturedDate;
+
+  return {
+    timeframe: timeframeLabel,
+    capturedAt: capturedAtDate,
+    candles: normalizedCandles,
+  };
+};
 
 const sanitizePayload = (payload: unknown): SanitizedHistoryPayload => {
   if (!payload || typeof payload !== "object") {
@@ -104,6 +202,7 @@ const sanitizePayload = (payload: unknown): SanitizedHistoryPayload => {
     verdict,
     feedback,
     executed,
+    snapshot,
   } = payload as {
     pair?: string;
     timeframe?: string;
@@ -113,6 +212,7 @@ const sanitizePayload = (payload: unknown): SanitizedHistoryPayload => {
     verdict?: string;
     feedback?: string;
     executed?: unknown;
+    snapshot?: unknown;
   };
 
   if (!pair || typeof pair !== "string") {
@@ -124,22 +224,30 @@ const sanitizePayload = (payload: unknown): SanitizedHistoryPayload => {
   if (!response || typeof response !== "object") {
     return { error: "Agent response is required." };
   }
-  const normalizedProvider = isCexProvider(provider ?? null) ? provider! : DEFAULT_PROVIDER;
-  const normalizedMode = isMarketMode(mode ?? null) ? (mode as MarketMode) : DEFAULT_MARKET_MODE;
-  const normalizedVerdict = ALLOWED_VERDICTS.has((verdict ?? "unknown") as Verdict)
-    ? ((verdict ?? "unknown") as Verdict)
+  const normalizedProvider = isCexProvider(provider ?? null)
+    ? provider!
+    : DEFAULT_PROVIDER;
+  const normalizedMode = isMarketMode(mode ?? null)
+    ? (mode as MarketMode)
+    : DEFAULT_MARKET_MODE;
+  const normalizedVerdict = ALLOWED_VERDICTS.has(
+    (verdict ?? "unknown") as HistoryVerdict
+  )
+    ? ((verdict ?? "unknown") as HistoryVerdict)
     : "unknown";
-  const sanitizedFeedback = feedback?.toString().slice(0, MAX_FEEDBACK_LENGTH) ?? null;
+  const sanitizedFeedback =
+    feedback?.toString().slice(0, MAX_FEEDBACK_LENGTH) ?? null;
   const normalizedExecuted =
     typeof executed === "boolean"
       ? executed
       : typeof executed === "string"
       ? executed.toLowerCase() === "true"
-        ? true
-        : executed.toLowerCase() === "false"
-        ? false
-        : null
+      ? true
+      : executed.toLowerCase() === "false"
+      ? false
+      : null
       : null;
+  const normalizedSnapshot = sanitizeSnapshot(snapshot);
 
   return {
     pair: pair.trim().toUpperCase(),
@@ -150,6 +258,7 @@ const sanitizePayload = (payload: unknown): SanitizedHistoryPayload => {
     verdict: normalizedVerdict,
     feedback: sanitizedFeedback,
     executed: normalizedExecuted,
+    snapshot: normalizedSnapshot,
   };
 };
 
@@ -191,7 +300,9 @@ export async function POST(request: NextRequest) {
       return buildError(validated.error);
     }
 
-    const decisionAction = (validated.response.decision?.action ?? "").toLowerCase();
+    const decisionAction = (
+      validated.response.decision?.action ?? ""
+    ).toLowerCase();
     if (decisionAction !== "buy" && decisionAction !== "sell") {
       return buildError("Only buy or sell signals can be saved.", 422);
     }
@@ -213,6 +324,7 @@ export async function POST(request: NextRequest) {
       verdict: validated.verdict,
       feedback: validated.feedback,
       executed: validated.executed ?? null,
+      snapshot: validated.snapshot,
       createdAt: now,
       updatedAt: now,
     };
@@ -224,7 +336,10 @@ export async function POST(request: NextRequest) {
     };
 
     const sessionData = toSessionResponse(session);
-    return NextResponse.json({ entry: mapHistoryDoc(stored, sessionData) }, { status: 201 });
+    return NextResponse.json(
+      { entry: mapHistoryDoc(stored, sessionData) },
+      { status: 201 }
+    );
   } catch (error) {
     console.error("Failed to save history entry", error);
     return buildError("Unable to save history entry.", 500);

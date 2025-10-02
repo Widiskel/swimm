@@ -32,7 +32,7 @@ import {
 } from "@/features/market/constants";
 import type { CexProvider } from "@/features/market/exchanges";
 import type { IndicatorKey, OverlayLevel } from "@/features/market/types";
-import { useHistory, type HistoryVerdict } from "@/providers/history-provider";
+import { useHistory, type HistorySnapshot, type HistoryVerdict } from "@/providers/history-provider";
 import { useLanguage } from "@/providers/language-provider";
 import { useSession } from "@/providers/session-provider";
 
@@ -43,12 +43,86 @@ type TradingPair = {
   label: string;
 };
 
+const MAX_SNAPSHOT_CANDLES = 220;
+
 const buildInitialIndicatorVisibility = () => {
   const initial: Record<IndicatorKey, boolean> = {} as Record<IndicatorKey, boolean>;
   for (const item of INDICATOR_CONFIG) {
     initial[item.key] = item.defaultVisible;
   }
   return initial;
+};
+
+const toUnixSeconds = (time: CandlestickData["time"]): number | null => {
+  if (typeof time === "number" && Number.isFinite(time)) {
+    return Math.floor(time);
+  }
+  if (typeof time === "string") {
+    const parsed = Number.parseFloat(time);
+    return Number.isFinite(parsed) ? Math.floor(parsed) : null;
+  }
+  if (typeof time === "object" && time) {
+    if ("timestamp" in time && typeof time.timestamp === "number") {
+      return Math.floor(time.timestamp);
+    }
+    if ("year" in time && "month" in time && "day" in time) {
+      const year = Number((time as { year: number }).year);
+      const month = Number((time as { month: number }).month);
+      const day = Number((time as { day: number }).day);
+      if ([year, month, day].every((value) => Number.isFinite(value))) {
+        return Math.floor(new Date(year, month - 1, day).getTime() / 1000);
+      }
+    }
+  }
+  return null;
+};
+
+const buildSnapshotPayload = (
+  candles: CandlestickData[],
+  timeframe: string
+): HistorySnapshot | null => {
+  if (!candles.length) {
+    return null;
+  }
+
+  const limitedCandles = candles.slice(-MAX_SNAPSHOT_CANDLES);
+  const sanitized = limitedCandles
+    .map((candle) => {
+      const timestamp = toUnixSeconds(candle.time);
+      if (timestamp === null) {
+        return null;
+      }
+      const open = Number(candle.open);
+      const high = Number(candle.high);
+      const low = Number(candle.low);
+      const close = Number(candle.close);
+      if ([open, high, low, close].every((value) => Number.isFinite(value))) {
+        return {
+          time: timestamp,
+          open: Number(open.toFixed(2)),
+          high: Number(high.toFixed(2)),
+          low: Number(low.toFixed(2)),
+          close: Number(close.toFixed(2)),
+        };
+      }
+      return null;
+    })
+    .filter((item): item is NonNullable<typeof item> => Boolean(item));
+
+  if (!sanitized.length) {
+    return null;
+  }
+
+  const last = sanitized[sanitized.length - 1];
+  const capturedAt = Number.isFinite(last.time)
+    ? new Date(last.time * 1000).toISOString()
+    : new Date().toISOString();
+
+  return {
+    timeframe,
+    capturedAt,
+    candles: sanitized,
+  };
 };
 
 export default function AnalysisPage() {
@@ -299,6 +373,7 @@ export default function AnalysisPage() {
     setSaveError(null);
 
     try {
+      const snapshot = buildSnapshotPayload(analysisCandles, timeframe);
       await saveEntry({
         pair: selectedPair,
         timeframe,
@@ -307,6 +382,7 @@ export default function AnalysisPage() {
         response,
         verdict: "unknown" as HistoryVerdict,
         feedback: saveFeedback.trim() || undefined,
+        snapshot,
       });
       setSaveStatus("success");
     } catch (saveException) {

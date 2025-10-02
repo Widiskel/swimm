@@ -14,6 +14,7 @@ import {
   type IChartApi,
   type IPriceLine,
   type ISeriesApi,
+  type SeriesMarker,
   type Time,
   type UTCTimestamp,
 } from "lightweight-charts";
@@ -46,7 +47,7 @@ type OverlayZone = {
   border: string;
 };
 
-const mapTimeframeToSeconds = (value: string) => {
+export const mapTimeframeToSeconds = (value: string) => {
   const normalized = value.trim().toLowerCase();
   const map: Record<string, number> = {
     "1m": 60,
@@ -133,6 +134,14 @@ type AnalysisSectionProps = {
     | RefObject<HTMLElement>
     | MutableRefObject<HTMLElement | null>
     | null;
+  analysisMarkers?: SeriesMarker<Time>[];
+  analysisCandleDetails?: {
+    time: number;
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+  } | null;
 };
 
 const MotionSection = motion.section;
@@ -163,8 +172,10 @@ export function AnalysisSection({
   saveStatus,
   saveError,
   sectionRef,
+  analysisMarkers = [],
+  analysisCandleDetails = null,
 }: AnalysisSectionProps) {
-  const { messages, __ } = useLanguage();
+  const { messages, __, languageTag } = useLanguage();
   const analysisCopy = messages.analysis;
   const fallbackCopy = messages.analysisFallback;
   const saveCopy = analysisCopy.savePanel;
@@ -198,6 +209,19 @@ export function AnalysisSection({
   const overlayPriceLinesRef = useRef<IPriceLine[]>([]);
   const [snapshotReady, setSnapshotReady] = useState(false);
   const overlayCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const ohlcTimeFormatterRef = useRef<
+    Intl.DateTimeFormat |
+    null
+  >(null);
+  if (!ohlcTimeFormatterRef.current) {
+    ohlcTimeFormatterRef.current = new Intl.DateTimeFormat(languageTag, {
+      year: "numeric",
+      month: "short",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
 
   useEffect(() => {
     if (!response || !analysisCandles.length) {
@@ -268,6 +292,7 @@ export function AnalysisSection({
 
     const limitedCandles = analysisCandles.slice(-SNAPSHOT_LIMIT);
     candleSeries.setData(limitedCandles);
+    candleSeries.setMarkers(analysisMarkers ?? []);
 
     const timeframeSeconds = mapTimeframeToSeconds(timeframe);
     const entryPrices = entryZoneValues.length ? entryZoneValues : [];
@@ -484,6 +509,7 @@ export function AnalysisSection({
     tradeStopLoss,
     timeframe,
     formatPrice,
+    analysisMarkers,
   ]);
 
   if (!response) {
@@ -552,20 +578,52 @@ export function AnalysisSection({
             {analysisCopy.snapshot.description}
           </p>
           <div className="relative mt-4 h-64 w-full overflow-hidden rounded-2xl border border-[var(--swimm-neutral-300)] bg-white">
-          <div
-            ref={chartContainerRef}
-            className="h-full w-full"
-          />
-          <canvas
-            ref={overlayCanvasRef}
-            className="pointer-events-none absolute inset-0"
-          />
-          {!snapshotReady && (
-            <div className="absolute inset-0 flex items-center justify-center text-xs text-[var(--swimm-neutral-300)]">
-              {analysisCopy.snapshot.placeholder}
-            </div>
-          )}
+            <div ref={chartContainerRef} className="h-full w-full" />
+            <canvas ref={overlayCanvasRef} className="pointer-events-none absolute inset-0" />
+            {!snapshotReady && (
+              <div className="absolute inset-0 flex items-center justify-center text-xs text-[var(--swimm-neutral-300)]">
+                {analysisCopy.snapshot.placeholder}
+              </div>
+            )}
           </div>
+          {analysisCandleDetails ? (
+            <div className="mt-4 grid gap-3 rounded-2xl border border-[var(--swimm-neutral-200)] bg-[var(--swimm-neutral-50)] px-4 py-3 text-xs text-[var(--swimm-neutral-600)] sm:grid-cols-6">
+              <div className="sm:col-span-2">
+                <div className="text-[10px] uppercase tracking-[0.2em] text-[var(--swimm-neutral-400)]">
+                  {analysisCopy.snapshot.ohlcCapturedAt}
+                </div>
+                <div className="mt-1 font-semibold text-[var(--swimm-navy-900)]">
+                  {ohlcTimeFormatterRef.current?.format(
+                    new Date(analysisCandleDetails.time * 1000)
+                  )}
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase tracking-[0.2em] text-[var(--swimm-neutral-400)]">
+                  {analysisCopy.snapshot.ohlcOpen}
+                </div>
+                <div className="mt-1 font-semibold">{formatPrice(analysisCandleDetails.open)}</div>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase tracking-[0.2em] text-[var(--swimm-neutral-400)]">
+                  {analysisCopy.snapshot.ohlcHigh}
+                </div>
+                <div className="mt-1 font-semibold">{formatPrice(analysisCandleDetails.high)}</div>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase tracking-[0.2em] text-[var(--swimm-neutral-400)]">
+                  {analysisCopy.snapshot.ohlcLow}
+                </div>
+                <div className="mt-1 font-semibold">{formatPrice(analysisCandleDetails.low)}</div>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase tracking-[0.2em] text-[var(--swimm-neutral-400)]">
+                  {analysisCopy.snapshot.ohlcClose}
+                </div>
+                <div className="mt-1 font-semibold">{formatPrice(analysisCandleDetails.close)}</div>
+              </div>
+            </div>
+          ) : null}
           <div className="mt-3 flex flex-wrap items-center gap-3 text-[11px] text-[var(--swimm-neutral-300)]">
             <span className="rounded-full border border-[var(--swimm-primary-500)]/40 px-2 py-1 text-[var(--swimm-primary-700)]">
               {analysisCopy.snapshot.legendEntry}

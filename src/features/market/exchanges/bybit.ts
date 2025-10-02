@@ -246,7 +246,11 @@ const intervalToMs = (interval: string): number => {
 export const fetchBybitCandles = async (
   symbol: string,
   interval: string,
-  limit: number,
+  options: {
+    limit?: number;
+    startTime?: number;
+    endTime?: number;
+  } = {},
   auth?: BybitRequestAuth,
   mode: MarketMode = "spot"
 ): Promise<MarketCandle[]> => {
@@ -258,7 +262,32 @@ export const fetchBybitCandles = async (
     url.searchParams.set("category", mode === "futures" ? "linear" : "spot");
     url.searchParams.set("symbol", resolvedSymbol);
     url.searchParams.set("interval", bybitInterval);
-    url.searchParams.set("limit", String(Math.min(Math.max(limit, 1), 1000)));
+    const intervalMs = intervalToMs(bybitInterval);
+    const startTime = options.startTime ?? null;
+    const endTime = options.endTime ?? null;
+    const targetLimit = (() => {
+      if (options.limit && options.limit > 0) {
+        return options.limit;
+      }
+      if (startTime !== null && endTime !== null) {
+        const estimated = Math.ceil((endTime - startTime) / intervalMs) + 2;
+        return Math.max(estimated, 100);
+      }
+      if (startTime !== null) {
+        const estimated = Math.ceil((Date.now() - startTime) / intervalMs) + 2;
+        return Math.max(estimated, 120);
+      }
+      return 120;
+    })();
+
+    let requestLimit = Math.min(Math.max(targetLimit, 1), 1000);
+    url.searchParams.set("limit", String(requestLimit));
+    if (startTime !== null) {
+      url.searchParams.set("start", String(Math.floor(startTime / 1000)));
+    }
+    if (endTime !== null) {
+      url.searchParams.set("end", String(Math.floor(endTime / 1000)));
+    }
 
     const response = await fetch(url, {
       method: "GET",
@@ -299,7 +328,102 @@ export const fetchBybitCandles = async (
       .filter((item): item is MarketCandle => Boolean(item))
       .sort((a, b) => a.openTime - b.openTime);
 
-    return candles;
+    const filtered = candles.filter((item) => {
+      const matchesStart = startTime === null || item.openTime >= startTime;
+      const matchesEnd = endTime === null || item.openTime <= endTime;
+      return matchesStart && matchesEnd;
+    });
+
+    if (filtered.length >= targetLimit) {
+      return filtered.slice(-targetLimit);
+    }
+
+    // If Bybit returned fewer candles than expected and we still have range to cover,
+    // attempt additional paginated fetches.
+    if (startTime !== null && filtered.length < targetLimit) {
+      let combined = [...filtered];
+      let nextStart =
+        combined.length > 0
+          ? combined[combined.length - 1].closeTime + 1
+          : startTime;
+      let safety = 0;
+
+      while (
+        combined.length < targetLimit &&
+        endTime !== null &&
+        nextStart < endTime &&
+        safety < 10
+      ) {
+        safety += 1;
+        requestLimit = Math.min(1000, targetLimit - combined.length);
+        const pagedUrl = new URL("/v5/market/kline", BYBIT_REST_URL);
+        pagedUrl.searchParams.set("category", mode === "futures" ? "linear" : "spot");
+        pagedUrl.searchParams.set("symbol", resolvedSymbol);
+        pagedUrl.searchParams.set("interval", bybitInterval);
+        pagedUrl.searchParams.set("limit", String(requestLimit));
+        pagedUrl.searchParams.set("start", String(Math.floor(nextStart / 1000)));
+        pagedUrl.searchParams.set("end", String(Math.floor(endTime / 1000)));
+
+        const pageResponse = await fetch(pagedUrl, {
+          method: "GET",
+          headers: withHeaders(auth),
+          cache: "no-store",
+        });
+
+        if (!pageResponse.ok) {
+          break;
+        }
+
+        const pagePayload = (await pageResponse.json()) as BybitKlineResponse;
+        const pageList = pagePayload.result?.list ?? [];
+        const pageCandles = pageList
+          .map((entry) => {
+            const [openTime, open, high, low, close, volume] = entry;
+            const parsedOpen = Number.parseFloat(open ?? "0");
+            const parsedHigh = Number.parseFloat(high ?? "0");
+            const parsedLow = Number.parseFloat(low ?? "0");
+            const parsedClose = Number.parseFloat(close ?? "0");
+            const parsedVolume = Number.parseFloat(volume ?? "0");
+            const start = Number.parseInt(openTime ?? "0", 10);
+            if (!Number.isFinite(start)) {
+              return null;
+            }
+            return {
+              openTime: start,
+              open: parsedOpen,
+              high: parsedHigh,
+              low: parsedLow,
+              close: parsedClose,
+              volume: parsedVolume,
+              closeTime: start + duration,
+            } satisfies MarketCandle;
+          })
+          .filter((item): item is MarketCandle => Boolean(item))
+          .sort((a, b) => a.openTime - b.openTime);
+
+        if (!pageCandles.length) {
+          break;
+        }
+
+        for (const candle of pageCandles) {
+          if (
+            (startTime === null || candle.openTime >= startTime) &&
+            (endTime === null || candle.openTime <= endTime)
+          ) {
+            combined.push(candle);
+          }
+        }
+
+        nextStart = pageCandles[pageCandles.length - 1].closeTime + 1;
+      }
+
+      combined = combined
+        .sort((a, b) => a.openTime - b.openTime)
+        .slice(-targetLimit);
+      return combined;
+    }
+
+    return filtered;
   } catch (error) {
     console.error("Failed to fetch Bybit candles", error);
     return [];
@@ -482,4 +606,3 @@ export const formatBybitSummary = (
 };
 
 export const mapTimeframeToBybitIntervalSymbol = mapTimeframeToBybitInterval;
-

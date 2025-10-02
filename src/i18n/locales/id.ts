@@ -132,6 +132,176 @@ const id = {
       loadPairs: "Gagal memuat daftar pair dari provider.",
     },
   },
+  agentApi: {
+    history: {
+      header: "Riwayat personal ({pair}, {timeframe})",
+      savedPlans: "Total riwayat tersimpan: {total} (Buy: {buy} | Sell: {sell})",
+      verdictSummary: "Verdict — Akurat: {accurate}, Melenceng: {inaccurate}, Pending: {pending}",
+      successRate: "Rasio keberhasilan: {value}",
+      successRatePending: "Rasio keberhasilan: Belum cukup data",
+      feedbackMissing: "(tanpa catatan)",
+      verdict: {
+        accurate: "Akurat",
+        inaccurate: "Melenceng",
+        unknown: "Pending",
+      },
+    },
+    marketAnalytics: {
+      missingNarrative: "Data candle tidak tersedia.",
+      missingForecast: "Tidak dapat melakukan forecasting tanpa data harga.",
+      bullishSma: "Sinyal bullish: SMA cepat berada di atas SMA lambat.",
+      bearishSma: "Sinyal bearish: SMA cepat berada di bawah SMA lambat.",
+      volatilityLabel: "Volatilitas {timeframe}",
+      priceRangeLabel: "Rentang harga",
+      sessionChangeLabel: "Perubahan sejak awal sesi",
+      atrLine: "ATR(14): {value} ({percent}% dari harga)",
+      volatilityBucket: {
+        low: "Rezim volatilitas: rendah (rentang sempit).",
+        medium: "Rezim volatilitas: medium (arah dua sisi seimbang).",
+        high: "Rezim volatilitas: tinggi (waspadai ayunan lebar).",
+        unknown: "Rezim volatilitas: tidak diketahui (data kurang).",
+      },
+      volatilityBucketName: {
+        low: "rendah",
+        medium: "moderat",
+        high: "tinggi",
+        unknown: "tidak diketahui",
+      },
+      smaRelation: {
+        above: "Crossover bullish (SMA cepat di atas SMA lambat).",
+        below: "Crossover bearish (SMA cepat di bawah SMA lambat).",
+        flat: "Crossover datar/tidak tegas.",
+      },
+      momentum: {
+        bullish: "bullish",
+        bearish: "bearish",
+        neutral: "netral",
+      },
+      chartNarrative:
+        "Harga timeframe {timeframe} bergerak {momentum} dengan penutupan terakhir {price} USDT.",
+      forecast: {
+        positive:
+          "Momentum positif mendominasi; waspadai konsolidasi sebelum kelanjutan tren.",
+        negative:
+          "Tekanan jual masih terasa; butuh katalis positif untuk reversal.",
+        flat: "Pergerakan datar; tunggu breakout untuk konfirmasi arah berikutnya.",
+      },
+      focus: {
+        bullishBreakout:
+          "Perlakukan pergerakan sebagai breakout bullish; siapkan skenario lanjutan dengan batas invalidasi di resistance sebelumnya.",
+        bearishBreakout:
+          "Tekanan bearish menandakan breakdown; susun rencana short lanjutan sambil memantau area reclaim.",
+        momentumLong:
+          "Momentum condong ke sisi long; incar pullback ke moving average sebelum melanjutkan posisi.",
+        momentumShort:
+          "Momentum condong ke sisi short; tunggu relief bounce untuk dijual dengan fokus ke support terdekat.",
+        rangePlay:
+          "Harga masih sideway; eksekusi mean reversion dengan risiko ketat sampai volatilitas meningkat.",
+      },
+      keyMetrics: {
+        close: "Penutupan terakhir: {value} USDT",
+        change: "Perubahan sesi: {value}%",
+        smaSignal: "Sinyal SMA: {value}",
+        atr: "ATR(14): {value} ({percent}% dari harga)",
+        volatility: "Rezim volatilitas: {value}",
+      },
+    },
+    fundamentals: {
+      priceUnavailable: "Harga terakhir tidak tersedia.",
+      changeUnavailable: "Perubahan harga 24 jam belum dihitung.",
+      macroReminder:
+        "Selaraskan strategi {timeframe} dengan konteks makro dan on-chain sebelum eksekusi.",
+    },
+    userPrompt: {
+      placeholders: {
+        urls: "(Tidak ada URL yang diberikan)",
+        dataset: "(Tidak ada dataset yang diunggah)",
+        manual: "(Tidak ada catatan manual)",
+        technical: "(Tidak ada ringkasan teknikal)",
+        tavilySummary: "(Tidak ada ringkasan Tavily)",
+        tavilyResults: "(Tidak ada hasil pencarian Tavily)",
+        tavilyArticles: "(Tidak ada konten Tavily yang diekstrak)",
+        promptSeries: "(Data candle tidak tersedia)",
+        history: "(Belum ada riwayat pengguna untuk pair ini)",
+        unknownDataset: "Tidak diketahui",
+        datasetPreviewLabel: "Isi (dipangkas)",
+        keyMetrics: "(Metrik kunci belum tersedia)",
+        analysisFocus: "(Belum ada fokus analisa)",
+      },
+      datasetNameLabel: "Nama dataset",
+      tavily: {
+        urlLabel: "URL",
+        publishedLabel: "Tanggal",
+        summaryLabel: "Ringkasan",
+        excerptLabel: "Kutipan",
+        rawExcerptLabel: "Kutipan (raw)",
+      },
+      dataMode: {
+        scrape: "Scrape URL berita",
+        upload: "Unggah dataset",
+        manual: "Catatan manual",
+      },
+      labels: {
+        objective: "Tujuan analisa",
+        dataMode: "Mode sumber data aktif",
+        urls: "Daftar URL berita",
+        manual: "Catatan manual",
+        dataset: "Dataset kustom",
+        history: "Riwayat pengguna",
+        pair: "Pair yang dianalisis",
+        timeframe: "Timeframe target",
+        summary: "Snapshot data pasar untuk {pair}",
+        keyMetrics: "Metrik kunci",
+        analysisFocus: "Fokus analisa",
+        narrative: "Narasi harga",
+        forecast: "Forecast internal",
+        promptSeries: "Data candle (ISO|O/H/L/C/V)",
+        technical: "Ringkasan teknikal",
+        tavilySummary: "Ringkasan Tavily",
+        tavilyResults: "Hasil pencarian Tavily",
+        tavilyArticles: "Konten Tavily",
+        instructions: "Instruksi",
+      },
+      instructions:
+        "Lakukan analisa sentimen, berita, dan pasar untuk {pair}; tampilkan insight yang dapat dieksekusi.\nSajikan skenario harga dasar, bullish, dan bearish untuk {pair} pada timeframe {timeframe}.\nLengkapi catatan teknikal & fundamental serta rencana eksekusi yang memperhatikan risiko (entry, target, stop, sizing).\nBalas hanya dalam format JSON menggunakan Bahasa Indonesia yang alami.",
+    },
+    tradePlan: {
+      holdSizingNotes:
+        "Tidak ada rencana eksekusi. Tunggu konfirmasi tambahan sebelum membuka posisi.",
+      holdRationale:
+        "Momentum belum jelas. Evaluasi ulang setelah harga menembus area kunci.",
+      sizingNotes: {
+        long: "Risiko per posisi disarankan ≤ 2% dari ekuitas; bangun posisi secara bertahap.",
+        short: "Pastikan modal siap untuk short dan gunakan ukuran posisi konservatif.",
+        neutral: "Tahan eksekusi sampai sinyal tambahan mengkonfirmasi arah.",
+      },
+      rationaleFallback:
+        "Validasi setup trading dengan order flow dan berita makro sebelum eksekusi.",
+    },
+    payload: {
+      rationaleMissing:
+        "Model tidak memberikan rasionalisasi. Tambahkan detail objektif untuk analisa lanjutan.",
+      summaryMissing:
+        "Analisa tidak berhasil dibuat. Coba jalankan ulang agent dengan data yang lebih lengkap.",
+      nextStepsDefault:
+        "Validasi rencana trading dengan chart real-time dan order book.\nPerbarui konteks berita atau makro, lalu jalankan ulang agent bila perlu.",
+    },
+    systemPrompt: {
+      languageReminder: "All strings must be written in natural Indonesian.",
+      coreGuidelines:
+        "- Kaitkan setiap kesimpulan dengan data pasar dan berita yang diberikan.\n- Gunakan angka asli untuk nilai numerik (confidence 0-1) dan jangan membuat data yang bertentangan dengan input.\n- Jika data kurang, jelaskan keterbatasannya alih-alih menebak level atau katalis.",
+      example:
+        "Contoh JSON:\n{\n  \"summary\": \"Harga bertahan di area tengah setelah reli 2%; likuiditas menumpuk dekat 68k.\",\n  \"decision\": {\n    \"action\": \"hold\",\n    \"confidence\": 0.48,\n    \"timeframe\": \"4H\",\n    \"rationale\": \"Momentum melambat dan order flow campuran; tunggu break range sebelum menambah risiko.\"\n  },\n  \"market\": {\n    \"pair\": \"BTCUSDT\",\n    \"chart\": {\n      \"interval\": \"5m\",\n      \"points\": [],\n      \"narrative\": \"Candle jangka pendek membentuk higher low, tetapi volume menipis.\",\n      \"forecast\": \"Kemungkinan masih konsolidasi kecuali buyer menyerap offer di atas 68.5k.\"\n    },\n    \"technical\": [\"SMA7 berada di atas SMA21\"],\n    \"fundamental\": [\"Volume 24 jam kembali normal; belum ada katalis berita besar.\"]\n  },\n  \"tradePlan\": {\n    \"bias\": \"neutral\",\n    \"entries\": [],\n    \"entry\": null,\n    \"stopLoss\": null,\n    \"takeProfits\": [],\n    \"executionWindow\": \"-\",\n    \"sizingNotes\": \"Risiko <=2% sampai breakout mengonfirmasi arah.\",\n    \"rationale\": \"Tunggu konfirmasi breakout atau katalis makro baru sebelum menambah posisi.\"\n  },\n  \"highlights\": [\"Order book menunjukkan offer menumpuk dekat 68.5k\"],\n  \"nextSteps\": [\"Pantau arus ETF setelah pembukaan sesi New York\"]\n}",
+    },
+    errors: {
+      invalidJson: "Payload JSON tidak valid",
+      objectiveRequired: "Tujuan analisa wajib diisi.",
+      missingApiKey: "Sentient Models API key belum dikonfigurasi.",
+      missingContent: "Sentient Models API tidak mengembalikan konten.",
+      timeout: "Permintaan ke Sentient Models melewati batas waktu.",
+      generic: "Integrasi Sentient Models gagal.",
+    },
+  },
   analysis: {
     heading: "Analisa agent untuk {pair} ({timeframe})",
     confidence: "Kepercayaan {value}% - Aksi {action}",
@@ -144,6 +314,11 @@ const id = {
       legendTarget: "Target",
       legendStop: "Stop",
       placeholder: "Chart snapshot akan muncul setelah analisa selesai.",
+      ohlcCapturedAt: "Diambil pada",
+      ohlcOpen: "Open",
+      ohlcHigh: "High",
+      ohlcLow: "Low",
+      ohlcClose: "Close",
     },
     chartInsight: {
       title: "Highlight chart",

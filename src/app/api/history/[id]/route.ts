@@ -8,8 +8,8 @@ import {
   buildError,
   mapHistoryDoc,
   type HistoryDocument,
-  type Verdict,
 } from "../route";
+import type { HistoryVerdict } from "@/features/history/types";
 import { getMongoDb } from "@/lib/mongodb";
 import { getSessionFromCookie, toSessionResponse } from "@/lib/session";
 
@@ -106,13 +106,13 @@ const findMatchingDocument = async (
   return null;
 };
 
-const sanitizeVerdict = (input: unknown): Verdict | undefined => {
+const sanitizeVerdict = (input: unknown): HistoryVerdict | undefined => {
   if (typeof input !== "string") {
     return undefined;
   }
   const lower = input.toLowerCase();
-  return ALLOWED_VERDICTS.has(lower as Verdict)
-    ? (lower as Verdict)
+  return ALLOWED_VERDICTS.has(lower as HistoryVerdict)
+    ? (lower as HistoryVerdict)
     : undefined;
 };
 

@@ -30,8 +30,8 @@ import {
 import { getMongoDb } from "@/lib/mongodb";
 import { getSessionFromCookie } from "@/lib/session";
 import { getUserSettings } from "@/lib/user-settings";
-import { isLocale, type Locale } from "@/i18n/messages";
-import { translate } from "@/i18n/translate";
+import { getLanguageTag, isLocale, type Locale } from "@/i18n/messages";
+import { translate, type Replacements } from "@/i18n/translate";
 import type { AgentResponse } from "@/features/analysis/types";
 
 type DataMode = "scrape" | "upload" | "manual";
@@ -108,6 +108,9 @@ const DEFAULT_FIREWORKS_MODEL =
 const ALLOWED_TIMEFRAMES = ["1m", "5m", "15m", "1h", "4h", "1d"] as const;
 type Timeframe = (typeof ALLOWED_TIMEFRAMES)[number];
 const DEFAULT_TIMEFRAME: Timeframe = "5m";
+
+const tAgent = (locale: Locale, path: string, replacements?: Replacements) =>
+  translate(locale, `agentApi.${path}`, replacements);
 
 const CEX_INTERVAL_MAP: Record<Timeframe, string> = {
   "1m": "1m",
@@ -214,6 +217,23 @@ const calculateVolatility = (values: number[]) => {
   return Math.sqrt(variance);
 };
 
+const calculateATR = (candles: BinanceCandle[], period = 14) => {
+  if (candles.length <= period) {
+    return null;
+  }
+  let total = 0;
+  for (let index = candles.length - period; index < candles.length; index += 1) {
+    const current = candles[index];
+    const previous = candles[index - 1];
+    const highLow = current.high - current.low;
+    const highClose = Math.abs(current.high - previous.close);
+    const lowClose = Math.abs(current.low - previous.close);
+    const trueRange = Math.max(highLow, highClose, lowClose);
+    total += trueRange;
+  }
+  return total / period;
+};
+
 const HISTORY_COLLECTION = "agent_history";
 const HISTORY_SAMPLE_LIMIT = 8;
 type HistoryVerdict = "accurate" | "inaccurate" | "unknown";
@@ -262,8 +282,7 @@ const buildHistoryInsightsForPrompt = async (
     }
 
     const normalizedPair = formatPairLabel(pair);
-    const isId = locale === "id";
-    const dateFormatter = new Intl.DateTimeFormat(locale === "id" ? "id-ID" : "en-US", {
+    const dateFormatter = new Intl.DateTimeFormat(getLanguageTag(locale), {
       year: "numeric",
       month: "short",
       day: "2-digit",
@@ -282,27 +301,23 @@ const buildHistoryInsightsForPrompt = async (
     const successRate = observed > 0 ? Math.round((verdictCounts.accurate / observed) * 100) : null;
 
     const summaryLines = [
-      isId
-        ? `Total riwayat tersimpan: ${docs.length} (Buy: ${buyCount} | Sell: ${sellCount})`
-        : `Saved plans: ${docs.length} (Buy: ${buyCount} | Sell: ${sellCount})`,
-      isId
-        ? `Verdict ? Akurat: ${verdictCounts.accurate}, Missed: ${verdictCounts.inaccurate}, Pending: ${verdictCounts.unknown}`
-        : `Verdicts ? Accurate: ${verdictCounts.accurate}, Missed: ${verdictCounts.inaccurate}, Pending: ${verdictCounts.unknown}`,
-      isId
-        ? `Rasio keberhasilan: ${successRate !== null ? `${successRate}%` : "Belum cukup data"}`
-        : `Success rate: ${successRate !== null ? `${successRate}%` : "Not enough data"}`,
+      tAgent(locale, "history.savedPlans", {
+        total: docs.length,
+        buy: buyCount,
+        sell: sellCount,
+      }),
+      tAgent(locale, "history.verdictSummary", {
+        accurate: verdictCounts.accurate,
+        inaccurate: verdictCounts.inaccurate,
+        pending: verdictCounts.unknown,
+      }),
+      successRate !== null
+        ? tAgent(locale, "history.successRate", { value: `${successRate}%` })
+        : tAgent(locale, "history.successRatePending"),
     ];
 
-    const verdictLabel = (value: HistoryVerdict) => {
-      switch (value) {
-        case "accurate":
-          return isId ? "Akurat" : "Accurate";
-        case "inaccurate":
-          return isId ? "Missed" : "Missed";
-        default:
-          return isId ? "Pending" : "Pending";
-      }
-    };
+    const verdictLabel = (value: HistoryVerdict) =>
+      tAgent(locale, `history.verdict.${value}`);
 
     const entryLines = docs.map((doc) => {
       const action = (doc.decision?.action ?? doc.response.decision?.action ?? "").toUpperCase() || "-";
@@ -312,15 +327,14 @@ const buildHistoryInsightsForPrompt = async (
       const verdict = verdictLabel(doc.verdict);
       const feedbackSnippet = doc.feedback?.trim()
         ? excerpt(doc.feedback.trim(), 140)
-        : isId
-        ? "(tanpa catatan)"
-        : "(no feedback)";
+        : tAgent(locale, "history.feedbackMissing");
       return `- ${dateLabel} | ${action} | TF ${tf} | ${verdict} | ${feedbackSnippet}`;
     });
 
-    const header = isId
-      ? `Riwayat personal (${normalizedPair}, ${timeframe.toUpperCase()})`
-      : `Personal history (${normalizedPair}, ${timeframe.toUpperCase()})`;
+    const header = tAgent(locale, "history.header", {
+      pair: normalizedPair,
+      timeframe: timeframe.toUpperCase(),
+    });
 
     return [header, ...summaryLines, "", ...(entryLines.slice(0, HISTORY_SAMPLE_LIMIT))].join("\n");
   } catch (error) {
@@ -598,22 +612,21 @@ const buildMarketAnalytics = (
   timeframe: Timeframe,
   locale: Locale
 ) => {
-  const isId = locale === "id";
-
   if (candles.length === 0) {
     return {
       chartPoints: [] as ChartPoint[],
       technical: [] as string[],
-      chartNarrative: isId ? "Data candle tidak tersedia." : "No candle data available.",
-      chartForecast: isId
-        ? "Tidak dapat melakukan forecasting tanpa data harga."
-        : "Unable to build a forecast without price history.",
+      chartNarrative: tAgent(locale, "marketAnalytics.missingNarrative"),
+      chartForecast: tAgent(locale, "marketAnalytics.missingForecast"),
       promptSeries: "",
       changePct: null as number | null,
       volatilityPct: null as number | null,
       high: null as number | null,
       low: null as number | null,
       lastClose: null as number | null,
+      atrPct: null as number | null,
+      keyMetrics: [] as string[],
+      analysisFocus: "",
     };
   }
 
@@ -631,6 +644,8 @@ const buildMarketAnalytics = (
   const rsi = calculateRSI(trimmed);
   const volatilityRaw = calculateVolatility(closes.slice(-Math.min(30, closes.length)));
   const volatilityPct = volatilityRaw ? (volatilityRaw / last.close) * 100 : null;
+  const atr = calculateATR(trimmed);
+  const atrPct = atr ? (atr / last.close) * 100 : null;
   const chartPoints: ChartPoint[] = trimmed.slice(-60).map((item) => ({
     time: new Date(item.openTime).toISOString(),
     close: Number(item.close.toFixed(2)),
@@ -642,17 +657,9 @@ const buildMarketAnalytics = (
       `SMA${smaShortPeriod}: ${smaShort.toFixed(2)} | SMA${smaLongPeriod}: ${smaLong.toFixed(2)}`
     );
     if (smaShort > smaLong) {
-      technical.push(
-        isId
-          ? "Sinyal bullish: SMA cepat berada di atas SMA lambat."
-          : "Bullish signal: fast SMA is above slow SMA."
-      );
+      technical.push(tAgent(locale, "marketAnalytics.bullishSma"));
     } else if (smaShort < smaLong) {
-      technical.push(
-        isId
-          ? "Sinyal bearish: SMA cepat berada di bawah SMA lambat."
-          : "Bearish signal: fast SMA is below slow SMA."
-      );
+      technical.push(tAgent(locale, "marketAnalytics.bearishSma"));
     }
   }
   if (typeof rsi === "number") {
@@ -660,34 +667,115 @@ const buildMarketAnalytics = (
   }
   if (typeof volatilityPct === "number") {
     technical.push(
-      `${isId ? "Volatilitas" : "Volatility"} ${timeframe.toUpperCase()}: ${volatilityPct.toFixed(2)}%`
+      `${tAgent(locale, "marketAnalytics.volatilityLabel", {
+        timeframe: timeframe.toUpperCase(),
+      })}: ${volatilityPct.toFixed(2)}%`
     );
   }
   technical.push(
-    `${isId ? "Rentang harga" : "Price range"}: ${low.toFixed(2)} - ${high.toFixed(2)}`
+    `${tAgent(locale, "marketAnalytics.priceRangeLabel")}: ${low.toFixed(2)} - ${high.toFixed(2)}`
   );
   technical.push(
-    `${
-      isId ? "Perubahan sejak awal sesi" : "Change since session start"
-    }: ${changePct.toFixed(2)}%`
+    `${tAgent(locale, "marketAnalytics.sessionChangeLabel")}: ${changePct.toFixed(2)}%`
   );
+  if (typeof atr === "number" && typeof atrPct === "number") {
+    technical.push(
+      tAgent(locale, "marketAnalytics.atrLine", {
+        value: atr.toFixed(2),
+        percent: atrPct.toFixed(2),
+      })
+    );
+  }
 
   const momentumLabel =
-    changePct > 0 ? "bullish" : changePct < 0 ? "bearish" : isId ? "netral" : "neutral";
-  const chartNarrative = isId
-    ? `Harga timeframe ${timeframe.toUpperCase()} bergerak ${momentumLabel} dengan penutupan terakhir ${last.close.toFixed(2)} USDT.`
-    : `Price on the ${timeframe.toUpperCase()} timeframe is ${momentumLabel} with the latest close at ${last.close.toFixed(2)} USDT.`;
-  const chartForecast = isId
-    ? changePct > 0
-      ? "Momentum positif mendominasi; waspadai konsolidasi sebelum kelanjutan tren."
+    changePct > 0
+      ? tAgent(locale, "marketAnalytics.momentum.bullish")
       : changePct < 0
-      ? "Tekanan jual masih terasa; butuh katalis positif untuk reversal."
-      : "Pergerakan datar; tunggu breakout untuk konfirmasi arah berikutnya."
-    : changePct > 0
-    ? "Positive momentum dominates; watch for consolidation before trend continuation."
+      ? tAgent(locale, "marketAnalytics.momentum.bearish")
+      : tAgent(locale, "marketAnalytics.momentum.neutral");
+  const smaRelationKey: "above" | "below" | "flat" =
+    typeof smaShort === "number" && typeof smaLong === "number"
+      ? smaShort > smaLong
+        ? "above"
+        : smaShort < smaLong
+        ? "below"
+        : "flat"
+      : "flat";
+
+  const volatilityBucket: "low" | "medium" | "high" | "unknown" = (() => {
+    if (typeof atrPct !== "number" || Number.isNaN(atrPct)) {
+      return "unknown";
+    }
+    if (atrPct < 1.2) {
+      return "low";
+    }
+    if (atrPct < 2.5) {
+      return "medium";
+    }
+    return "high";
+  })();
+
+  const volatilityDescriptor = tAgent(locale, `marketAnalytics.volatilityBucket.${volatilityBucket}`);
+  if (volatilityDescriptor && !technical.includes(volatilityDescriptor)) {
+    technical.push(volatilityDescriptor);
+  }
+
+  const smaDescriptor = tAgent(locale, `marketAnalytics.smaRelation.${smaRelationKey}`);
+
+  const focusKey: "bullishBreakout" | "bearishBreakout" | "momentumLong" | "momentumShort" | "rangePlay" = (() => {
+    if (typeof changePct !== "number" || Number.isNaN(changePct)) {
+      return "rangePlay";
+    }
+    if (changePct >= 2.5) {
+      return "bullishBreakout";
+    }
+    if (changePct <= -2.5) {
+      return "bearishBreakout";
+    }
+    if (changePct >= 1.2 && (volatilityBucket === "medium" || volatilityBucket === "high")) {
+      return "momentumLong";
+    }
+    if (changePct <= -1.2 && (volatilityBucket === "medium" || volatilityBucket === "high")) {
+      return "momentumShort";
+    }
+    if (Math.abs(changePct) <= 0.7 && volatilityBucket === "low") {
+      return "rangePlay";
+    }
+    return changePct >= 0 ? "momentumLong" : "momentumShort";
+  })();
+
+  const analysisFocus = tAgent(locale, `marketAnalytics.focus.${focusKey}`, {
+    timeframe: timeframe.toUpperCase(),
+  });
+
+  const volatilityName = tAgent(locale, `marketAnalytics.volatilityBucketName.${volatilityBucket}`);
+  const keyMetrics = [
+    tAgent(locale, "marketAnalytics.keyMetrics.close", { value: last.close.toFixed(2) }),
+    tAgent(locale, "marketAnalytics.keyMetrics.change", { value: changePct.toFixed(2) }),
+    tAgent(locale, "marketAnalytics.keyMetrics.smaSignal", { value: smaDescriptor }),
+  ];
+  if (typeof atr === "number" && typeof atrPct === "number") {
+    keyMetrics.push(
+      tAgent(locale, "marketAnalytics.keyMetrics.atr", {
+        value: atr.toFixed(2),
+        percent: atrPct.toFixed(2),
+      })
+    );
+  }
+  keyMetrics.push(
+    tAgent(locale, "marketAnalytics.keyMetrics.volatility", { value: volatilityName })
+  );
+
+  const chartNarrative = tAgent(locale, "marketAnalytics.chartNarrative", {
+    timeframe: timeframe.toUpperCase(),
+    momentum: momentumLabel,
+    price: last.close.toFixed(2),
+  });
+  const chartForecast = changePct > 0
+    ? tAgent(locale, "marketAnalytics.forecast.positive")
     : changePct < 0
-    ? "Selling pressure remains; a bullish catalyst is needed for reversal."
-    : "Sideways movement; wait for a breakout to confirm the next direction.";
+    ? tAgent(locale, "marketAnalytics.forecast.negative")
+    : tAgent(locale, "marketAnalytics.forecast.flat");
 
   const promptSeries = trimmed
     .slice(-60)
@@ -705,14 +793,16 @@ const buildMarketAnalytics = (
     promptSeries,
     changePct,
     volatilityPct,
+    atrPct,
     high,
     low,
     lastClose: last.close,
+    keyMetrics,
+    analysisFocus,
   };
 };
 
 const buildDefaultFundamentals = (summary: string, timeframe: Timeframe, locale: Locale) => {
-  const isId = locale === "id";
   const lines = summary.split("\n").map((line) => line.trim()).filter(Boolean);
   const priceLine = lines.find((line) => {
     const lower = line.toLowerCase();
@@ -725,8 +815,8 @@ const buildDefaultFundamentals = (summary: string, timeframe: Timeframe, locale:
   const volumeLine = lines.find((line) => line.toLowerCase().includes("volume"));
 
   const fundamentals = [
-    priceLine ?? (isId ? "Harga terakhir Binance tidak tersedia." : "Latest price information is unavailable."),
-    changeLine ?? (isId ? "Perubahan harga 24 jam belum dihitung." : "24h price change has not been calculated."),
+    priceLine ?? tAgent(locale, "fundamentals.priceUnavailable"),
+    changeLine ?? tAgent(locale, "fundamentals.changeUnavailable"),
   ];
 
   if (volumeLine) {
@@ -734,9 +824,7 @@ const buildDefaultFundamentals = (summary: string, timeframe: Timeframe, locale:
   }
 
   fundamentals.push(
-    isId
-      ? `Selaraskan strategi ${timeframe.toUpperCase()} dengan konteks makro dan on-chain sebelum eksekusi.`
-      : `Align the ${timeframe.toUpperCase()} strategy with current macro and on-chain context before execution.`
+    tAgent(locale, "fundamentals.macroReminder", { timeframe: timeframe.toUpperCase() })
   );
 
   return fundamentals;
@@ -759,6 +847,8 @@ const buildUserMessage = (
       technical: string[];
       chartNarrative: string;
       chartForecast: string;
+      keyMetrics: string[];
+      analysisFocus: string;
     };
     tavilySearch: TavilySearchData | null;
     tavilyArticles: TavilyExtractedArticle[];
@@ -767,26 +857,26 @@ const buildUserMessage = (
   locale: Locale
 ) => {
   const formattedPair = formatPairLabel(params.pairSymbol);
-  const isId = locale === "id";
-
   const placeholders = {
-    urls: isId ? "(Tidak ada URL yang diberikan)" : "(No URLs provided)",
-    dataset: isId ? "(Tidak ada dataset yang diunggah)" : "(No dataset uploaded)",
-    manual: isId ? "(Tidak ada catatan manual)" : "(No manual notes)",
-    technical: isId ? "(Tidak ada ringkasan teknikal)" : "(No technical summary)",
-    tavilySummary: isId ? "(Tidak ada ringkasan Tavily)" : "(No Tavily summary)",
-    tavilyResults: isId ? "(Tidak ada hasil pencarian Tavily)" : "(No Tavily search results)",
-    tavilyArticles: isId ? "(Tidak ada konten Tavily yang diekstrak)" : "(No Tavily article extracts)",
-    promptSeries: isId ? "(Data candle tidak tersedia)" : "(No candle data)",
-    history: isId ? "(Belum ada riwayat pengguna untuk pair ini)" : "(No personal history saved for this pair)",
-    unknownDataset: isId ? "Tidak diketahui" : "Unknown",
-    datasetPreviewLabel: isId ? "Isi (dipangkas)" : "Content (truncated)",
+    urls: tAgent(locale, "userPrompt.placeholders.urls"),
+    dataset: tAgent(locale, "userPrompt.placeholders.dataset"),
+    manual: tAgent(locale, "userPrompt.placeholders.manual"),
+    technical: tAgent(locale, "userPrompt.placeholders.technical"),
+    tavilySummary: tAgent(locale, "userPrompt.placeholders.tavilySummary"),
+    tavilyResults: tAgent(locale, "userPrompt.placeholders.tavilyResults"),
+    tavilyArticles: tAgent(locale, "userPrompt.placeholders.tavilyArticles"),
+    promptSeries: tAgent(locale, "userPrompt.placeholders.promptSeries"),
+    history: tAgent(locale, "userPrompt.placeholders.history"),
+    unknownDataset: tAgent(locale, "userPrompt.placeholders.unknownDataset"),
+    datasetPreviewLabel: tAgent(locale, "userPrompt.placeholders.datasetPreviewLabel"),
+    keyMetrics: tAgent(locale, "userPrompt.placeholders.keyMetrics"),
+    analysisFocus: tAgent(locale, "userPrompt.placeholders.analysisFocus"),
   } as const;
 
   const dataModeMap: Record<DataMode, string> = {
-    scrape: isId ? "Scrape URL berita" : "Scrape news URLs",
-    upload: isId ? "Unggah dataset" : "Upload dataset",
-    manual: isId ? "Catatan manual" : "Manual notes",
+    scrape: tAgent(locale, "userPrompt.dataMode.scrape"),
+    upload: tAgent(locale, "userPrompt.dataMode.upload"),
+    manual: tAgent(locale, "userPrompt.dataMode.manual"),
   };
 
   const urlList = params.urls.length
@@ -794,7 +884,7 @@ const buildUserMessage = (
     : placeholders.urls;
 
   const datasetBlock = params.datasetPreview
-    ? `${isId ? "Nama dataset" : "Dataset name"}: ${
+    ? `${tAgent(locale, "userPrompt.datasetNameLabel")}: ${
         params.datasetName ?? placeholders.unknownDataset
       }\n${placeholders.datasetPreviewLabel}:\n${excerpt(params.datasetPreview, 2000)}`
     : placeholders.dataset;
@@ -811,6 +901,16 @@ const buildUserMessage = (
     ? params.marketAnalytics.technical.map((item, index) => `${index + 1}. ${item}`).join("\n")
     : placeholders.technical;
 
+  const keyMetricsBlock = params.marketAnalytics.keyMetrics.length
+    ? params.marketAnalytics.keyMetrics
+        .map((item, index) => `${index + 1}. ${item}`)
+        .join("\n")
+    : placeholders.keyMetrics;
+
+  const analysisFocusBlock = params.marketAnalytics.analysisFocus
+    ? params.marketAnalytics.analysisFocus
+    : placeholders.analysisFocus;
+
   const tavilyAnswer = params.tavilySearch?.answer
     ? excerpt(params.tavilySearch.answer, 800)
     : placeholders.tavilySummary;
@@ -824,12 +924,17 @@ const buildUserMessage = (
                 ? ` (score: ${result.score.toFixed(2)})`
                 : ""
             }`,
-            result.url ? `   URL: ${result.url}` : null,
+            result.url
+              ? `   ${tAgent(locale, "userPrompt.tavily.urlLabel")}: ${result.url}`
+              : null,
             result.publishedDate
-              ? `   ${isId ? "Tanggal" : "Published"}: ${result.publishedDate}`
+              ? `   ${tAgent(locale, "userPrompt.tavily.publishedLabel")}: ${result.publishedDate}`
               : null,
             result.content
-              ? `   ${isId ? "Ringkasan" : "Summary"}: ${excerpt(result.content, 320)}`
+              ? `   ${tAgent(locale, "userPrompt.tavily.summaryLabel")}: ${excerpt(
+                  result.content,
+                  320
+                )}`
               : null,
           ];
           return parts.filter(Boolean).join("\n");
@@ -842,14 +947,22 @@ const buildUserMessage = (
         .map((article, index) => {
           const parts = [
             `${index + 1}. ${article.title}`,
-            article.url ? `   URL: ${article.url}` : null,
+            article.url
+              ? `   ${tAgent(locale, "userPrompt.tavily.urlLabel")}: ${article.url}`
+              : null,
             article.publishedDate
-              ? `   ${isId ? "Tanggal" : "Published"}: ${article.publishedDate}`
+              ? `   ${tAgent(locale, "userPrompt.tavily.publishedLabel")}: ${article.publishedDate}`
               : null,
             article.content
-              ? `   ${isId ? "Kutipan" : "Excerpt"}: ${excerpt(article.content, 320)}`
+              ? `   ${tAgent(locale, "userPrompt.tavily.excerptLabel")}: ${excerpt(
+                  article.content,
+                  320
+                )}`
               : article.rawContent
-              ? `   ${isId ? "Kutipan (raw)" : "Excerpt (raw)"}: ${excerpt(article.rawContent, 320)}`
+              ? `   ${tAgent(locale, "userPrompt.tavily.rawExcerptLabel")}: ${excerpt(
+                  article.rawContent,
+                  320
+                )}`
               : null,
           ];
           return parts.filter(Boolean).join("\n");
@@ -858,42 +971,34 @@ const buildUserMessage = (
     : placeholders.tavilyArticles;
 
   const labels = {
-    objective: isId ? "Tujuan analisa" : "Analysis objective",
-    dataMode: isId ? "Mode sumber data aktif" : "Active data mode",
-    urls: isId ? "Daftar URL berita" : "News URLs",
-    manual: isId ? "Catatan manual" : "Manual notes",
-    dataset: isId ? "Dataset kustom" : "Custom dataset",
-    history: isId ? "Riwayat pengguna" : "User history",
-    pair: isId ? "Pair yang dianalisis" : "Pair under analysis",
-    timeframe: isId ? "Timeframe target" : "Target timeframe",
-    summary: isId
-      ? `Ringkasan pasar Binance untuk ${formattedPair}`
-      : `Binance market data for ${formattedPair}`,
-    narrative: isId ? "Narasi harga" : "Price narrative",
-    forecast: isId ? "Forecast internal" : "Internal forecast",
-    promptSeries: isId
-      ? "Data candle (ISO|O/H/L/C/V)"
-      : "Candle data (ISO|O/H/L/C/V)",
-    technical: isId ? "Ringkasan teknikal" : "Technical snapshot",
-    tavilySummary: isId ? "Ringkasan Tavily" : "Tavily summary",
-    tavilyResults: isId ? "Hasil pencarian Tavily" : "Tavily search results",
-    tavilyArticles: isId ? "Konten Tavily" : "Tavily article extracts",
-    instructions: isId ? "Instruksi" : "Instructions",
+    objective: tAgent(locale, "userPrompt.labels.objective"),
+    dataMode: tAgent(locale, "userPrompt.labels.dataMode"),
+    urls: tAgent(locale, "userPrompt.labels.urls"),
+    manual: tAgent(locale, "userPrompt.labels.manual"),
+    dataset: tAgent(locale, "userPrompt.labels.dataset"),
+    history: tAgent(locale, "userPrompt.labels.history"),
+    pair: tAgent(locale, "userPrompt.labels.pair"),
+    timeframe: tAgent(locale, "userPrompt.labels.timeframe"),
+    summary: tAgent(locale, "userPrompt.labels.summary", { pair: formattedPair }),
+    keyMetrics: tAgent(locale, "userPrompt.labels.keyMetrics"),
+    analysisFocus: tAgent(locale, "userPrompt.labels.analysisFocus"),
+    narrative: tAgent(locale, "userPrompt.labels.narrative"),
+    forecast: tAgent(locale, "userPrompt.labels.forecast"),
+    promptSeries: tAgent(locale, "userPrompt.labels.promptSeries"),
+    technical: tAgent(locale, "userPrompt.labels.technical"),
+    tavilySummary: tAgent(locale, "userPrompt.labels.tavilySummary"),
+    tavilyResults: tAgent(locale, "userPrompt.labels.tavilyResults"),
+    tavilyArticles: tAgent(locale, "userPrompt.labels.tavilyArticles"),
+    instructions: tAgent(locale, "userPrompt.labels.instructions"),
   } as const;
 
-  const instructions = isId
-    ? [
-        `Lakukan analisa sentimen, berita, dan pasar untuk ${formattedPair}; tampilkan insight yang dapat dieksekusi.`,
-        `Sajikan skenario harga dasar, bullish, dan bearish untuk ${formattedPair} pada timeframe ${params.timeframe.toUpperCase()}.`,
-        "Lengkapi catatan teknikal & fundamental serta rencana eksekusi yang memperhatikan risiko (entry, target, stop, sizing).",
-        "Balas hanya dalam format JSON menggunakan Bahasa Indonesia yang alami.",
-      ]
-    : [
-        `Perform sentiment, news, and market analysis for ${formattedPair}; surface tradable insights.`,
-        `Produce base, bullish, and bearish price scenarios for ${formattedPair} on the ${params.timeframe.toUpperCase()} timeframe.`,
-        "Provide supporting technical & fundamental notes plus a risk-aware execution plan (entries, targets, stop, sizing).",
-        "Respond in JSON only, using natural English throughout all strings.",
-      ];
+  const instructions = tAgent(locale, "userPrompt.instructions", {
+    pair: formattedPair,
+    timeframe: params.timeframe.toUpperCase(),
+  })
+    .split("\n")
+    .map((item) => item.trim())
+    .filter(Boolean);
 
   const lines = [
     `${labels.objective}: ${params.objective}`,
@@ -917,6 +1022,12 @@ const buildUserMessage = (
     "",
     `${labels.summary}:`,
     params.marketSummary,
+    "",
+    `${labels.keyMetrics}:`,
+    keyMetricsBlock,
+    "",
+    `${labels.analysisFocus}:`,
+    analysisFocusBlock,
     "",
     `${labels.narrative}:`,
     params.marketAnalytics.chartNarrative,
@@ -947,13 +1058,13 @@ const buildUserMessage = (
 };
 
 const buildSystemPrompt = (locale: Locale) => {
-  const languageReminder =
-    locale === "id"
-      ? "All strings must be written in natural Indonesian."
-      : "All strings must be written in natural English.";
+  const languageReminder = tAgent(locale, "systemPrompt.languageReminder");
+  const coreGuidelines = tAgent(locale, "systemPrompt.coreGuidelines");
+  const exampleBlock = tAgent(locale, "systemPrompt.example");
 
   return `You are SWIMM (Soon You Will Make Money), a crypto markets analyst.
 Always reply with valid JSON only. ${languageReminder}
+${coreGuidelines ? `\n${coreGuidelines}` : ""}
 Schema:
 {
   "summary": string,
@@ -986,7 +1097,7 @@ Schema:
   },
   "highlights": string[],
   "nextSteps": string[]
-}`;
+}${exampleBlock ? `\n\n${exampleBlock}` : ""}`;
 };
 
 const stripCodeFences = (content: string) => {
@@ -1148,7 +1259,6 @@ const buildTradePlan = (
   },
   locale: Locale
 ): TradePlan => {
-  const isId = locale === "id";
   const biasDraft = typeof draft?.bias === "string" ? draft.bias.toLowerCase() : null;
   const bias: "long" | "short" | "neutral" =
     biasDraft === "long" || biasDraft === "short" || biasDraft === "neutral"
@@ -1159,9 +1269,7 @@ const buildTradePlan = (
       ? "short"
       : "neutral";
 
-  const sizingNotesDefaultHold = isId
-    ? "Tidak ada rencana eksekusi. Tunggu konfirmasi tambahan sebelum membuka posisi."
-    : "No execution plan provided. Wait for additional confirmation before opening a position.";
+  const sizingNotesDefaultHold = tAgent(locale, "tradePlan.holdSizingNotes");
 
   if (action === "hold") {
     return {
@@ -1174,9 +1282,7 @@ const buildTradePlan = (
       sizingNotes: ensureString(draft?.sizingNotes, sizingNotesDefaultHold),
       rationale: ensureString(
         draft?.rationale,
-        isId
-          ? "Momentum belum jelas. Evaluasi ulang setelah harga menembus area kunci."
-          : "Momentum is unclear. Reassess once price breaks a key area."
+        tAgent(locale, "tradePlan.holdRationale")
       ),
     };
   }
@@ -1237,16 +1343,10 @@ const buildTradePlan = (
 
   const sizingNotesDefault =
     bias === "long"
-      ? isId
-        ? "Risiko per posisi disarankan <= 2% dari ekuitas; gunakan position sizing bertahap."
-        : "Risk per position should stay ≤ 2% of equity; scale into the trade gradually."
+      ? tAgent(locale, "tradePlan.sizingNotes.long")
       : bias === "short"
-      ? isId
-        ? "Pastikan modal siap untuk short dan lindungi dengan ukuran posisi konservatif."
-        : "Confirm borrow availability for shorts and keep position sizing conservative."
-      : isId
-      ? "Tahan eksekusi sampai sinyal tambahan mengkonfirmasi arah."
-      : "Hold execution until additional signals confirm direction.";
+      ? tAgent(locale, "tradePlan.sizingNotes.short")
+      : tAgent(locale, "tradePlan.sizingNotes.neutral");
 
   return {
     bias,
@@ -1258,9 +1358,7 @@ const buildTradePlan = (
     sizingNotes: ensureString(draft?.sizingNotes, sizingNotesDefault),
     rationale: ensureString(
       draft?.rationale,
-      isId
-        ? "Validasi setup trading dengan order flow dan berita makro sebelum eksekusi."
-        : "Validate the trade setup with order flow and macro headlines before execution."
+      tAgent(locale, "tradePlan.rationaleFallback")
     ),
   };
 };
@@ -1276,7 +1374,6 @@ const buildAgentPayload = (
   },
   locale: Locale
 ): AgentPayload => {
-  const isId = locale === "id";
   const decision: Partial<AgentPayload["decision"]> = draft.decision ?? {};
 
   const action = ((): AgentDecision => {
@@ -1303,16 +1400,12 @@ const buildAgentPayload = (
       : pickFallbackTimeframe(objective);
   const rationale = ensureString(
     decision.rationale,
-    isId
-      ? "Model tidak memberikan rasionalisasi. Tambahkan detail objektif untuk analisa lanjutan."
-      : "The model did not supply a rationale. Add more objective detail for a follow-up analysis run."
+    tAgent(locale, "payload.rationaleMissing")
   );
 
   const summary = ensureString(
     draft.summary,
-    isId
-      ? "Analisa tidak berhasil dibuat. Coba jalankan ulang agent dengan data yang lebih lengkap."
-      : "Analysis could not be generated. Rerun the agent with richer context."
+    tAgent(locale, "payload.summaryMissing")
   );
 
   const baseHighlights = ensureStringArray(draft.highlights);
@@ -1342,17 +1435,15 @@ const buildAgentPayload = (
       rationale,
     },
     highlights: supportiveHighlights,
-    nextSteps: nextSteps.length
-      ? nextSteps
-      : isId
-      ? [
-          "Validasi rencana trading dengan chart real-time dan order book.",
-          "Perbarui data berita atau on-chain, lalu jalankan ulang agent bila perlu.",
-        ]
-      : [
-          "Validate the trading plan against live charts and order-book data.",
-          "Refresh macro/news context and rerun the agent if needed.",
-        ],
+    nextSteps: (() => {
+      if (nextSteps.length) {
+        return nextSteps;
+      }
+      return tAgent(locale, "payload.nextStepsDefault")
+        .split("\n")
+        .map((item) => item.trim())
+        .filter(Boolean);
+    })(),
     market: {
       pair: marketSupport.context.symbol,
       chart: {
@@ -1383,20 +1474,21 @@ export async function POST(request: Request) {
     body = await request.json();
   } catch {
     return NextResponse.json(
-      { error: "Invalid JSON payload" },
-      { status: 400 }
-    );
-  }
-
-  if (!body.objective || body.objective.trim().length === 0) {
-    return NextResponse.json(
-      { error: "Objective analisa wajib diisi." },
+      { error: tAgent("en", "errors.invalidJson") },
       { status: 400 }
     );
   }
 
   const locale: Locale =
     typeof body.locale === "string" && isLocale(body.locale) ? body.locale : "en";
+
+  if (!body.objective || body.objective.trim().length === 0) {
+    return NextResponse.json(
+      { error: tAgent(locale, "errors.objectiveRequired") },
+      { status: 400 }
+    );
+  }
+
   const objective = body.objective.trim();
 
   const session = await getSessionFromCookie();
@@ -1465,7 +1557,7 @@ export async function POST(request: Request) {
   const apiKey = process.env.FIREWORKS_API_KEY;
   if (!apiKey) {
     return NextResponse.json(
-      { error: "Sentient Models API key belum dikonfigurasi." },
+      { error: tAgent(locale, "errors.missingApiKey") },
       { status: 500 }
     );
   }
@@ -1474,11 +1566,23 @@ export async function POST(request: Request) {
     (provider === "bybit"
       ? Promise.all([
           fetchBybitMarketSummary(symbol, bybitAuth, mode),
-          fetchBybitCandles(symbol, timeframe, 500, bybitAuth, mode),
+          fetchBybitCandles(
+            symbol,
+            timeframe,
+            { limit: 500 },
+            bybitAuth,
+            mode
+          ),
         ])
       : Promise.all([
           fetchBinanceMarketSummary(symbol, binanceAuth, mode),
-          fetchBinanceCandles(symbol, CEX_INTERVAL_MAP[timeframe], 500, binanceAuth, mode),
+          fetchBinanceCandles(
+            symbol,
+            CEX_INTERVAL_MAP[timeframe],
+            { limit: 500 },
+            binanceAuth,
+            mode
+          ),
         ])),
     tavilySearchPromise,
     tavilyExtractPromise,
@@ -1524,7 +1628,7 @@ export async function POST(request: Request) {
       },
       body: JSON.stringify({
         model: process.env.FIREWORKS_MODEL ?? DEFAULT_FIREWORKS_MODEL,
-        temperature: 0.25,
+        temperature: 0.15,
         max_tokens: 1_000,
         messages: [
           {
@@ -1548,6 +1652,8 @@ export async function POST(request: Request) {
                 technical: marketAnalytics.technical,
                 chartNarrative: marketAnalytics.chartNarrative,
                 chartForecast: marketAnalytics.chartForecast,
+                keyMetrics: marketAnalytics.keyMetrics,
+                analysisFocus: marketAnalytics.analysisFocus,
               },
               tavilySearch,
               tavilyArticles,
@@ -1572,7 +1678,7 @@ export async function POST(request: Request) {
     const content = result.choices?.[0]?.message?.content;
 
     if (!content) {
-      throw new Error("Sentient Models API tidak mengembalikan konten.");
+      throw new Error(tAgent(locale, "errors.missingContent"));
     }
 
     const draft = parseModelPayload(content);
@@ -1582,10 +1688,10 @@ export async function POST(request: Request) {
   } catch (error) {
     const message =
       error instanceof Error && error.name === "AbortError"
-        ? "Permintaan ke Sentient Models melewati batas waktu."
+        ? tAgent(locale, "errors.timeout")
         : error instanceof Error
         ? error.message
-        : "Integrasi Sentient Models gagal.";
+        : tAgent(locale, "errors.generic");
 
     return NextResponse.json(
       {
@@ -1597,10 +1703,3 @@ export async function POST(request: Request) {
     clearTimeout(timeout);
   }
 }
-
-
-
-
-
-
-

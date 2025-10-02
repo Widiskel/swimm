@@ -39,6 +39,8 @@ export async function GET(request: NextRequest) {
     : defaultSymbol;
   const intervalParam = searchParams.get("interval")?.toLowerCase() ?? "15m";
   const limitParam = Number.parseInt(searchParams.get("limit") ?? "500", 10);
+  const startParamRaw = searchParams.get("start");
+  const endParamRaw = searchParams.get("end");
   const localeParam = searchParams.get("locale") ?? "";
   const locale: Locale = localeParam && isLocale(localeParam) ? localeParam : "en";
 
@@ -71,17 +73,68 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const limit = Number.isFinite(limitParam) ? Math.max(50, Math.min(limitParam, 1000)) : 500;
+  const limit = Number.isFinite(limitParam) ? Math.max(50, Math.min(limitParam, 5000)) : 500;
+
+  const parseTimestamp = (value: string | null) => {
+    if (!value) {
+      return null;
+    }
+    const numeric = Number(value);
+    if (Number.isFinite(numeric) && numeric > 0) {
+      return numeric > 10_000_000_000 ? numeric : numeric * 1000;
+    }
+    const parsed = Date.parse(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+    return null;
+  };
+
+  const startTimeMs = parseTimestamp(startParamRaw);
+  const endTimeMs = parseTimestamp(endParamRaw);
+
+  const intervalMsMap: Record<string, number> = {
+    "1m": 60_000,
+    "5m": 5 * 60_000,
+    "15m": 15 * 60_000,
+    "1h": 60 * 60_000,
+    "4h": 4 * 60 * 60_000,
+    "1d": 24 * 60 * 60_000,
+  };
+
+  const intervalMs = intervalMsMap[intervalParam] ?? intervalMsMap["1h"];
+
+  const computedLimit = (() => {
+    if (startTimeMs !== null) {
+      const effectiveEnd = endTimeMs ?? Date.now();
+      const diff = Math.max(effectiveEnd - startTimeMs, intervalMs);
+      const estimate = Math.ceil(diff / intervalMs) + 5;
+      return Math.min(Math.max(estimate, limit), 5000);
+    }
+    return limit;
+  })();
 
   const [candles, summary, orderBook] = await Promise.all(
     provider === "bybit"
       ? [
-          fetchBybitCandles(symbolParam, intervalParam, limit, bybitAuth, mode),
+          fetchBybitCandles(
+            symbolParam,
+            intervalParam,
+            { limit: computedLimit, startTime: startTimeMs ?? undefined, endTime: endTimeMs ?? undefined },
+            bybitAuth,
+            mode
+          ),
           fetchBybitMarketSummary(symbolParam, bybitAuth, mode),
           fetchBybitOrderBook(symbolParam, 50, bybitAuth, mode),
         ]
       : [
-          fetchBinanceCandles(symbolParam, intervalParam, limit, binanceAuth, mode),
+          fetchBinanceCandles(
+            symbolParam,
+            intervalParam,
+            { limit: computedLimit, startTime: startTimeMs ?? undefined, endTime: endTimeMs ?? undefined },
+            binanceAuth,
+            mode
+          ),
           fetchBinanceMarketSummary(symbolParam, binanceAuth, mode),
           fetchBinanceOrderBook(symbolParam, 50, binanceAuth, mode),
         ]
@@ -102,4 +155,3 @@ export async function GET(request: NextRequest) {
     updatedAt: new Date().toISOString(),
   });
 }
-

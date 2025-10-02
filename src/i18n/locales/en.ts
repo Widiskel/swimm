@@ -131,6 +131,176 @@ const en = {
       loadPairs: "Failed to load tradable pairs from the provider.",
     },
   },
+  agentApi: {
+    history: {
+      header: "Personal history ({pair}, {timeframe})",
+      savedPlans: "Saved plans: {total} (Buy: {buy} | Sell: {sell})",
+      verdictSummary: "Verdicts — Accurate: {accurate}, Missed: {inaccurate}, Pending: {pending}",
+      successRate: "Success rate: {value}",
+      successRatePending: "Success rate: Not enough data",
+      feedbackMissing: "(no feedback)",
+      verdict: {
+        accurate: "Accurate",
+        inaccurate: "Missed",
+        unknown: "Pending",
+      },
+    },
+    marketAnalytics: {
+      missingNarrative: "No candle data available.",
+      missingForecast: "Unable to build a forecast without price history.",
+      bullishSma: "Bullish signal: fast SMA is above slow SMA.",
+      bearishSma: "Bearish signal: fast SMA is below slow SMA.",
+      volatilityLabel: "Volatility {timeframe}",
+      priceRangeLabel: "Price range",
+      sessionChangeLabel: "Change since session start",
+      atrLine: "ATR(14): {value} ({percent}% of price)",
+      volatilityBucket: {
+        low: "Volatility regime: low (tight range conditions).",
+        medium: "Volatility regime: medium (two-way participation).",
+        high: "Volatility regime: high (expect wider swings).",
+        unknown: "Volatility regime: unknown (insufficient data).",
+      },
+      volatilityBucketName: {
+        low: "low",
+        medium: "moderate",
+        high: "elevated",
+        unknown: "unknown",
+      },
+      smaRelation: {
+        above: "Bullish crossover (fast above slow).",
+        below: "Bearish crossover (fast below slow).",
+        flat: "Flat/indecisive crossover.",
+      },
+      momentum: {
+        bullish: "bullish",
+        bearish: "bearish",
+        neutral: "neutral",
+      },
+      chartNarrative:
+        "Price on the {timeframe} timeframe is {momentum} with the latest close at {price} USDT.",
+      forecast: {
+        positive:
+          "Positive momentum dominates; watch for consolidation before trend continuation.",
+        negative:
+          "Selling pressure remains; a bullish catalyst is needed for reversal.",
+        flat: "Sideways movement; wait for a breakout to confirm the next direction.",
+      },
+      focus: {
+        bullishBreakout:
+          "Treat the move as a bullish breakout; plan for continuation but define invalidation near prior resistance.",
+        bearishBreakout:
+          "Bearish pressure suggests a breakdown; look for continuation shorts while marking reclaim levels.",
+        momentumLong:
+          "Momentum is skewed long; stalk pullbacks into moving averages before taking continuation entries.",
+        momentumShort:
+          "Momentum is skewed short; wait for relief bounces to fade while tracking nearby support.",
+        rangePlay:
+          "Price is ranging; frame mean-reversion trades with tight risk until volatility expands.",
+      },
+      keyMetrics: {
+        close: "Last close: {value} USDT",
+        change: "Session change: {value}%",
+        smaSignal: "SMA signal: {value}",
+        atr: "ATR(14): {value} ({percent}% of price)",
+        volatility: "Volatility regime: {value}",
+      },
+    },
+    fundamentals: {
+      priceUnavailable: "Latest price information is unavailable.",
+      changeUnavailable: "24h price change has not been calculated.",
+      macroReminder:
+        "Align the {timeframe} strategy with current macro and on-chain context before execution.",
+    },
+    userPrompt: {
+      placeholders: {
+        urls: "(No URLs provided)",
+        dataset: "(No dataset uploaded)",
+        manual: "(No manual notes)",
+        technical: "(No technical summary)",
+        tavilySummary: "(No Tavily summary)",
+        tavilyResults: "(No Tavily search results)",
+        tavilyArticles: "(No Tavily article extracts)",
+        promptSeries: "(No candle data)",
+        history: "(No personal history saved for this pair)",
+        unknownDataset: "Unknown",
+        datasetPreviewLabel: "Content (truncated)",
+        keyMetrics: "(Key metrics unavailable)",
+        analysisFocus: "(No focus hint available)",
+      },
+      datasetNameLabel: "Dataset name",
+      tavily: {
+        urlLabel: "URL",
+        publishedLabel: "Published",
+        summaryLabel: "Summary",
+        excerptLabel: "Excerpt",
+        rawExcerptLabel: "Excerpt (raw)",
+      },
+      dataMode: {
+        scrape: "Scrape news URLs",
+        upload: "Upload dataset",
+        manual: "Manual notes",
+      },
+      labels: {
+        objective: "Analysis objective",
+        dataMode: "Active data mode",
+        urls: "News URLs",
+        manual: "Manual notes",
+        dataset: "Custom dataset",
+        history: "User history",
+        pair: "Pair under analysis",
+        timeframe: "Target timeframe",
+        summary: "Market data snapshot for {pair}",
+        keyMetrics: "Key metrics snapshot",
+        analysisFocus: "Focus checklist",
+        narrative: "Price narrative",
+        forecast: "Internal forecast",
+        promptSeries: "Candle data (ISO|O/H/L/C/V)",
+        technical: "Technical snapshot",
+        tavilySummary: "Tavily summary",
+        tavilyResults: "Tavily search results",
+        tavilyArticles: "Tavily article extracts",
+        instructions: "Instructions",
+      },
+      instructions:
+        "Perform sentiment, news, and market analysis for {pair}; surface tradable insights.\nProduce base, bullish, and bearish price scenarios for {pair} on the {timeframe} timeframe.\nProvide supporting technical & fundamental notes plus a risk-aware execution plan (entries, targets, stop, sizing).\nRespond in JSON only, using natural English throughout all strings.",
+    },
+    tradePlan: {
+      holdSizingNotes:
+        "No execution plan provided. Wait for additional confirmation before opening a position.",
+      holdRationale:
+        "Momentum is unclear. Reassess once price breaks a key area.",
+      sizingNotes: {
+        long: "Risk per position should stay ≤ 2% of equity; scale into the trade gradually.",
+        short: "Confirm borrow availability for shorts and keep position sizing conservative.",
+        neutral: "Hold execution until additional signals confirm direction.",
+      },
+      rationaleFallback:
+        "Validate the trade setup with order flow and macro headlines before execution.",
+    },
+    payload: {
+      rationaleMissing:
+        "The model did not supply a rationale. Add more objective detail for a follow-up analysis run.",
+      summaryMissing:
+        "Analysis could not be generated. Rerun the agent with richer context.",
+      nextStepsDefault:
+        "Validate the trading plan against live charts and order-book data.\nRefresh macro/news context and rerun the agent if needed.",
+    },
+    systemPrompt: {
+      languageReminder: "All strings must be written in natural English.",
+      coreGuidelines:
+        "- Anchor every conclusion to the supplied market and news data.\n- Keep numeric fields as numbers (confidence between 0 and 1) and avoid fabricating data that conflicts with inputs.\n- Highlight missing context explicitly instead of guessing levels or catalysts.",
+      example:
+        "Example JSON:\n{\n  \"summary\": \"Price is holding the mid-range after a 2% rally; liquidity is clustered near 68k.\",\n  \"decision\": {\n    \"action\": \"hold\",\n    \"confidence\": 0.48,\n    \"timeframe\": \"4H\",\n    \"rationale\": \"Momentum is slowing and order flow is mixed; wait for a range break before committing risk.\"\n  },\n  \"market\": {\n    \"pair\": \"BTCUSDT\",\n    \"chart\": {\n      \"interval\": \"5m\",\n      \"points\": [],\n      \"narrative\": \"Short-term candles show higher lows, but volume is tapering.\",\n      \"forecast\": \"Likely to consolidate unless buyers absorb offers above 68.5k.\"\n    },\n    \"technical\": [\"SMA7 is above SMA21\"],\n    \"fundamental\": [\"24h volume has normalised; no major news catalysts active.\"]\n  },\n  \"tradePlan\": {\n    \"bias\": \"neutral\",\n    \"entries\": [],\n    \"entry\": null,\n    \"stopLoss\": null,\n    \"takeProfits\": [],\n    \"executionWindow\": \"-\",\n    \"sizingNotes\": \"Risk <=2% until breakout confirms direction.\",\n    \"rationale\": \"Wait for breakout confirmation or new macro catalyst before sizing up.\"\n  },\n  \"highlights\": [\"Order book shows stacked offers near 68.5k\"],\n  \"nextSteps\": [\"Monitor ETF flows after NY open\"]\n}",
+    },
+    errors: {
+      invalidJson: "Invalid JSON payload",
+      objectiveRequired: "Analysis objective is required.",
+      missingApiKey: "Sentient Models API key is not configured.",
+      missingContent: "Sentient Models API did not return any content.",
+      timeout: "Request to Sentient Models timed out.",
+      generic: "Sentient Models integration failed.",
+    },
+  },
   analysis: {
     heading: "Agent analysis for {pair} ({timeframe})",
     confidence: "Confidence {value}% - Action {action}",
@@ -143,6 +313,11 @@ const en = {
       legendTarget: "Target",
       legendStop: "Stop",
       placeholder: "Snapshot chart will appear after the analysis is complete.",
+      ohlcCapturedAt: "Captured at",
+      ohlcOpen: "Open",
+      ohlcHigh: "High",
+      ohlcLow: "Low",
+      ohlcClose: "Close",
     },
     chartInsight: {
       title: "Chart insight",

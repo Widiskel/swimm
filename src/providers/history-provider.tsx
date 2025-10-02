@@ -8,8 +8,8 @@ import type { AgentResponse } from "@/features/analysis/types";
 import { DEFAULT_PROVIDER, type CexProvider } from "@/features/market/exchanges";
 import { DEFAULT_MARKET_MODE, type MarketMode } from "@/features/market/constants";
 import { useSession } from "@/providers/session-provider";
-
-export type HistoryVerdict = "accurate" | "inaccurate" | "unknown";
+import type { HistorySnapshot, HistoryVerdict } from "@/features/history/types";
+export type { HistoryVerdict, HistorySnapshot } from "@/features/history/types";
 
 export type HistoryEntry = {
   id: string;
@@ -26,6 +26,7 @@ export type HistoryEntry = {
   verdict: HistoryVerdict;
   feedback: string | null;
   executed: boolean | null;
+  snapshot: HistorySnapshot | null;
 };
 
 type SaveHistoryPayload = {
@@ -37,6 +38,7 @@ type SaveHistoryPayload = {
   verdict: HistoryVerdict;
   feedback?: string;
   executed?: boolean | null;
+  snapshot?: HistorySnapshot | null;
 };
 
 type UpdateHistoryPayload = {
@@ -153,6 +155,7 @@ export function HistoryProvider({ children }: { children: React.ReactNode }) {
       verdict,
       feedback,
       executed,
+      snapshot,
     }: SaveHistoryPayload) => {
       if (status !== "authenticated") {
         throw new Error("Session required.");
@@ -168,6 +171,7 @@ export function HistoryProvider({ children }: { children: React.ReactNode }) {
           verdict,
           feedback,
           executed: typeof executed === "boolean" ? executed : null,
+          snapshot: snapshot ?? null,
         };
 
         const request = await fetch("/api/history", {

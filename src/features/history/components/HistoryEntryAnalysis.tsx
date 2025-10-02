@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import type { CandlestickData } from "lightweight-charts";
+import type { CandlestickData, SeriesMarker, Time } from "lightweight-charts";
 
 import {
   AnalysisSection,
@@ -16,7 +16,8 @@ import {
 } from "@/features/analysis/components/AnalysisSection";
 import { INDICATOR_CONFIG, DEFAULT_MARKET_MODE } from "@/features/market/constants";
 import type { IndicatorKey } from "@/features/market/types";
-import type { HistoryEntry, HistoryVerdict } from "@/providers/history-provider";
+import { mapTimeframeToSeconds } from "@/features/analysis/components/AnalysisSection";
+import type { HistoryEntry, HistorySnapshot, HistoryVerdict } from "@/providers/history-provider";
 import { useLanguage } from "@/providers/language-provider";
 import { HistoryLiveChart } from "./HistoryLiveChart";
 
@@ -61,6 +62,14 @@ export function HistoryEntryAnalysis({ entry, onUpdateEntry }: HistoryEntryAnaly
   const { messages, languageTag } = useLanguage();
   const indicatorVisibility = useMemo(() => buildInitialIndicatorVisibility(), []);
   const [analysisCandles, setAnalysisCandles] = useState<CandlestickData[]>([]);
+  const [analysisMarkers, setAnalysisMarkers] = useState<SeriesMarker<Time>[]>([]);
+  const [analysisCandleDetails, setAnalysisCandleDetails] = useState<{
+    time: number;
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+  } | null>(null);
   const [chartStart, setChartStart] = useState("-");
   const [chartEnd, setChartEnd] = useState("-");
   const [isFetching, setIsFetching] = useState(false);
@@ -90,15 +99,248 @@ export function HistoryEntryAnalysis({ entry, onUpdateEntry }: HistoryEntryAnaly
     setExecutedState(entry.executed);
   }, [entry.id, entry.verdict, entry.feedback, entry.executed]);
 
+  const capturedAtMs = useMemo(() => {
+    const fromSnapshot = entry.snapshot?.capturedAt
+      ? Date.parse(entry.snapshot.capturedAt)
+      : NaN;
+    if (Number.isFinite(fromSnapshot)) {
+      return fromSnapshot;
+    }
+    const fromCreated = Date.parse(entry.createdAt);
+    return Number.isFinite(fromCreated) ? fromCreated : null;
+  }, [entry.snapshot?.capturedAt, entry.createdAt]);
+
+  const capturedAtSeconds = useMemo(() => {
+    if (capturedAtMs === null) {
+      return null;
+    }
+    return Math.floor(capturedAtMs / 1000);
+  }, [capturedAtMs]);
+
   useEffect(() => {
     let cancelled = false;
+
+    const applySnapshot = (
+      snapshotCandles: HistorySnapshot["candles"],
+      fetchedCandles: CandlestickData[]
+    ) => {
+      setAnalysisCandleDetails(null);
+      const candlesMap = new Map<number, CandlestickData>();
+
+      const pushCandle = (item: {
+        time: number;
+        open: number;
+        high: number;
+        low: number;
+        close: number;
+      }) => {
+        const payload: CandlestickData = {
+          time: (item.time as unknown) as CandlestickData["time"],
+          open: Number(item.open.toFixed(2)),
+          high: Number(item.high.toFixed(2)),
+          low: Number(item.low.toFixed(2)),
+          close: Number(item.close.toFixed(2)),
+        };
+        candlesMap.set(item.time, payload);
+      };
+
+      snapshotCandles.forEach((item) => {
+        pushCandle({
+          time: item.time,
+          open: item.open,
+          high: item.high,
+          low: item.low,
+          close: item.close,
+        });
+      });
+
+      fetchedCandles.forEach((item) => {
+        const timeNumeric = item.time as number;
+        if (!Number.isFinite(timeNumeric)) {
+          return;
+        }
+        pushCandle({
+          time: timeNumeric,
+          open: item.open,
+          high: (item as { high?: number }).high ?? item.close,
+          low: (item as { low?: number }).low ?? item.close,
+          close: item.close,
+        });
+      });
+
+      const combined = Array.from(candlesMap.values()).sort(
+        (a, b) => (a.time as number) - (b.time as number)
+      );
+
+      const timeframeSeconds = mapTimeframeToSeconds(timeframe);
+      const action = (entry.decision?.action ?? entry.response.decision?.action ?? "hold")
+        .toLowerCase();
+      const isBuy = action === "buy";
+      const isSell = action === "sell";
+      const stopPrice = entry.response.tradePlan.stopLoss ?? null;
+      const takeProfits = (entry.response.tradePlan.takeProfits ?? []).filter(
+        (value): value is number => typeof value === "number" && Number.isFinite(value)
+      );
+      const tpTarget = isBuy
+        ? (takeProfits.length ? Math.max(...takeProfits) : null)
+        : takeProfits.length
+        ? Math.min(...takeProfits)
+        : null;
+
+      const captureTime = capturedAtSeconds;
+      let eventTime: number | null = null;
+      let eventType: "tp" | "sl" | null = null;
+
+      for (const candle of combined) {
+        const openTime = candle.time as number;
+        if (captureTime !== null && openTime < captureTime) {
+          continue;
+        }
+
+        const high = (candle as { high?: number }).high ?? candle.close;
+        const low = (candle as { low?: number }).low ?? candle.close;
+
+        if (isBuy) {
+          const hitStop = stopPrice !== null && low <= stopPrice;
+          const hitTarget = tpTarget !== null && high >= tpTarget;
+          if (hitStop) {
+            eventTime = openTime;
+            eventType = "sl";
+            break;
+          }
+          if (hitTarget) {
+            eventTime = openTime;
+            eventType = "tp";
+            break;
+          }
+        } else if (isSell) {
+          const hitStop = stopPrice !== null && high >= stopPrice;
+          const hitTarget = tpTarget !== null && low <= tpTarget;
+          if (hitStop) {
+            eventTime = openTime;
+            eventType = "sl";
+            break;
+          }
+          if (hitTarget) {
+            eventTime = openTime;
+            eventType = "tp";
+            break;
+          }
+        }
+      }
+
+      const trimmed = eventTime !== null
+        ? combined.filter((item) => (item.time as number) <= eventTime)
+        : combined;
+
+      const limited = trimmed.slice(-220);
+      setAnalysisCandles(limited);
+      setMarketError(null);
+
+      if (limited.length) {
+        const [startLabel, endLabel] = buildChartRangeLabels(
+          limited.map((candle) => ({
+            time: new Date((candle.time as number) * 1000).toISOString(),
+            close: candle.close,
+          })),
+          languageTag
+        );
+        setChartStart(startLabel);
+        setChartEnd(endLabel);
+      } else {
+        setChartStart("-");
+        setChartEnd("-");
+      }
+
+      const markers: SeriesMarker<Time>[] = [];
+      let capturedCandleDetails: {
+        time: number;
+        open: number;
+        high: number;
+        low: number;
+        close: number;
+      } | null = null;
+      if (captureTime !== null) {
+        const captureMarker = (() => {
+          const timeframe = timeframeSeconds || 60 * 60;
+          const target = combined.find((candle) => {
+            const openTime = candle.time as number;
+            const closeTime = openTime + timeframe;
+            return captureTime >= openTime && captureTime < closeTime;
+          }) ?? combined.find((candle) => (candle.time as number) >= captureTime);
+          if (!target) {
+            return null;
+          }
+          capturedCandleDetails = {
+            time: target.time as number,
+            open: target.open,
+            high: (target as { high?: number }).high ?? target.close,
+            low: (target as { low?: number }).low ?? target.close,
+            close: target.close,
+          };
+          const text = isSell ? "S" : "B";
+          const color = isSell ? "#ef4444" : "#22c55e";
+          const position = isSell ? "aboveBar" : "belowBar";
+          return {
+            time: target.time,
+            position,
+            color: "#f8fafc",
+            shape: "text",
+            text,
+            backgroundColor: color,
+          } as SeriesMarker<Time>;
+        })();
+        if (captureMarker) {
+          markers.push(captureMarker);
+        }
+      }
+
+      if (eventTime !== null && eventType && combined.length) {
+        const eventCandle = combined.find(
+          (item) => (item.time as number) === eventTime
+        );
+        if (eventCandle) {
+          const isTp = eventType === "tp";
+          markers.push({
+            time: eventCandle.time,
+            position: isTp ? "aboveBar" : "belowBar",
+            shape: "text",
+            text: isTp ? "TP" : "SL",
+            color: "#f8fafc",
+            backgroundColor: isTp ? "#22c55e" : "#ef4444",
+          });
+        }
+      }
+
+      setAnalysisMarkers(markers);
+      setAnalysisCandleDetails(capturedCandleDetails);
+    };
+
     const loadCandles = async () => {
       setIsFetching(true);
       try {
         const params = new URLSearchParams();
         params.set("symbol", symbol);
         params.set("interval", interval);
-        params.set("limit", "300");
+        const fallbackCaptured = capturedAtMs ?? Date.now();
+        const startRange = Math.max(fallbackCaptured - 7 * 24 * 60 * 60 * 1000, 0);
+        const endRange = capturedAtMs ?? Date.now();
+        const intervalMsMap: Record<string, number> = {
+          "1m": 60_000,
+          "5m": 5 * 60_000,
+          "15m": 15 * 60_000,
+          "1h": 60 * 60_000,
+          "4h": 4 * 60 * 60_000,
+          "1d": 24 * 60 * 60_000,
+        };
+        const intervalMs = intervalMsMap[interval] ?? intervalMsMap["1h"];
+        const estimatedLimit = Math.min(
+          Math.ceil((endRange - startRange) / intervalMs) + 10,
+          5000
+        );
+        params.set("limit", String(estimatedLimit));
+        params.set("start", String(startRange));
+        params.set("end", String(endRange));
         params.set("provider", entry.provider);
         params.set("mode", entry.mode ?? DEFAULT_MARKET_MODE);
         const response = await fetch(`/api/market?${params.toString()}`);
@@ -112,10 +354,12 @@ export function HistoryEntryAnalysis({ entry, onUpdateEntry }: HistoryEntryAnaly
           } catch (parseError) {
             console.warn("Failed to parse market error payload", parseError);
           }
-          setAnalysisCandles([]);
-          setChartStart("-");
-          setChartEnd("-");
-          setMarketError(errorMessage);
+          if (!cancelled) {
+            setAnalysisCandles([]);
+            setChartStart("-");
+            setChartEnd("-");
+            setMarketError(errorMessage);
+          }
           return;
         }
         const payload = (await response.json()) as {
@@ -131,29 +375,17 @@ export function HistoryEntryAnalysis({ entry, onUpdateEntry }: HistoryEntryAnaly
         if (cancelled) {
           return;
         }
-        const candles: CandlestickData[] = (payload.candles ?? []).map((item) => ({
-          time: (item.openTime / 1000) as CandlestickData["time"],
-          open: Number(item.open.toFixed(2)),
-          high: Number(item.high.toFixed(2)),
-          low: Number(item.low.toFixed(2)),
-          close: Number(item.close.toFixed(2)),
-        }));
-        setAnalysisCandles(candles.slice(-220));
-        setMarketError(null);
-        if (candles.length) {
-          const [startLabel, endLabel] = buildChartRangeLabels(
-            candles.map((item) => ({
-              time: new Date((item.time as number) * 1000).toISOString(),
-              close: item.close,
-            })),
-            languageTag
-          );
-          setChartStart(startLabel);
-          setChartEnd(endLabel);
-        } else {
-          setChartStart("-");
-          setChartEnd("-");
-        }
+        const fetchedCandles: CandlestickData[] = (payload.candles ?? []).map(
+          (item) => ({
+            time: (item.openTime / 1000) as CandlestickData["time"],
+            open: Number(item.open.toFixed(2)),
+            high: Number(item.high.toFixed(2)),
+            low: Number(item.low.toFixed(2)),
+            close: Number(item.close.toFixed(2)),
+          })
+        );
+        const snapshotCandles = entry.snapshot?.candles ?? [];
+        applySnapshot(snapshotCandles, fetchedCandles);
       } catch (error) {
         console.error("Failed to load market data for history entry", error);
       } finally {
@@ -167,7 +399,21 @@ export function HistoryEntryAnalysis({ entry, onUpdateEntry }: HistoryEntryAnaly
     return () => {
       cancelled = true;
     };
-  }, [symbol, interval, languageTag, entry.provider, entry.mode]);
+  }, [
+    symbol,
+    interval,
+    languageTag,
+    entry.provider,
+    entry.mode,
+    entry.snapshot,
+    capturedAtSeconds,
+    capturedAtMs,
+    timeframe,
+    entry.response.tradePlan.stopLoss,
+    entry.response.tradePlan.takeProfits,
+    entry.decision?.action,
+    entry.response.decision?.action,
+  ]);
 
   const priceFormatter = useMemo(
     () =>
@@ -306,6 +552,7 @@ export function HistoryEntryAnalysis({ entry, onUpdateEntry }: HistoryEntryAnaly
         provider={entry.provider}
         mode={entry.mode}
         timeframe={entry.decision?.timeframe ?? entry.timeframe ?? timeframe}
+        snapshotCapturedAt={entry.snapshot?.capturedAt ?? entry.createdAt}
       />
 
       <AnalysisSection
@@ -313,6 +560,8 @@ export function HistoryEntryAnalysis({ entry, onUpdateEntry }: HistoryEntryAnaly
         timeframe={timeframe}
         indicatorVisibility={indicatorVisibility}
         analysisCandles={analysisCandles}
+        analysisMarkers={analysisMarkers}
+        analysisCandleDetails={analysisCandleDetails}
         overlayLevels={overlayLevels}
         supportiveHighlights={supportiveHighlights}
         paddedTargets={paddedTargets}

@@ -57,6 +57,7 @@ export type HistoryLiveChartProps = {
   provider: CexProvider;
   mode?: MarketMode | null;
   timeframe: string;
+  snapshotCapturedAt?: string | null;
 };
 
 export function HistoryLiveChart({
@@ -64,6 +65,7 @@ export function HistoryLiveChart({
   provider,
   mode,
   timeframe,
+  snapshotCapturedAt,
 }: HistoryLiveChartProps) {
   const { languageTag, messages, __, locale } = useLanguage();
   const historyCopy = messages.history.liveComparison;
@@ -192,6 +194,30 @@ export function HistoryLiveChart({
           params.set("mode", resolvedMode);
         }
 
+        const capturedAtMs = snapshotCapturedAt
+          ? Date.parse(snapshotCapturedAt)
+          : NaN;
+        if (Number.isFinite(capturedAtMs)) {
+          const start = Math.max(capturedAtMs - 7 * 24 * 60 * 60 * 1000, 0);
+          const end = Date.now();
+          const intervalMsMap: Record<string, number> = {
+            "1m": 60_000,
+            "5m": 5 * 60_000,
+            "15m": 15 * 60_000,
+            "1h": 60 * 60_000,
+            "4h": 4 * 60 * 60_000,
+            "1d": 24 * 60 * 60_000,
+          };
+          const intervalMs = intervalMsMap[interval] ?? intervalMsMap["1h"];
+          const estimate = Math.min(
+            Math.ceil((end - start) / intervalMs) + 10,
+            5000
+          );
+          params.set("limit", String(estimate));
+          params.set("start", String(start));
+          params.set("end", String(end));
+        }
+
         const response = await fetch(`/api/market?${params.toString()}`);
         if (!response.ok) {
           throw new Error(historyCopy.error);
@@ -273,6 +299,7 @@ export function HistoryLiveChart({
     resetChart,
     setHoverState,
     symbol,
+    snapshotCapturedAt,
   ]);
 
   useEffect(() => () => resetChart(), [resetChart]);
