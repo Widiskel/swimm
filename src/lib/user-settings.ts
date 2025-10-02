@@ -2,6 +2,7 @@ import { getMongoDb } from "./mongodb";
 
 export type UserSettingsDocument = {
   userId: string;
+  displayName?: string | null;
   binanceApiKey?: string | null;
   binanceApiSecret?: string | null;
   bybitApiKey?: string | null;
@@ -11,6 +12,7 @@ export type UserSettingsDocument = {
 
 export type UserSettingsPayload = {
   userId: string;
+  displayName: string | null;
   binanceApiKey: string | null;
   binanceApiSecret: string | null;
   bybitApiKey: string | null;
@@ -22,6 +24,7 @@ const COLLECTION = "user_settings";
 
 const toPayload = (doc: UserSettingsDocument): UserSettingsPayload => ({
   userId: doc.userId,
+  displayName: doc.displayName ?? null,
   binanceApiKey: doc.binanceApiKey ?? null,
   binanceApiSecret: doc.binanceApiSecret ?? null,
   bybitApiKey: doc.bybitApiKey ?? null,
@@ -39,6 +42,7 @@ export const getUserSettings = async (userId: string) => {
 export const upsertUserSettings = async (
   userId: string,
   updates: {
+    displayName?: string | null;
     binanceApiKey?: string | null;
     binanceApiSecret?: string | null;
     bybitApiKey?: string | null;
@@ -53,6 +57,7 @@ export const upsertUserSettings = async (
     {
       $set: {
         userId,
+        displayName: updates.displayName ?? null,
         binanceApiKey: updates.binanceApiKey ?? null,
         binanceApiSecret: updates.binanceApiSecret ?? null,
         bybitApiKey: updates.bybitApiKey ?? null,
@@ -65,6 +70,7 @@ export const upsertUserSettings = async (
 
   return {
     userId,
+    displayName: updates.displayName ?? null,
     binanceApiKey: updates.binanceApiKey ?? null,
     binanceApiSecret: updates.binanceApiSecret ?? null,
     bybitApiKey: updates.bybitApiKey ?? null,

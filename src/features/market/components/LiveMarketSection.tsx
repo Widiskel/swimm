@@ -31,20 +31,27 @@ import {
   type IndicatorSeriesMap,
   type MarketSnapshot,
 } from "../types";
-import { INDICATOR_CONFIG, PROVIDER_ICON_MAP, TIMEFRAME_OPTIONS } from "../constants";
+import {
+  INDICATOR_CONFIG,
+  PROVIDER_ICON_MAP,
+  TIMEFRAME_OPTIONS,
+  type MarketMode,
+} from "../constants";
 import type { CexProvider } from "../exchanges";
 import { useLanguage } from "@/providers/language-provider";
+import { swal } from "@/utils/swal";
 
 const REFRESH_INTERVAL = 30_000;
 const ORDERBOOK_LIMIT = 50;
 
 export type LiveMarketHandle = {
-  startChart: () => void;
+  startChart: (options?: { mode?: MarketMode }) => void;
   reset: () => void;
 };
 
 export type LiveMarketSectionProps = {
   provider: CexProvider;
+  mode: MarketMode;
   selectedPair: string;
   timeframe: (typeof TIMEFRAME_OPTIONS)[number];
   onTimeframeChange: (timeframe: (typeof TIMEFRAME_OPTIONS)[number]) => void;
@@ -64,6 +71,7 @@ export const LiveMarketSection = forwardRef<
 >(function LiveMarketSection(
   {
     provider,
+    mode: marketMode,
     selectedPair,
     timeframe,
     onTimeframeChange,
@@ -99,11 +107,13 @@ export const LiveMarketSection = forwardRef<
     ((param: MouseEventParams) => void) | null
   >(null);
   const refreshTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const notificationKeyRef = useRef<string | null>(null);
 
   const [chartData, setChartData] = useState<MarketSnapshot | null>(null);
   const [isChartActive, setIsChartActive] = useState(false);
   const [isChartVisible, setIsChartVisible] = useState(false);
   const [isChartLoading, setIsChartLoading] = useState(false);
+  const [isSnapshotLoading, setIsSnapshotLoading] = useState(false);
   const [chartError, setChartError] = useState<string | null>(null);
   const [hoverData, setHoverData] = useState<HoverData | null>(null);
   const hoverDataRef = useRef<HoverData | null>(null);
@@ -122,8 +132,8 @@ export const LiveMarketSection = forwardRef<
   const priceFormatter = useMemo(
     () =>
       new Intl.NumberFormat(languageTag, {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
+        minimumFractionDigits: 4,
+        maximumFractionDigits: 4,
       }),
     [languageTag]
   );
@@ -180,8 +190,10 @@ export const LiveMarketSection = forwardRef<
         symbol?: string;
         interval?: (typeof TIMEFRAME_OPTIONS)[number];
         provider?: CexProvider;
+        mode?: MarketMode;
       } = {}
     ) => {
+      setIsSnapshotLoading(true);
       if (!options.silent) {
         setIsChartLoading(true);
       }
@@ -189,6 +201,14 @@ export const LiveMarketSection = forwardRef<
         const symbol = options.symbol ?? selectedPair;
         const interval = options.interval ?? timeframe;
         const providerValue = options.provider ?? provider;
+        const modeValue = options.mode ?? marketMode;
+
+        if (!symbol) {
+          setChartData(null);
+          setIsChartActive(false);
+          setChartError(null);
+          return;
+        }
 
         const params = new URLSearchParams({
           symbol,
@@ -197,25 +217,59 @@ export const LiveMarketSection = forwardRef<
           provider: providerValue,
           locale,
         });
+        if (modeValue) {
+          params.set("mode", modeValue);
+        }
         const res = await fetch(`/api/market?${params.toString()}`);
         if (!res.ok) {
           throw new Error(__("live.errors.fetchSnapshot"));
         }
         const payload = (await res.json()) as MarketSnapshot;
         setChartData(payload);
-        setChartError(null);
         setIsChartActive(true);
+
+        if (!payload.candles?.length) {
+          const message =
+            (typeof payload.summary === "string" && payload.summary.trim().length > 0
+              ? payload.summary.trim()
+              : __("live.errors.renderChart")) ?? __("live.errors.renderChart");
+          setChartError(message);
+          const key = `warn|${message}`;
+          if (notificationKeyRef.current !== key) {
+            notificationKeyRef.current = key;
+            void swal({
+              title: liveCopy.card.title,
+              text: message,
+              icon: "warning",
+            });
+          }
+        } else {
+          notificationKeyRef.current = null;
+          setChartError(null);
+        }
       } catch (error) {
-        setChartError(
+        const message =
           error instanceof Error
             ? error.message
-            : __("live.errors.renderChart")
-        );
+            : __("live.errors.renderChart");
+        setChartError(message);
+        const key = `error|${message}`;
+        if (notificationKeyRef.current !== key) {
+          notificationKeyRef.current = key;
+          void swal({
+            title: liveCopy.card.title,
+            text: message,
+            icon: "error",
+          });
+        }
       } finally {
-        setIsChartLoading(false);
+        setIsSnapshotLoading(false);
+        if (!options.silent) {
+          setIsChartLoading(false);
+        }
       }
     },
-    [provider, selectedPair, timeframe, __, locale]
+    [provider, selectedPair, timeframe, marketMode, __, locale, liveCopy.card.title]
   );
 
   const startChartPolling = useCallback(
@@ -223,6 +277,7 @@ export const LiveMarketSection = forwardRef<
       symbol?: string;
       interval?: (typeof TIMEFRAME_OPTIONS)[number];
       provider?: CexProvider;
+      mode?: MarketMode;
     }) => {
       if (refreshTimerRef.current) {
         clearInterval(refreshTimerRef.current);
@@ -232,11 +287,16 @@ export const LiveMarketSection = forwardRef<
       setIsChartActive(false);
       setIsChartVisible(false);
       setHoverState(null);
+      notificationKeyRef.current = null;
+
+      const resolvedProvider = options?.provider ?? provider;
+      const resolvedMode = options?.mode ?? marketMode;
 
       fetchMarketSnapshot({
         symbol: options?.symbol,
         interval: options?.interval,
-        provider,
+        provider: resolvedProvider,
+        mode: resolvedMode,
       })
         .catch(() => undefined)
         .finally(() => {
@@ -249,18 +309,23 @@ export const LiveMarketSection = forwardRef<
               silent: true,
               symbol: options?.symbol,
               interval: options?.interval,
-              provider,
+              provider: resolvedProvider,
+              mode: resolvedMode,
             }).catch(() => undefined);
           }, REFRESH_INTERVAL);
         });
     },
-    [fetchMarketSnapshot, provider, setHoverState]
+    [fetchMarketSnapshot, marketMode, provider, setHoverState]
   );
 
   useImperativeHandle(
     ref,
     () => ({
-      startChart: () => startChartPolling({ provider }),
+      startChart: (options) =>
+        startChartPolling({
+          provider,
+          mode: options?.mode ?? marketMode,
+        }),
       reset: () => {
         if (refreshTimerRef.current) {
           clearInterval(refreshTimerRef.current);
@@ -270,10 +335,11 @@ export const LiveMarketSection = forwardRef<
         setIsChartActive(false);
         setIsChartVisible(false);
         setHoverState(null);
+        notificationKeyRef.current = null;
         resetChart();
       },
     }),
-    [provider, resetChart, setHoverState, startChartPolling]
+    [provider, marketMode, resetChart, setHoverState, startChartPolling]
   );
 
   useEffect(
@@ -503,24 +569,30 @@ export const LiveMarketSection = forwardRef<
                     </span>
                   </span>
                 </div>
-                <div className="flex flex-wrap items-center gap-3 text-sm text-[var(--swimm-neutral-500)]">
-                  <span className="text-lg font-semibold text-[var(--swimm-navy-900)]">
-                    {summaryStats
-                      ? simpleNumberFormatter.format(summaryStats.lastPrice)
-                      : "-"}
+              <div className="flex flex-wrap items-center gap-3 text-sm text-[var(--swimm-neutral-500)]">
+                <span className="text-lg font-semibold text-[var(--swimm-navy-900)]">
+                  {summaryStats
+                    ? simpleNumberFormatter.format(summaryStats.lastPrice)
+                    : "-"}
+                </span>
+                {priceChangePct !== null && (
+                  <span
+                    className={`rounded-full px-3 py-1 text-xs font-semibold ${changeBadgeClass}`}
+                  >
+                    {priceChangeLabel}
                   </span>
-                  {priceChangePct !== null && (
-                    <span
-                      className={`rounded-full px-3 py-1 text-xs font-semibold ${changeBadgeClass}`}
-                    >
-                      {priceChangeLabel}
-                    </span>
-                  )}
-                  <div className="ml-auto flex flex-wrap items-center gap-2 text-xs text-[var(--swimm-neutral-500)]">
-                    <span>
-                      {liveCopy.stats.volumeBase}:
-                      <span className="ml-1 text-[var(--swimm-navy-900)]">
-                        {volumeLabelBase}
+                )}
+                {isSnapshotLoading && (
+                  <span className="inline-flex items-center gap-2 rounded-full border border-[var(--swimm-neutral-300)] bg-white px-3 py-1 text-xs font-medium text-[var(--swimm-neutral-400)]">
+                    <span className="inline-block h-3 w-3 animate-spin rounded-full border border-[var(--swimm-neutral-300)] border-t-[var(--swimm-primary-500)]" />
+                    {liveCopy.card.loading}
+                  </span>
+                )}
+                <div className="ml-auto flex flex-wrap items-center gap-2 text-xs text-[var(--swimm-neutral-500)]">
+                  <span>
+                    {liveCopy.stats.volumeBase}:
+                    <span className="ml-1 text-[var(--swimm-navy-900)]">
+                      {volumeLabelBase}
                       </span>
                     </span>
                     {summaryStats && (

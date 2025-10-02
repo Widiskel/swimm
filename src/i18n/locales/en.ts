@@ -26,7 +26,8 @@ const en = {
   },
   hero: {
     badge: "Live Market Intelligence",
-    heading: "Track live crypto markets, then let the agent build trade-ready plans instantly.",
+    heading:
+      "Track live crypto markets, then let the agent build trade-ready plans instantly.",
     description:
       "Web Analytic AI blends Binance price streaming, order flow, and up-to-the-minute Tavily headlines into structured guidance you can execute.",
     features: [
@@ -50,10 +51,16 @@ const en = {
   pairSelection: {
     title: "Choose trading pair",
     description:
-      "Pick a pair, then click \"Show chart\" to stream candlesticks. Timeframe can be adjusted inside the chart card.",
+      'Pick a pair, then click "Show chart" to stream candlesticks. Timeframe can be adjusted inside the chart card.',
     selectLabel: "Trading pair",
+    modeLabel: "Market mode",
+    modeHint: "Choose between spot markets or perpetual futures",
     providerLabel: "CEX provider",
     providerHint: "Choose the exchange to source prices and order data",
+    modeOptions: {
+      spot: "Spot",
+      futures: "Futures",
+    },
     providerOptions: {
       binance: "Binance",
       bybit: "Bybit",
@@ -80,7 +87,7 @@ const en = {
       hoverHigh: "High",
       hoverLow: "Low",
       loading: "Loading chart...",
-      emptyState: "Select a pair and click \"Show chart\" to load candlesticks.",
+      emptyState: 'Select a pair and click "Show chart" to load candlesticks.',
     },
     stats: {
       volumeBase: "24h volume",
@@ -92,7 +99,8 @@ const en = {
       bids: "Bids",
       asks: "Asks",
     },
-    analysisNote: "Analysis will use {pair} from {provider} with timeframe {timeframe}.",
+    analysisNote:
+      "Analysis will use {pair} from {provider} with timeframe {timeframe}.",
     analyzeButton: "Analyze",
     analyzingButton: "Analyzing...",
     errors: {
@@ -103,7 +111,10 @@ const en = {
   market: {
     summary: {
       unavailable: "{provider} market data is unavailable.",
-      spotTitle: "{symbol} spot ({provider})",
+      modeTitle: {
+        spot: "{symbol} spot ({provider})",
+        futures: "{symbol} futures ({provider})",
+      },
       lastPrice: "Last price: {value}",
       change24h: "24h change: {value}%",
       highLow24h: "24h high/low: {high} / {low}",
@@ -122,6 +133,176 @@ const en = {
       loadPairs: "Failed to load tradable pairs from the provider.",
     },
   },
+  agentApi: {
+    history: {
+      header: "Personal history ({pair}, {timeframe})",
+      savedPlans: "Saved plans: {total} (Buy: {buy} | Sell: {sell})",
+      verdictSummary: "Verdicts — Accurate: {accurate}, Missed: {inaccurate}, Pending: {pending}",
+      successRate: "Success rate: {value}",
+      successRatePending: "Success rate: Not enough data",
+      feedbackMissing: "(no feedback)",
+      verdict: {
+        accurate: "Accurate",
+        inaccurate: "Missed",
+        unknown: "Pending",
+      },
+    },
+    marketAnalytics: {
+      missingNarrative: "No candle data available.",
+      missingForecast: "Unable to build a forecast without price history.",
+      bullishSma: "Bullish signal: fast SMA is above slow SMA.",
+      bearishSma: "Bearish signal: fast SMA is below slow SMA.",
+      volatilityLabel: "Volatility {timeframe}",
+      priceRangeLabel: "Price range",
+      sessionChangeLabel: "Change since session start",
+      atrLine: "ATR(14): {value} ({percent}% of price)",
+      volatilityBucket: {
+        low: "Volatility regime: low (tight range conditions).",
+        medium: "Volatility regime: medium (two-way participation).",
+        high: "Volatility regime: high (expect wider swings).",
+        unknown: "Volatility regime: unknown (insufficient data).",
+      },
+      volatilityBucketName: {
+        low: "low",
+        medium: "moderate",
+        high: "elevated",
+        unknown: "unknown",
+      },
+      smaRelation: {
+        above: "Bullish crossover (fast above slow).",
+        below: "Bearish crossover (fast below slow).",
+        flat: "Flat/indecisive crossover.",
+      },
+      momentum: {
+        bullish: "bullish",
+        bearish: "bearish",
+        neutral: "neutral",
+      },
+      chartNarrative:
+        "Price on the {timeframe} timeframe is {momentum} with the latest close at {price} USDT.",
+      forecast: {
+        positive:
+          "Positive momentum dominates; watch for consolidation before trend continuation.",
+        negative:
+          "Selling pressure remains; a bullish catalyst is needed for reversal.",
+        flat: "Sideways movement; wait for a breakout to confirm the next direction.",
+      },
+      focus: {
+        bullishBreakout:
+          "Treat the move as a bullish breakout; plan for continuation but define invalidation near prior resistance.",
+        bearishBreakout:
+          "Bearish pressure suggests a breakdown; look for continuation shorts while marking reclaim levels.",
+        momentumLong:
+          "Momentum is skewed long; stalk pullbacks into moving averages before taking continuation entries.",
+        momentumShort:
+          "Momentum is skewed short; wait for relief bounces to fade while tracking nearby support.",
+        rangePlay:
+          "Price is ranging; frame mean-reversion trades with tight risk until volatility expands.",
+      },
+      keyMetrics: {
+        close: "Last close: {value} USDT",
+        change: "Session change: {value}%",
+        smaSignal: "SMA signal: {value}",
+        atr: "ATR(14): {value} ({percent}% of price)",
+        volatility: "Volatility regime: {value}",
+      },
+    },
+    fundamentals: {
+      priceUnavailable: "Latest price information is unavailable.",
+      changeUnavailable: "24h price change has not been calculated.",
+      macroReminder:
+        "Align the {timeframe} strategy with current macro and on-chain context before execution.",
+    },
+    userPrompt: {
+      placeholders: {
+        urls: "(No URLs provided)",
+        dataset: "(No dataset uploaded)",
+        manual: "(No manual notes)",
+        technical: "(No technical summary)",
+        tavilySummary: "(No Tavily summary)",
+        tavilyResults: "(No Tavily search results)",
+        tavilyArticles: "(No Tavily article extracts)",
+        promptSeries: "(No candle data)",
+        history: "(No personal history saved for this pair)",
+        unknownDataset: "Unknown",
+        datasetPreviewLabel: "Content (truncated)",
+        keyMetrics: "(Key metrics unavailable)",
+        analysisFocus: "(No focus hint available)",
+      },
+      datasetNameLabel: "Dataset name",
+      tavily: {
+        urlLabel: "URL",
+        publishedLabel: "Published",
+        summaryLabel: "Summary",
+        excerptLabel: "Excerpt",
+        rawExcerptLabel: "Excerpt (raw)",
+      },
+      dataMode: {
+        scrape: "Scrape news URLs",
+        upload: "Upload dataset",
+        manual: "Manual notes",
+      },
+      labels: {
+        objective: "Analysis objective",
+        dataMode: "Active data mode",
+        urls: "News URLs",
+        manual: "Manual notes",
+        dataset: "Custom dataset",
+        history: "User history",
+        pair: "Pair under analysis",
+        timeframe: "Target timeframe",
+        summary: "Market data snapshot for {pair}",
+        keyMetrics: "Key metrics snapshot",
+        analysisFocus: "Focus checklist",
+        narrative: "Price narrative",
+        forecast: "Internal forecast",
+        promptSeries: "Candle data (ISO|O/H/L/C/V)",
+        technical: "Technical snapshot",
+        tavilySummary: "Tavily summary",
+        tavilyResults: "Tavily search results",
+        tavilyArticles: "Tavily article extracts",
+        instructions: "Instructions",
+      },
+      instructions:
+        "Perform sentiment, news, and market analysis for {pair}; surface tradable insights.\nProduce base, bullish, and bearish price scenarios for {pair} on the {timeframe} timeframe.\nProvide supporting technical & fundamental notes plus a risk-aware execution plan (entries, targets, stop, sizing).\nRespond in JSON only, using natural English throughout all strings.",
+    },
+    tradePlan: {
+      holdSizingNotes:
+        "No execution plan provided. Wait for additional confirmation before opening a position.",
+      holdRationale:
+        "Momentum is unclear. Reassess once price breaks a key area.",
+      sizingNotes: {
+        long: "Risk per position should stay ≤ 2% of equity; scale into the trade gradually.",
+        short: "Confirm borrow availability for shorts and keep position sizing conservative.",
+        neutral: "Hold execution until additional signals confirm direction.",
+      },
+      rationaleFallback:
+        "Validate the trade setup with order flow and macro headlines before execution.",
+    },
+    payload: {
+      rationaleMissing:
+        "The model did not supply a rationale. Add more objective detail for a follow-up analysis run.",
+      summaryMissing:
+        "Analysis could not be generated. Rerun the agent with richer context.",
+      nextStepsDefault:
+        "Validate the trading plan against live charts and order-book data.\nRefresh macro/news context and rerun the agent if needed.",
+    },
+    systemPrompt: {
+      languageReminder: "All strings must be written in natural English.",
+      coreGuidelines:
+        "- Anchor every conclusion to the supplied market and news data.\n- Keep numeric fields as numbers (confidence between 0 and 1) and avoid fabricating data that conflicts with inputs.\n- Highlight missing context explicitly instead of guessing levels or catalysts.",
+      example:
+        "Example JSON:\n{\n  \"summary\": \"Price is holding the mid-range after a 2% rally; liquidity is clustered near 68k.\",\n  \"decision\": {\n    \"action\": \"hold\",\n    \"confidence\": 0.48,\n    \"timeframe\": \"4H\",\n    \"rationale\": \"Momentum is slowing and order flow is mixed; wait for a range break before committing risk.\"\n  },\n  \"market\": {\n    \"pair\": \"BTCUSDT\",\n    \"chart\": {\n      \"interval\": \"5m\",\n      \"points\": [],\n      \"narrative\": \"Short-term candles show higher lows, but volume is tapering.\",\n      \"forecast\": \"Likely to consolidate unless buyers absorb offers above 68.5k.\"\n    },\n    \"technical\": [\"SMA7 is above SMA21\"],\n    \"fundamental\": [\"24h volume has normalised; no major news catalysts active.\"]\n  },\n  \"tradePlan\": {\n    \"bias\": \"neutral\",\n    \"entries\": [],\n    \"entry\": null,\n    \"stopLoss\": null,\n    \"takeProfits\": [],\n    \"executionWindow\": \"-\",\n    \"sizingNotes\": \"Risk <=2% until breakout confirms direction.\",\n    \"rationale\": \"Wait for breakout confirmation or new macro catalyst before sizing up.\"\n  },\n  \"highlights\": [\"Order book shows stacked offers near 68.5k\"],\n  \"nextSteps\": [\"Monitor ETF flows after NY open\"]\n}",
+    },
+    errors: {
+      invalidJson: "Invalid JSON payload",
+      objectiveRequired: "Analysis objective is required.",
+      missingApiKey: "Sentient Models API key is not configured.",
+      missingContent: "Sentient Models API did not return any content.",
+      timeout: "Request to Sentient Models timed out.",
+      generic: "Sentient Models integration failed.",
+    },
+  },
   analysis: {
     heading: "Agent analysis for {pair} ({timeframe})",
     confidence: "Confidence {value}% - Action {action}",
@@ -134,6 +315,11 @@ const en = {
       legendTarget: "Target",
       legendStop: "Stop",
       placeholder: "Snapshot chart will appear after the analysis is complete.",
+      ohlcCapturedAt: "Captured at",
+      ohlcOpen: "Open",
+      ohlcHigh: "High",
+      ohlcLow: "Low",
+      ohlcClose: "Close",
     },
     chartInsight: {
       title: "Chart insight",
@@ -151,6 +337,7 @@ const en = {
     },
     highlights: {
       title: "Supporting notes",
+      empty: "No supporting notes captured yet.",
     },
     tradePlan: {
       title: "Trade plan",
@@ -171,78 +358,110 @@ const en = {
       title: "Further integrations",
       body1:
         "Connect your own scraping endpoints, on-chain feeds, or favorite LLM providers (OpenAI, Claude, etc.) through the /api/agent route.",
-      body2: "Automate order execution on your preferred exchange once you validate the recommendations.",
+      body2:
+        "Automate order execution on your preferred exchange once you validate the recommendations.",
     },
-     savePanel: {
-
+    savePanel: {
       title: "Archive this analysis",
 
-      description: "Log the outcome and store the full agent output in your history.",
+      description:
+        "Store the full agent output in your history now and confirm the outcome once the trade has finished.",
 
       verdictLabel: "Prediction outcome",
 
       verdictOptions: {
-
         accurate: {
-
           label: "Accurate",
 
           description: "Price respected the plan and levels.",
-
         },
 
         inaccurate: {
-
           label: "Missed",
 
           description: "Price invalidated the thesis or levels.",
-
         },
 
         unknown: {
-
           label: "Too early",
 
           description: "Still waiting on price action to confirm.",
-
         },
-
       },
 
       feedbackLabel: "Feedback notes",
 
-      feedbackPlaceholder: "Add context on why the trade worked or what you observed...",
+      feedbackPlaceholder:
+        "Add context on why the trade worked or what you observed...",
 
-      holdNotAllowed: "Hold signals cannot be saved. Save only actionable buy or sell plans.",
+      holdNotAllowed:
+        "Hold signals cannot be saved. Save only actionable buy or sell plans.",
 
-      feedbackHint: "Feedback helps refine future summaries and keeps your journal detailed.",
+      feedbackHint:
+        "Feedback helps refine future summaries and keeps your journal detailed. You can always add it later from History.",
 
       saveButton: "Save to history",
 
       savingButton: "Saving...",
 
-      successMessage: "Report stored in your history.",
+      savedButton: "Saved",
+
+      successMessage: "Report stored in your history. Update the verdict anytime from History.",
 
       loginPrompt: "Sign in to save analyses to your SWIMM account.",
 
       syncing: "Preparing your secure session...",
 
-      verdictRequired: "Select how the prediction performed before saving.",
-
       genericError: "Unable to save the report. Try again.",
 
-      hint: "Entries are stored privately with your verdict and feedback.",
-
+      hint: "Entries are stored privately. Update the verdict anytime from your History page.",
     },
-
- },
+  },
   profile: {
     badge: "Account",
-    title: "Profile & Exchange API Keys",
-    description:
-      "Link trading keys that your exchanges use for order execution and portfolio access. Trading actions stay disabled until keys are connected. Leave the fields blank if you only plan to fetch public market data.",
+    title: "Account & Exchange Settings",
+    descriptions: {
+      account:
+        "Manage your personal information and linked login providers so the avatar and history reflect the right identity.",
+      apiKey:
+        "Link trading keys used for execution or portfolio access. Without keys, trading actions stay disabled and only public market tools are available.",
+    },
+    tabs: {
+      account: "Account",
+      apiKey: "API keys",
+    },
+    account: {
+      title: "Account preferences",
+      description:
+        "Update your display name and review which sign-in providers are linked. Exchange wallets are not required here.",
+      displayNameLabel: "Display name",
+      displayNamePlaceholder: "Enter the name shown across SWIMM",
+      displayNameHelp: "Used in notifications and collaborative reports.",
+      connectionsTitle: "Linked providers",
+      connectionsDescription:
+        "Manage which social or email accounts can authenticate you.",
+      connectionStatus: {
+        connected: "Connected",
+        notConnected: "Not connected",
+      },
+      actions: {
+        save: "Save account changes",
+        saving: "Saving...",
+        connect: "Connect",
+        disconnect: "Disconnect",
+        processing: "Processing...",
+      },
+      success: "Account preferences updated.",
+      connectionsNote: "Use the buttons below to link or unlink providers. You can also manage them through the regular sign-in flow.",
+    },
+    connections: {
+      email: "Email",
+      google: "Google",
+      discord: "Discord",
+    },
     loading: "Loading your profile...",
-    success: "Settings saved. Future analyses will prioritise your personal keys.",
+    success:
+      "Settings saved. Future analyses will prioritise your personal keys.",
     disclaimer:
       "Keys stay encrypted and tied to your account. SWIMM will never place trades or move funds without your consent.",
     placeholders: {
@@ -251,13 +470,15 @@ const en = {
     },
     binance: {
       title: "Binance credentials",
-      description: "Use trade-enabled keys if you want SWIMM to sync positions or prepare executions. For market-only access, your workspace project key already covers price data.",
+      description:
+        "Use trade-enabled keys if you want SWIMM to sync positions or prepare executions. For market-only access, your workspace project key already covers price data.",
       apiKey: "API key",
       apiSecret: "API secret",
     },
     bybit: {
       title: "Bybit credentials",
-      description: "Optional. Supply keys for account-aware tooling on Bybit. Leave blank when you only need the shared market feed.",
+      description:
+        "Optional. Supply keys for account-aware tooling on Bybit. Leave blank when you only need the shared market feed.",
       apiKey: "API key",
       apiSecret: "API secret",
     },
@@ -267,7 +488,8 @@ const en = {
     },
     authRequired: {
       title: "Sign in to manage your profile",
-      description: "Connect your Privy account to edit personal API keys and preferences.",
+      description:
+        "Connect your Privy account to edit personal API keys and preferences.",
       cta: "Sign in",
     },
     meta: {
@@ -275,7 +497,8 @@ const en = {
       lastUpdated: "Last updated {timestamp}",
       neverUpdated: "No settings saved yet.",
       hint: "All keys are encrypted at rest and never shared across accounts.",
-      fallback: "If you leave these fields blank, account-aware trading features stay disabled and only public market tools remain available.",
+      fallback:
+        "If you leave these fields blank, account-aware trading features stay disabled and only public market tools remain available.",
     },
     errors: {
       sessionRequired: "Please sign in before saving settings.",
@@ -283,12 +506,15 @@ const en = {
     },
   },
   analysisFallback: {
-    summary: "Analysis could not be generated. Please rerun the agent with richer data.",
-    rationale: "The model did not provide a rationale. Add more objective details for the next attempt.",
+    summary:
+      "Analysis could not be generated. Please rerun the agent with richer data.",
+    rationale:
+      "The model did not provide a rationale. Add more objective details for the next attempt.",
   },
   agent: {
     errors: {
-      unsupportedSymbol: "{symbol} is not supported by the {provider} data source.",
+      unsupportedSymbol:
+        "{symbol} is not supported by the {provider} data source.",
     },
   },
   auth: {
@@ -301,12 +527,12 @@ const en = {
     logoutError: "Logout failed. Please try again.",
     authenticatedLabel: "Authenticated",
     defaultUser: "Account",
-    envMissing:
-      "Set NEXT_PUBLIC_PRIVY_APP_ID to enable authentication.",
+    envMissing: "Set NEXT_PUBLIC_PRIVY_APP_ID to enable authentication.",
   },
   analysisPage: {
     connectingTitle: "Checking your sign-in status...",
-    connectingSubtitle: "Please wait while we verify access to protected tools.",
+    connectingSubtitle:
+      "Please wait while we verify access to protected tools.",
     protectedBadge: "Protected Area",
     signInHeading: "Sign in to run personalised trading analysis",
     signInDescription:
@@ -324,7 +550,7 @@ const en = {
     title: "Analysis history",
     subtitle:
       "Saved analyses live in the cloud with your verdict and feedback so you can review them anywhere.",
-    clearButton: "Clear history",
+    retentionNote: "History stays available so SWIMM can keep learning from your outcomes.",
     loading: "Loading saved analyses...",
     metrics: {
       totalAnalyses: "Total analyses",
@@ -381,6 +607,21 @@ const en = {
         empty: "No feedback left for this report.",
       },
     },
+    feedbackPanel: {
+      title: "How did this plan play out?",
+      description:
+        "Update the verdict after you've executed the trade so the agent can keep learning from real outcomes.",
+      holdDisabled: "This plan didn't trigger a trade, so feedback isn't required.",
+      verdictLabel: "Outcome verdict",
+      feedbackLabel: "Execution notes",
+      feedbackPlaceholder:
+        "Share what happened after you followed (or skipped) the plan...",
+      pendingHint: "Add context on fills, slippage, or reasons the plan succeeded or failed.",
+      submitButton: "Submit feedback",
+      updatingButton: "Saving feedback...",
+      success: "Thanks! Your feedback has been saved.",
+      genericError: "Unable to update feedback right now. Try again.",
+    },
     dayGroup: {
       title: "Analyses on {date}",
       totals: {
@@ -400,6 +641,7 @@ const en = {
       verdictLabel: "Verdict",
       pairLabel: "Pair",
       allOption: "All",
+      dateLabel: "Date",
       decisionOptions: {
         buy: "Buy",
         sell: "Sell",
@@ -412,10 +654,43 @@ const en = {
       },
     },
     summaryRow: {
-      entry: "{pair} ? {timeframe}",
+      entry: "{pair} • {timeframe}",
       format: "{decision} -> {verdict}",
       noDecision: "No decision",
       noVerdict: "No verdict",
+    },
+    detail: {
+      backLink: "Back to history",
+      loading: "Loading entry...",
+      missingTitle: "Analysis not found",
+      missingDescription: "We couldn't find this saved analysis. It may have been removed.",
+      metaCreated: "Created",
+      metaUpdated: "Last updated",
+      decisionLabel: "Decision",
+      verdictLabel: "Verdict",
+    },
+    executionSurvey: {
+      title: "Did you execute this plan?",
+      description:
+        "Let us know if you took the trade so we can prompt for outcome feedback at the right time.",
+      executedYes: "Yes, I executed it",
+      executedNo: "No, kept it as reference",
+      recordedYes: "Marked as executed. Tell us how it performed below.",
+      recordedNo: "Saved as reference only. You can update this later if you take the trade.",
+      updateError: "Unable to update execution status. Try again.",
+    },
+    executionBadge: {
+      executed: "Executed",
+    },
+    liveComparison: {
+      title: "Live chart",
+      subtitle: "Current {pair} ({timeframe}) from {provider}.",
+      lastUpdated: "Updated {time}",
+      loading: "Loading live chart...",
+      empty: "Live market data is unavailable.",
+      error: "Unable to load live chart.",
+      timeframeLabel: "Timeframe",
+      indicatorsLabel: "Indicators",
     },
   },
   language: {
@@ -427,8 +702,8 @@ const en = {
       badge: "SWIMM Intelligence Hub",
       heading: "Multi-pair crypto intelligence with natural-language guidance.",
       description:
-        "SWIMM harnesses Fireworks LLM to analyse structure, sentiment, and liquidity across supported pairs.",
-      ctaPrimaryAuthenticated: "Launch analysis dashboard",
+        "SWIMM harnesses Sentient Models (dobby-unhinged-llama) to analyse structure, sentiment, and liquidity across supported pairs.",
+      ctaPrimaryAuthenticated: "Launch analytics",
       ctaPrimaryGuest: "Sign in & start",
       ctaSecondaryAuthenticated: "Review history",
       ctaSecondaryGuest: "Explore features",
@@ -438,22 +713,25 @@ const en = {
     highlights: [
       {
         title: "Multi-Pair Forecasting",
-        description: "AI projections across BTC, ETH, SOL, and rotating assets.",
+        description:
+          "AI projections across BTC, ETH, SOL, and rotating assets.",
       },
       {
         title: "Unified Sentiment",
-        description: "Blend scraped headlines, briefs, and custom data for balanced decisions.",
+        description:
+          "Blend scraped headlines, briefs, and custom data for balanced decisions.",
       },
       {
         title: "Trade Plans",
-        description: "Entries, targets, stops, and sizing guidance aligned to your timeframe.",
+        description:
+          "Entries, targets, stops, and sizing guidance aligned to your timeframe.",
       },
     ],
     features: {
       heading: "Why traders choose SWIMM",
       description:
         "Each briefing blends technical signals, catalysts, and AI projections to minimise bias.",
-      cta: "View the dashboard",
+      cta: "View analytics",
       cards: [
         {
           title: "Sentiment Fusion",
@@ -467,19 +745,23 @@ const en = {
         },
         {
           title: "Risk Discipline",
-          description: "Every call ships with realistic targets and protective stops.",
+          description:
+            "Every call ships with realistic targets and protective stops.",
         },
         {
           title: "Live Binance Feed",
-          description: "Stream candlesticks for majors and track new listings effortlessly.",
+          description:
+            "Stream candlesticks for majors and track new listings effortlessly.",
         },
         {
           title: "Timeframe Control",
-          description: "Flip from 5-minute scalps to daily swings without losing context.",
+          description:
+            "Flip from 5-minute scalps to daily swings without losing context.",
         },
         {
           title: "Persistent History",
-          description: "Compare past calls stored locally and iterate your playbook.",
+          description:
+            "Compare past calls stored locally and iterate your playbook.",
         },
       ],
     },
@@ -493,17 +775,20 @@ const en = {
         {
           id: "01",
           title: "Authenticate with Privy",
-          description: "Secure login via email or wallet unlocks SWIMM analytics.",
+          description:
+            "Secure login via email or wallet unlocks SWIMM analytics.",
         },
         {
           id: "02",
           title: "Pick Pair & Timeframe",
-          description: "Switch from scalps to swings across supported symbols in seconds.",
+          description:
+            "Switch from scalps to swings across supported symbols in seconds.",
         },
         {
           id: "03",
           title: "Execute with Confidence",
-          description: "Follow AI-backed entries, targets, and risk parameters.",
+          description:
+            "Follow AI-backed entries, targets, and risk parameters.",
         },
       ],
     },

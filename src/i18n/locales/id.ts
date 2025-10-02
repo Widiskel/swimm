@@ -53,8 +53,14 @@ const id = {
     description:
       'Tentukan pair lalu klik "Tampilkan chart" untuk menampilkan candlestick. Timeframe bisa diganti langsung di kartu chart.',
     selectLabel: "Trading pair",
+    modeLabel: "Mode pasar",
+    modeHint: "Pilih antara pasar spot atau futures perpetual",
     providerLabel: "CEX provider",
     providerHint: "Pilih bursa sumber harga dan data pasar",
+    modeOptions: {
+      spot: "Spot",
+      futures: "Futures",
+    },
     providerOptions: {
       binance: "Binance",
       bybit: "Bybit",
@@ -106,7 +112,10 @@ const id = {
   market: {
     summary: {
       unavailable: "Data pasar {provider} tidak tersedia.",
-      spotTitle: "{symbol} spot ({provider})",
+      modeTitle: {
+        spot: "{symbol} spot ({provider})",
+        futures: "{symbol} futures ({provider})",
+      },
       lastPrice: "Harga terakhir: {value}",
       change24h: "Perubahan 24 jam: {value}%",
       highLow24h: "High/Low 24 jam: {high} / {low}",
@@ -125,6 +134,176 @@ const id = {
       loadPairs: "Gagal memuat daftar pair dari provider.",
     },
   },
+  agentApi: {
+    history: {
+      header: "Riwayat personal ({pair}, {timeframe})",
+      savedPlans: "Total riwayat tersimpan: {total} (Buy: {buy} | Sell: {sell})",
+      verdictSummary: "Verdict — Akurat: {accurate}, Melenceng: {inaccurate}, Pending: {pending}",
+      successRate: "Rasio keberhasilan: {value}",
+      successRatePending: "Rasio keberhasilan: Belum cukup data",
+      feedbackMissing: "(tanpa catatan)",
+      verdict: {
+        accurate: "Akurat",
+        inaccurate: "Melenceng",
+        unknown: "Pending",
+      },
+    },
+    marketAnalytics: {
+      missingNarrative: "Data candle tidak tersedia.",
+      missingForecast: "Tidak dapat melakukan forecasting tanpa data harga.",
+      bullishSma: "Sinyal bullish: SMA cepat berada di atas SMA lambat.",
+      bearishSma: "Sinyal bearish: SMA cepat berada di bawah SMA lambat.",
+      volatilityLabel: "Volatilitas {timeframe}",
+      priceRangeLabel: "Rentang harga",
+      sessionChangeLabel: "Perubahan sejak awal sesi",
+      atrLine: "ATR(14): {value} ({percent}% dari harga)",
+      volatilityBucket: {
+        low: "Rezim volatilitas: rendah (rentang sempit).",
+        medium: "Rezim volatilitas: medium (arah dua sisi seimbang).",
+        high: "Rezim volatilitas: tinggi (waspadai ayunan lebar).",
+        unknown: "Rezim volatilitas: tidak diketahui (data kurang).",
+      },
+      volatilityBucketName: {
+        low: "rendah",
+        medium: "moderat",
+        high: "tinggi",
+        unknown: "tidak diketahui",
+      },
+      smaRelation: {
+        above: "Crossover bullish (SMA cepat di atas SMA lambat).",
+        below: "Crossover bearish (SMA cepat di bawah SMA lambat).",
+        flat: "Crossover datar/tidak tegas.",
+      },
+      momentum: {
+        bullish: "bullish",
+        bearish: "bearish",
+        neutral: "netral",
+      },
+      chartNarrative:
+        "Harga timeframe {timeframe} bergerak {momentum} dengan penutupan terakhir {price} USDT.",
+      forecast: {
+        positive:
+          "Momentum positif mendominasi; waspadai konsolidasi sebelum kelanjutan tren.",
+        negative:
+          "Tekanan jual masih terasa; butuh katalis positif untuk reversal.",
+        flat: "Pergerakan datar; tunggu breakout untuk konfirmasi arah berikutnya.",
+      },
+      focus: {
+        bullishBreakout:
+          "Perlakukan pergerakan sebagai breakout bullish; siapkan skenario lanjutan dengan batas invalidasi di resistance sebelumnya.",
+        bearishBreakout:
+          "Tekanan bearish menandakan breakdown; susun rencana short lanjutan sambil memantau area reclaim.",
+        momentumLong:
+          "Momentum condong ke sisi long; incar pullback ke moving average sebelum melanjutkan posisi.",
+        momentumShort:
+          "Momentum condong ke sisi short; tunggu relief bounce untuk dijual dengan fokus ke support terdekat.",
+        rangePlay:
+          "Harga masih sideway; eksekusi mean reversion dengan risiko ketat sampai volatilitas meningkat.",
+      },
+      keyMetrics: {
+        close: "Penutupan terakhir: {value} USDT",
+        change: "Perubahan sesi: {value}%",
+        smaSignal: "Sinyal SMA: {value}",
+        atr: "ATR(14): {value} ({percent}% dari harga)",
+        volatility: "Rezim volatilitas: {value}",
+      },
+    },
+    fundamentals: {
+      priceUnavailable: "Harga terakhir tidak tersedia.",
+      changeUnavailable: "Perubahan harga 24 jam belum dihitung.",
+      macroReminder:
+        "Selaraskan strategi {timeframe} dengan konteks makro dan on-chain sebelum eksekusi.",
+    },
+    userPrompt: {
+      placeholders: {
+        urls: "(Tidak ada URL yang diberikan)",
+        dataset: "(Tidak ada dataset yang diunggah)",
+        manual: "(Tidak ada catatan manual)",
+        technical: "(Tidak ada ringkasan teknikal)",
+        tavilySummary: "(Tidak ada ringkasan Tavily)",
+        tavilyResults: "(Tidak ada hasil pencarian Tavily)",
+        tavilyArticles: "(Tidak ada konten Tavily yang diekstrak)",
+        promptSeries: "(Data candle tidak tersedia)",
+        history: "(Belum ada riwayat pengguna untuk pair ini)",
+        unknownDataset: "Tidak diketahui",
+        datasetPreviewLabel: "Isi (dipangkas)",
+        keyMetrics: "(Metrik kunci belum tersedia)",
+        analysisFocus: "(Belum ada fokus analisa)",
+      },
+      datasetNameLabel: "Nama dataset",
+      tavily: {
+        urlLabel: "URL",
+        publishedLabel: "Tanggal",
+        summaryLabel: "Ringkasan",
+        excerptLabel: "Kutipan",
+        rawExcerptLabel: "Kutipan (raw)",
+      },
+      dataMode: {
+        scrape: "Scrape URL berita",
+        upload: "Unggah dataset",
+        manual: "Catatan manual",
+      },
+      labels: {
+        objective: "Tujuan analisa",
+        dataMode: "Mode sumber data aktif",
+        urls: "Daftar URL berita",
+        manual: "Catatan manual",
+        dataset: "Dataset kustom",
+        history: "Riwayat pengguna",
+        pair: "Pair yang dianalisis",
+        timeframe: "Timeframe target",
+        summary: "Snapshot data pasar untuk {pair}",
+        keyMetrics: "Metrik kunci",
+        analysisFocus: "Fokus analisa",
+        narrative: "Narasi harga",
+        forecast: "Forecast internal",
+        promptSeries: "Data candle (ISO|O/H/L/C/V)",
+        technical: "Ringkasan teknikal",
+        tavilySummary: "Ringkasan Tavily",
+        tavilyResults: "Hasil pencarian Tavily",
+        tavilyArticles: "Konten Tavily",
+        instructions: "Instruksi",
+      },
+      instructions:
+        "Lakukan analisa sentimen, berita, dan pasar untuk {pair}; tampilkan insight yang dapat dieksekusi.\nSajikan skenario harga dasar, bullish, dan bearish untuk {pair} pada timeframe {timeframe}.\nLengkapi catatan teknikal & fundamental serta rencana eksekusi yang memperhatikan risiko (entry, target, stop, sizing).\nBalas hanya dalam format JSON menggunakan Bahasa Indonesia yang alami.",
+    },
+    tradePlan: {
+      holdSizingNotes:
+        "Tidak ada rencana eksekusi. Tunggu konfirmasi tambahan sebelum membuka posisi.",
+      holdRationale:
+        "Momentum belum jelas. Evaluasi ulang setelah harga menembus area kunci.",
+      sizingNotes: {
+        long: "Risiko per posisi disarankan ≤ 2% dari ekuitas; bangun posisi secara bertahap.",
+        short: "Pastikan modal siap untuk short dan gunakan ukuran posisi konservatif.",
+        neutral: "Tahan eksekusi sampai sinyal tambahan mengkonfirmasi arah.",
+      },
+      rationaleFallback:
+        "Validasi setup trading dengan order flow dan berita makro sebelum eksekusi.",
+    },
+    payload: {
+      rationaleMissing:
+        "Model tidak memberikan rasionalisasi. Tambahkan detail objektif untuk analisa lanjutan.",
+      summaryMissing:
+        "Analisa tidak berhasil dibuat. Coba jalankan ulang agent dengan data yang lebih lengkap.",
+      nextStepsDefault:
+        "Validasi rencana trading dengan chart real-time dan order book.\nPerbarui konteks berita atau makro, lalu jalankan ulang agent bila perlu.",
+    },
+    systemPrompt: {
+      languageReminder: "All strings must be written in natural Indonesian.",
+      coreGuidelines:
+        "- Kaitkan setiap kesimpulan dengan data pasar dan berita yang diberikan.\n- Gunakan angka asli untuk nilai numerik (confidence 0-1) dan jangan membuat data yang bertentangan dengan input.\n- Jika data kurang, jelaskan keterbatasannya alih-alih menebak level atau katalis.",
+      example:
+        "Contoh JSON:\n{\n  \"summary\": \"Harga bertahan di area tengah setelah reli 2%; likuiditas menumpuk dekat 68k.\",\n  \"decision\": {\n    \"action\": \"hold\",\n    \"confidence\": 0.48,\n    \"timeframe\": \"4H\",\n    \"rationale\": \"Momentum melambat dan order flow campuran; tunggu break range sebelum menambah risiko.\"\n  },\n  \"market\": {\n    \"pair\": \"BTCUSDT\",\n    \"chart\": {\n      \"interval\": \"5m\",\n      \"points\": [],\n      \"narrative\": \"Candle jangka pendek membentuk higher low, tetapi volume menipis.\",\n      \"forecast\": \"Kemungkinan masih konsolidasi kecuali buyer menyerap offer di atas 68.5k.\"\n    },\n    \"technical\": [\"SMA7 berada di atas SMA21\"],\n    \"fundamental\": [\"Volume 24 jam kembali normal; belum ada katalis berita besar.\"]\n  },\n  \"tradePlan\": {\n    \"bias\": \"neutral\",\n    \"entries\": [],\n    \"entry\": null,\n    \"stopLoss\": null,\n    \"takeProfits\": [],\n    \"executionWindow\": \"-\",\n    \"sizingNotes\": \"Risiko <=2% sampai breakout mengonfirmasi arah.\",\n    \"rationale\": \"Tunggu konfirmasi breakout atau katalis makro baru sebelum menambah posisi.\"\n  },\n  \"highlights\": [\"Order book menunjukkan offer menumpuk dekat 68.5k\"],\n  \"nextSteps\": [\"Pantau arus ETF setelah pembukaan sesi New York\"]\n}",
+    },
+    errors: {
+      invalidJson: "Payload JSON tidak valid",
+      objectiveRequired: "Tujuan analisa wajib diisi.",
+      missingApiKey: "Sentient Models API key belum dikonfigurasi.",
+      missingContent: "Sentient Models API tidak mengembalikan konten.",
+      timeout: "Permintaan ke Sentient Models melewati batas waktu.",
+      generic: "Integrasi Sentient Models gagal.",
+    },
+  },
   analysis: {
     heading: "Analisa agent untuk {pair} ({timeframe})",
     confidence: "Kepercayaan {value}% - Aksi {action}",
@@ -137,6 +316,11 @@ const id = {
       legendTarget: "Target",
       legendStop: "Stop",
       placeholder: "Chart snapshot akan muncul setelah analisa selesai.",
+      ohlcCapturedAt: "Diambil pada",
+      ohlcOpen: "Open",
+      ohlcHigh: "High",
+      ohlcLow: "Low",
+      ohlcClose: "Close",
     },
     chartInsight: {
       title: "Highlight chart",
@@ -154,6 +338,7 @@ const id = {
     },
     highlights: {
       title: "Catatan pendukung",
+      empty: "Belum ada catatan pendukung.",
     },
     tradePlan: {
       title: "Trade plan",
@@ -179,7 +364,8 @@ const id = {
     },
     savePanel: {
       title: "Arsipkan analisa ini",
-      description: "Catat hasilnya dan simpan output agen ke riwayat akun Anda.",
+      description:
+        "Simpan output agen ke riwayat sekarang dan tetapkan hasilnya setelah trade selesai.",
       verdictLabel: "Hasil prediksi",
       verdictOptions: {
         accurate: {
@@ -196,27 +382,68 @@ const id = {
         },
       },
       feedbackLabel: "Catatan feedback",
-      feedbackPlaceholder: "Tambahkan konteks mengapa trade berhasil atau tidak...",
-      holdNotAllowed: "Sinyal hold tidak dapat disimpan. Simpan hanya rencana buy atau sell.",
-      feedbackHint: "Feedback membantu memperkaya ringkasan berikutnya dan journaling Anda.",
+      feedbackPlaceholder:
+        "Tambahkan konteks mengapa trade berhasil atau tidak...",
+      holdNotAllowed:
+        "Sinyal hold tidak dapat disimpan. Simpan hanya rencana buy atau sell.",
+      feedbackHint:
+        "Feedback membantu memperkaya ringkasan berikutnya dan jurnal trading Anda. Anda bisa menambahkannya nanti dari halaman Riwayat.",
       saveButton: "Simpan ke riwayat",
       savingButton: "Menyimpan...",
-      successMessage: "Laporan tersimpan di riwayat Anda.",
+      savedButton: "Tersimpan",
+      successMessage: "Laporan tersimpan di riwayat Anda. Update verdict kapan saja dari halaman Riwayat.",
       loginPrompt: "Masuk untuk menyimpan analisa ke akun SWIMM Anda.",
       loginRequired: "Masuk untuk menyimpan analisa ke akun SWIMM Anda.",
       syncing: "Menyiapkan sesi aman Anda...",
-      verdictRequired: "Pilih hasil prediksi sebelum menyimpan.",
       genericError: "Gagal menyimpan laporan. Coba lagi.",
-      hint: "Riwayat tersimpan privat bersama verdict dan feedback Anda.",
+      hint: "Riwayat tersimpan privat. Update verdict kapan saja dari halaman Riwayat.",
     },
   },
   profile: {
     badge: "Profil",
-    title: "Profil & API Key Exchange",
-    description:
-      "Hubungkan API key bursa yang Anda gunakan untuk eksekusi order atau pengecekan aset. Fitur eksekusi trading akan tetap nonaktif sampai key terhubung. Jika hanya perlu data pasar publik, biarkan kosong dan gunakan key proyek.",
+    title: "Pengaturan Akun & API Exchange",
+    descriptions: {
+      account:
+        "Kelola informasi pribadi dan penyedia login yang terhubung agar avatar serta riwayat mencerminkan identitas yang benar.",
+      apiKey:
+        "Hubungkan API key untuk eksekusi order atau akses portofolio. Tanpa key, fitur trading tetap nonaktif dan hanya alat data pasar publik yang tersedia.",
+    },
+    tabs: {
+      account: "Akun",
+      apiKey: "API key",
+    },
+    account: {
+      title: "Preferensi akun",
+      description:
+        "Perbarui nama tampilan dan tinjau penyedia login yang sudah terhubung. Dompet exchange tidak diperlukan di sini.",
+      displayNameLabel: "Nama tampilan",
+      displayNamePlaceholder: "Masukkan nama yang terlihat di SWIMM",
+      displayNameHelp: "Digunakan pada notifikasi dan laporan kolaboratif.",
+      connectionsTitle: "Penyedia login terhubung",
+      connectionsDescription:
+        "Atur akun sosial atau email mana yang dapat Anda gunakan untuk masuk.",
+      connectionStatus: {
+        connected: "Terhubung",
+        notConnected: "Belum terhubung",
+      },
+      actions: {
+        save: "Simpan perubahan akun",
+        saving: "Menyimpan...",
+        connect: "Hubungkan",
+        disconnect: "Putuskan",
+        processing: "Memproses...",
+      },
+      success: "Preferensi akun diperbarui.",
+      connectionsNote: "Gunakan tombol di bawah untuk menautkan atau memutus penyedia login. Anda juga bisa memakai alur masuk biasa.",
+    },
+    connections: {
+      email: "Email",
+      google: "Google",
+      discord: "Discord",
+    },
     loading: "Memuat profil Anda...",
-    success: "Pengaturan tersimpan. Analisa berikutnya akan memakai key pribadi Anda.",
+    success:
+      "Pengaturan tersimpan. Analisa berikutnya akan memakai key pribadi Anda.",
     disclaimer:
       "Key terenkripsi dan hanya terikat pada akun Anda. SWIMM tidak akan mengeksekusi transaksi tanpa persetujuan Anda.",
     placeholders: {
@@ -225,13 +452,15 @@ const id = {
     },
     binance: {
       title: "Kredensial Binance",
-      description: "Masukkan key yang memiliki izin trading jika ingin sinkron saldo atau rencana eksekusi. Untuk data pasar saja, key proyek sudah mencukupi.",
+      description:
+        "Masukkan key yang memiliki izin trading jika ingin sinkron saldo atau rencana eksekusi. Untuk data pasar saja, key proyek sudah mencukupi.",
       apiKey: "API key",
       apiSecret: "API secret",
     },
     bybit: {
       title: "Kredensial Bybit",
-      description: "Opsional. Isi jika memerlukan fitur akun di Bybit. Kosongkan jika hanya memakai feed pasar bersama.",
+      description:
+        "Opsional. Isi jika memerlukan fitur akun di Bybit. Kosongkan jika hanya memakai feed pasar bersama.",
       apiKey: "API key",
       apiSecret: "API secret",
     },
@@ -241,7 +470,8 @@ const id = {
     },
     authRequired: {
       title: "Masuk untuk mengelola profil",
-      description: "Hubungkan akun Privy Anda untuk mengubah API key pribadi dan preferensi lainnya.",
+      description:
+        "Hubungkan akun Privy Anda untuk mengubah API key pribadi dan preferensi lainnya.",
       cta: "Masuk",
     },
     meta: {
@@ -249,7 +479,8 @@ const id = {
       lastUpdated: "Terakhir diperbarui {timestamp}",
       neverUpdated: "Belum ada pengaturan yang disimpan.",
       hint: "Seluruh key dienkripsi dan tidak dibagikan ke akun lain.",
-      fallback: "Jika dibiarkan kosong, fitur trading yang memerlukan akses akun tidak akan aktif dan Anda hanya mendapatkan alat data pasar publik.",
+      fallback:
+        "Jika dibiarkan kosong, fitur trading yang memerlukan akses akun tidak akan aktif dan Anda hanya mendapatkan alat data pasar publik.",
     },
     errors: {
       sessionRequired: "Silakan masuk sebelum menyimpan pengaturan.",
@@ -264,7 +495,8 @@ const id = {
   },
   agent: {
     errors: {
-      unsupportedSymbol: "Symbol {symbol} tidak didukung oleh sumber data {provider}.",
+      unsupportedSymbol:
+        "Symbol {symbol} tidak didukung oleh sumber data {provider}.",
     },
   },
   auth: {
@@ -301,7 +533,8 @@ const id = {
     title: "Riwayat analisa",
     subtitle:
       "Riwayat tersimpan di cloud bersama verdict dan feedback sehingga bisa ditinjau kapan saja.",
-    clearButton: "Bersihkan riwayat",
+    retentionNote:
+      "Riwayat disimpan agar SWIMM dapat terus belajar dari hasil trading Anda.",
     loading: "Memuat riwayat analisa...",
     metrics: {
       totalAnalyses: "Total analisa",
@@ -358,6 +591,21 @@ const id = {
         empty: "Belum ada feedback untuk laporan ini.",
       },
     },
+    feedbackPanel: {
+      title: "Bagaimana hasil rencana ini?",
+      description:
+        "Perbarui verdict setelah mengeksekusi trade agar agent dapat belajar dari hasil nyata.",
+      holdDisabled: "Rencana ini tidak menghasilkan trade sehingga tidak perlu feedback.",
+      verdictLabel: "Verdict hasil",
+      feedbackLabel: "Catatan eksekusi",
+      feedbackPlaceholder:
+        "Bagikan apa yang terjadi setelah mengikuti (atau melewatkan) rencana ini...",
+      pendingHint: "Tambahkan konteks soal entry, slippage, atau alasan rencana berhasil maupun gagal.",
+      submitButton: "Kirim feedback",
+      updatingButton: "Menyimpan feedback...",
+      success: "Feedback tersimpan. Terima kasih!",
+      genericError: "Tidak dapat memperbarui feedback. Coba lagi.",
+    },
     dayGroup: {
       title: "Analisa tanggal {date}",
       totals: {
@@ -377,6 +625,7 @@ const id = {
       verdictLabel: "Verdict",
       pairLabel: "Pair",
       allOption: "Semua",
+      dateLabel: "Tanggal",
       decisionOptions: {
         buy: "Buy",
         sell: "Sell",
@@ -389,10 +638,43 @@ const id = {
       },
     },
     summaryRow: {
-      entry: "{pair} ? {timeframe}",
+      entry: "{pair} • {timeframe}",
       format: "{decision} -> {verdict}",
       noDecision: "Tidak ada keputusan",
       noVerdict: "Tidak ada verdict",
+    },
+    detail: {
+      backLink: "Kembali ke riwayat",
+      loading: "Memuat entri...",
+      missingTitle: "Analisa tidak ditemukan",
+      missingDescription: "Kami tidak menemukan analisa ini. Mungkin sudah dihapus.",
+      metaCreated: "Dibuat",
+      metaUpdated: "Terakhir diperbarui",
+      decisionLabel: "Keputusan",
+      verdictLabel: "Verdict",
+    },
+    executionSurvey: {
+      title: "Apakah rencana ini dieksekusi?",
+      description:
+        "Beritahu kami bila trade dijalankan supaya kami bisa meminta feedback saat waktunya tepat.",
+      executedYes: "Ya, saya eksekusi",
+      executedNo: "Tidak, hanya referensi",
+      recordedYes: "Ditandai sebagai dieksekusi. Ceritakan hasilnya di bawah.",
+      recordedNo: "Disimpan sebagai referensi. Anda bisa memperbarui nanti jika trade dijalankan.",
+      updateError: "Tidak dapat memperbarui status eksekusi. Coba lagi.",
+    },
+    executionBadge: {
+      executed: "Dieksekusi",
+    },
+    liveComparison: {
+      title: "Chart live",
+      subtitle: "Kondisi {pair} ({timeframe}) saat ini dari {provider}.",
+      lastUpdated: "Diperbarui {time}",
+      loading: "Memuat chart live...",
+      empty: "Data market live belum tersedia.",
+      error: "Chart live tidak dapat dimuat.",
+      timeframeLabel: "Timeframe",
+      indicatorsLabel: "Indikator",
     },
   },
   language: {
@@ -404,8 +686,8 @@ const id = {
       badge: "Pusat Inteligensi SWIMM",
       heading: "Inteligensi kripto multi-pair dengan panduan bahasa natural.",
       description:
-        "SWIMM memanfaatkan Fireworks LLM untuk menganalisa struktur, sentimen, dan likuiditas di seluruh pair yang tersedia.",
-      ctaPrimaryAuthenticated: "Buka dashboard analisa",
+        "SWIMM memanfaatkan Sentient Models (dobby-unhinged-llama) untuk menganalisa struktur, sentimen, dan likuiditas di seluruh pair yang tersedia.",
+      ctaPrimaryAuthenticated: "Mulai analitik",
       ctaPrimaryGuest: "Masuk & mulai",
       ctaSecondaryAuthenticated: "Lihat riwayat",
       ctaSecondaryGuest: "Jelajahi fitur",
@@ -433,7 +715,7 @@ const id = {
       heading: "Mengapa trader memilih SWIMM",
       description:
         "Setiap ringkasan menggabungkan sinyal teknikal, katalis, dan proyeksi AI untuk meminimalkan bias.",
-      cta: "Lihat dashboard",
+      cta: "Lihat analitik",
       cards: [
         {
           title: "Fusi Sentimen",

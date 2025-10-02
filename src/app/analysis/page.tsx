@@ -27,10 +27,12 @@ import {
   INDICATOR_CONFIG,
   TIMEFRAME_OPTIONS,
   DEFAULT_PROVIDER,
+  DEFAULT_MARKET_MODE,
+  type MarketMode,
 } from "@/features/market/constants";
 import type { CexProvider } from "@/features/market/exchanges";
 import type { IndicatorKey, OverlayLevel } from "@/features/market/types";
-import { useHistory, type HistoryVerdict } from "@/providers/history-provider";
+import { useHistory, type HistorySnapshot, type HistoryVerdict } from "@/providers/history-provider";
 import { useLanguage } from "@/providers/language-provider";
 import { useSession } from "@/providers/session-provider";
 
@@ -41,12 +43,86 @@ type TradingPair = {
   label: string;
 };
 
+const MAX_SNAPSHOT_CANDLES = 220;
+
 const buildInitialIndicatorVisibility = () => {
   const initial: Record<IndicatorKey, boolean> = {} as Record<IndicatorKey, boolean>;
   for (const item of INDICATOR_CONFIG) {
     initial[item.key] = item.defaultVisible;
   }
   return initial;
+};
+
+const toUnixSeconds = (time: CandlestickData["time"]): number | null => {
+  if (typeof time === "number" && Number.isFinite(time)) {
+    return Math.floor(time);
+  }
+  if (typeof time === "string") {
+    const parsed = Number.parseFloat(time);
+    return Number.isFinite(parsed) ? Math.floor(parsed) : null;
+  }
+  if (typeof time === "object" && time) {
+    if ("timestamp" in time && typeof time.timestamp === "number") {
+      return Math.floor(time.timestamp);
+    }
+    if ("year" in time && "month" in time && "day" in time) {
+      const year = Number((time as { year: number }).year);
+      const month = Number((time as { month: number }).month);
+      const day = Number((time as { day: number }).day);
+      if ([year, month, day].every((value) => Number.isFinite(value))) {
+        return Math.floor(new Date(year, month - 1, day).getTime() / 1000);
+      }
+    }
+  }
+  return null;
+};
+
+const buildSnapshotPayload = (
+  candles: CandlestickData[],
+  timeframe: string
+): HistorySnapshot | null => {
+  if (!candles.length) {
+    return null;
+  }
+
+  const limitedCandles = candles.slice(-MAX_SNAPSHOT_CANDLES);
+  const sanitized = limitedCandles
+    .map((candle) => {
+      const timestamp = toUnixSeconds(candle.time);
+      if (timestamp === null) {
+        return null;
+      }
+      const open = Number(candle.open);
+      const high = Number(candle.high);
+      const low = Number(candle.low);
+      const close = Number(candle.close);
+      if ([open, high, low, close].every((value) => Number.isFinite(value))) {
+        return {
+          time: timestamp,
+          open: Number(open.toFixed(2)),
+          high: Number(high.toFixed(2)),
+          low: Number(low.toFixed(2)),
+          close: Number(close.toFixed(2)),
+        };
+      }
+      return null;
+    })
+    .filter((item): item is NonNullable<typeof item> => Boolean(item));
+
+  if (!sanitized.length) {
+    return null;
+  }
+
+  const last = sanitized[sanitized.length - 1];
+  const capturedAt = Number.isFinite(last.time)
+    ? new Date(last.time * 1000).toISOString()
+    : new Date().toISOString();
+
+  return {
+    timeframe,
+    capturedAt,
+    candles: sanitized,
+  };
 };
 
 export default function AnalysisPage() {
@@ -58,6 +134,7 @@ export default function AnalysisPage() {
   const { status: sessionStatus, isSyncing: isSessionSyncing } = useSession();
 
   const [provider, setProvider] = useState<CexProvider>(DEFAULT_PROVIDER);
+  const [marketMode, setMarketMode] = useState<MarketMode>(DEFAULT_MARKET_MODE);
   const [availablePairs, setAvailablePairs] = useState<TradingPair[]>([]);
   const [isLoadingPairs, setIsLoadingPairs] = useState(false);
   const [selectedPair, setSelectedPair] = useState<string>(DEFAULT_PAIR_SYMBOL);
@@ -68,7 +145,6 @@ export default function AnalysisPage() {
   const [response, setResponse] = useState<AgentResponse | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
-  const [saveVerdict, setSaveVerdict] = useState<HistoryVerdict | null>(null);
   const [saveFeedback, setSaveFeedback] = useState("");
   const [isSavingReport, setIsSavingReport] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"idle" | "success" | "error">("idle");
@@ -77,25 +153,39 @@ export default function AnalysisPage() {
   const liveMarketRef = useRef<LiveMarketHandle | null>(null);
   const chartSectionRef = useRef<HTMLElement | null>(null);
   const analysisSectionRef = useRef<HTMLElement | null>(null);
-  const lastPairByProviderRef = useRef<Record<CexProvider, string>>({
-    binance: DEFAULT_PAIR_SYMBOL,
-    bybit: "BTCUSDT",
-  });
+  const lastPairByProviderRef = useRef<Record<CexProvider, Record<MarketMode, string>>>(
+    {
+      binance: {
+        spot: DEFAULT_PAIR_SYMBOL,
+        futures: DEFAULT_PAIR_SYMBOL,
+      },
+      bybit: {
+        spot: "BTCUSDT",
+        futures: "BTCUSDT",
+      },
+    }
+  );
   const canPersistHistory = sessionStatus === "authenticated";
 
   const loadPairs = useCallback(async () => {
-    const res = await fetch(`/api/symbols?provider=${provider}&locale=${locale}`);
+    const params = new URLSearchParams({
+      provider,
+      locale,
+      mode: marketMode,
+    });
+    const res = await fetch(`/api/symbols?${params.toString()}`);
     if (!res.ok) {
       throw new Error(`Failed to load symbols: ${res.status}`);
     }
     const payload = (await res.json()) as { symbols?: TradingPair[] };
     return payload.symbols ?? [];
-  }, [locale, provider]);
+  }, [locale, marketMode, provider]);
 
   useEffect(() => {
     let cancelled = false;
     const run = async () => {
       setIsLoadingPairs(true);
+      setAvailablePairs([]);
       try {
         const pairs = await loadPairs();
         if (cancelled) {
@@ -103,12 +193,19 @@ export default function AnalysisPage() {
         }
         setAvailablePairs(pairs);
         if (pairs.length > 0) {
-          const preferred = lastPairByProviderRef.current[provider];
-          const nextSymbol = pairs.some((item) => item.symbol === preferred)
+          const preferred = lastPairByProviderRef.current[provider]?.[marketMode];
+          const fallback = pairs[0]?.symbol ?? "";
+          const nextSymbol = preferred && pairs.some((item) => item.symbol === preferred)
             ? preferred
-            : pairs[0].symbol;
-          lastPairByProviderRef.current[provider] = nextSymbol;
-          setSelectedPair(nextSymbol);
+            : fallback;
+          if (nextSymbol) {
+            lastPairByProviderRef.current[provider][marketMode] = nextSymbol;
+            setSelectedPair(nextSymbol);
+          } else {
+            setSelectedPair("");
+          }
+        } else {
+          setSelectedPair("");
         }
       } catch (error) {
         if (!cancelled) {
@@ -125,31 +222,30 @@ export default function AnalysisPage() {
     return () => {
       cancelled = true;
     };
-  }, [loadPairs, provider]);
+  }, [loadPairs, marketMode, provider]);
 
   useEffect(() => {
     const isSavableSignal = (response?.decision?.action ?? "").toLowerCase() === "buy" || (response?.decision?.action ?? "").toLowerCase() === "sell";
     if (!canPersistHistory) {
-      setSaveVerdict(null);
       setSaveFeedback("");
       setSaveStatus("idle");
       setSaveError(null);
       return;
     }
     if (!isSavableSignal) {
-      setSaveVerdict(null);
       setSaveStatus("idle");
       setSaveError(null);
     }
   }, [canPersistHistory, response?.decision?.action]);
 
   const providerLabel = useMemo(() => __("pairSelection.providerOptions." + provider), [__, provider]);
+  const modeLabel = useMemo(() => __("pairSelection.modeOptions." + marketMode), [__, marketMode]);
 
   const priceFormatter = useMemo(
     () =>
       new Intl.NumberFormat(languageTag, {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
+        minimumFractionDigits: 4,
+        maximumFractionDigits: 4,
       }),
     [languageTag]
   );
@@ -210,9 +306,23 @@ export default function AnalysisPage() {
     liveMarketRef.current?.reset();
   };
 
+  const handleModeChange = (nextMode: MarketMode) => {
+    if (nextMode === marketMode) {
+      return;
+    }
+    setMarketMode(nextMode);
+    const stored = lastPairByProviderRef.current[provider]?.[nextMode];
+    setSelectedPair(stored ?? "");
+    setResponse(null);
+    setAnalysisCandles([]);
+    setLatestCandles([]);
+    setAnalysisError(null);
+    liveMarketRef.current?.reset();
+  };
+
   const handlePairChange = (symbol: string) => {
     setSelectedPair(symbol);
-    lastPairByProviderRef.current[provider] = symbol;
+    lastPairByProviderRef.current[provider][marketMode] = symbol;
     setResponse(null);
     setAnalysisCandles([]);
     setLatestCandles([]);
@@ -220,7 +330,7 @@ export default function AnalysisPage() {
   };
 
   const handleShowChart = () => {
-    liveMarketRef.current?.startChart();
+    liveMarketRef.current?.startChart({ mode: marketMode });
     if (typeof window !== "undefined") {
       window.requestAnimationFrame(() => {
         chartSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -234,7 +344,7 @@ export default function AnalysisPage() {
     setAnalysisCandles([]);
     setLatestCandles([]);
     setAnalysisError(null);
-    liveMarketRef.current?.startChart();
+    liveMarketRef.current?.startChart({ mode: marketMode });
   };
 
   const handleIndicatorToggle = (key: IndicatorKey) => {
@@ -258,17 +368,12 @@ export default function AnalysisPage() {
       setSaveError(savePanelCopy.loginPrompt);
       return;
     }
-    if (!saveVerdict) {
-      setSaveStatus("error");
-      setSaveError(savePanelCopy.verdictRequired);
-      return;
-    }
 
     setIsSavingReport(true);
     setSaveError(null);
 
     try {
-      await saveEntry({\n        pair: selectedPair,\n        timeframe,\n        provider,\n        response,\n        verdict: saveVerdict,\n        feedback: saveFeedback.trim() || undefined,\n        snapshot: {\n          timeframe,\n          at: (analysisCandles.length ? new Date((analysisCandles[analysisCandles.length - 1].time as number) * 1000).toISOString() : new Date().toISOString()),\n          candles: analysisCandles.map(c => ({\n            openTime: Number((c.time as number) * 1000),\n            open: c.open,\n            high: c.high,\n            low: c.low,\n            close: c.close,\n            volume: 0,\n            closeTime: Number((c.time as number) * 1000)\n          }))\n        }\n      });
+      await saveEntry({pair: selectedPair,timeframe,provider,response,verdict: saveVerdict,feedback: saveFeedback.trim() || undefined,snapshot: {  timeframe,  at: (analysisCandles.length ? new Date((analysisCandles[analysisCandles.length - 1].time as number) * 1000).toISOString() : new Date().toISOString()),  candles: analysisCandles.map(c => ({    openTime: Number((c.time as number) * 1000),    open: c.open,    high: c.high,    low: c.low,    close: c.close,    volume: 0,    closeTime: Number((c.time as number) * 1000)  }))}\n      });
       setSaveStatus("success");
     } catch (saveException) {
       const message =
@@ -286,7 +391,7 @@ export default function AnalysisPage() {
     if (!latestCandles.length || !ready || !authenticated) {
       return;
     }
-    const objective = `Analyse trading pair ${formattedPair} on timeframe ${timeframe} using ${providerLabel}`;
+    const objective = `Analyse ${modeLabel} trading pair ${formattedPair} on timeframe ${timeframe} using ${providerLabel}`;
 
     setIsRunning(true);
     setAnalysisError(null);
@@ -304,6 +409,7 @@ export default function AnalysisPage() {
           manualNotes: "",
           datasetPreview: "",
           provider,
+          mode: marketMode,
           locale,
         }),
       });
@@ -324,7 +430,6 @@ export default function AnalysisPage() {
       const payload: AgentResponse = await res.json();
       setResponse(payload);
       setAnalysisCandles(latestCandles.slice(-180));
-      setSaveVerdict(null);
       setSaveFeedback("");
       setSaveStatus("idle");
       setSaveError(null);
@@ -422,6 +527,8 @@ export default function AnalysisPage() {
           <PairSelectionCard
             provider={provider}
             onProviderChange={handleProviderChange}
+            mode={marketMode}
+            onModeChange={handleModeChange}
             selectedPair={selectedPair}
             onPairChange={handlePairChange}
             onShowChart={handleShowChart}
@@ -433,6 +540,7 @@ export default function AnalysisPage() {
         <LiveMarketSection
           ref={liveMarketRef}
           provider={provider}
+          mode={marketMode}
           selectedPair={selectedPair}
           timeframe={timeframe}
           onTimeframeChange={handleTimeframeChange}
@@ -466,8 +574,6 @@ export default function AnalysisPage() {
           sectionRef={analysisSectionRef}
           canSaveReport={canSaveHistory}
           isSessionSyncing={isSessionSyncing}
-          saveVerdict={saveVerdict}
-          onVerdictChange={setSaveVerdict}
           saveFeedback={saveFeedback}
           onFeedbackChange={setSaveFeedback}
           onSaveReport={handleSaveReport}

@@ -7,6 +7,13 @@ export const PROVIDER_ICON_MAP: Record<CexProvider, string> = {
   gold: "/logo/branding.png",
 };
 
+export const MARKET_MODES = ["spot", "futures"] as const;
+export type MarketMode = (typeof MARKET_MODES)[number];
+export const DEFAULT_MARKET_MODE: MarketMode = "spot";
+export const isMarketMode = (
+  value: string | null | undefined
+): value is MarketMode => value === "spot" || value === "futures";
+
 export const TIMEFRAME_OPTIONS = ["1m", "5m", "15m", "1h", "4h", "1d"] as const;
 
 export const INDICATOR_CONFIG: IndicatorConfigItem[] = [

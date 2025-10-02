@@ -27,6 +27,9 @@ export async function GET(request: NextRequest) {
   const providerParam = searchParams.get("provider")?.toLowerCase() ?? DEFAULT_PROVIDER;
   const provider = isCexProvider(providerParam) ? providerParam : providerParam === "gold" ? "gold" : DEFAULT_PROVIDER;
   const symbolParamRaw = searchParams.get("symbol")?.toUpperCase();
+  const modeParam = searchParams.get("mode")?.toLowerCase() ?? DEFAULT_MARKET_MODE;
+  const mode: MarketMode = isMarketMode(modeParam) ? modeParam : DEFAULT_MARKET_MODE;
+  const defaultSymbol = "BTCUSDT";
   const symbolParam = symbolParamRaw
     ? symbolParamRaw.replace(/[^A-Z0-9]/g, "")
     : provider === "bybit"
@@ -36,6 +39,8 @@ export async function GET(request: NextRequest) {
     : (process.env.BINANCE_SYMBOL ?? "BTCUSDT");
   const intervalParam = searchParams.get("interval")?.toLowerCase() ?? "15m";
   const limitParam = Number.parseInt(searchParams.get("limit") ?? "500", 10);
+  const startParamRaw = searchParams.get("start");
+  const endParamRaw = searchParams.get("end");
   const localeParam = searchParams.get("locale") ?? "";
   const locale: Locale = localeParam && isLocale(localeParam) ? localeParam : "en";
 
@@ -46,9 +51,9 @@ export async function GET(request: NextRequest) {
   const bybitAuth = settings?.bybitApiKey ? { apiKey: settings.bybitApiKey } : undefined;
 
   if (provider === "binance") {
-    const isSupported = await isPairTradable(symbolParam, binanceAuth);
+    const isSupported = await isPairTradable(symbolParam, binanceAuth, mode);
     if (!isSupported) {
-      const pairs = await fetchBinanceTradablePairs(binanceAuth);
+      const pairs = await fetchBinanceTradablePairs(binanceAuth, mode);
       const topSamples = pairs.slice(0, 20).map((item) => item.label).join(", ");
       return NextResponse.json(
         {
@@ -68,7 +73,46 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const limit = Number.isFinite(limitParam) ? Math.max(50, Math.min(limitParam, 1000)) : 500;
+  const limit = Number.isFinite(limitParam) ? Math.max(50, Math.min(limitParam, 5000)) : 500;
+
+  const parseTimestamp = (value: string | null) => {
+    if (!value) {
+      return null;
+    }
+    const numeric = Number(value);
+    if (Number.isFinite(numeric) && numeric > 0) {
+      return numeric > 10_000_000_000 ? numeric : numeric * 1000;
+    }
+    const parsed = Date.parse(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+    return null;
+  };
+
+  const startTimeMs = parseTimestamp(startParamRaw);
+  const endTimeMs = parseTimestamp(endParamRaw);
+
+  const intervalMsMap: Record<string, number> = {
+    "1m": 60_000,
+    "5m": 5 * 60_000,
+    "15m": 15 * 60_000,
+    "1h": 60 * 60_000,
+    "4h": 4 * 60 * 60_000,
+    "1d": 24 * 60 * 60_000,
+  };
+
+  const intervalMs = intervalMsMap[intervalParam] ?? intervalMsMap["1h"];
+
+  const computedLimit = (() => {
+    if (startTimeMs !== null) {
+      const effectiveEnd = endTimeMs ?? Date.now();
+      const diff = Math.max(effectiveEnd - startTimeMs, intervalMs);
+      const estimate = Math.ceil(diff / intervalMs) + 5;
+      return Math.min(Math.max(estimate, limit), 5000);
+    }
+    return limit;
+  })();
 
   const buildGoldOrderBook = (lastPrice: number, levels = 50) => {
     if (!Number.isFinite(lastPrice) || lastPrice <= 0) {
@@ -121,6 +165,7 @@ export async function GET(request: NextRequest) {
     symbol: symbolParam,
     interval: intervalParam,
     provider,
+    mode,
     candles,
     orderBook: computedOrderBook,
     summary:

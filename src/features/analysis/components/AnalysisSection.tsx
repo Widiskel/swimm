@@ -14,10 +14,12 @@ import {
   type IChartApi,
   type IPriceLine,
   type ISeriesApi,
+  type SeriesMarker,
+  type Time,
+  type UTCTimestamp,
 } from "lightweight-charts";
 
 import type { AgentResponse } from "../types";
-import type { HistoryVerdict } from "@/providers/history-provider";
 import { useLanguage } from "@/providers/language-provider";
 import {
   buildIndicatorData,
@@ -25,10 +27,7 @@ import {
   updateIndicatorSeries,
 } from "@/features/market/utils/indicators";
 import { updateOverlayPriceLines } from "@/features/market/utils/overlays";
-import {
-  INDICATOR_CONFIG,
-  TARGET_LABELS,
-} from "@/features/market/constants";
+import { INDICATOR_CONFIG, TARGET_LABELS } from "@/features/market/constants";
 import type {
   IndicatorKey,
   IndicatorSeriesMap,
@@ -37,6 +36,74 @@ import type {
 import { formatPairLabel } from "@/features/market/utils/format";
 
 const SNAPSHOT_LIMIT = 220;
+const ZONE_LOOKAHEAD_BARS = 6;
+const EXECUTION_WINDOW_OFFSET_MINUTES = 7 * 60;
+
+type OverlayZone = {
+  top: number;
+  bottom: number;
+  label: string;
+  color: string;
+  border: string;
+};
+
+export const mapTimeframeToSeconds = (value: string) => {
+  const normalized = value.trim().toLowerCase();
+  const map: Record<string, number> = {
+    "1m": 60,
+    "5m": 300,
+    "15m": 900,
+    "30m": 1800,
+    "1h": 3600,
+    "2h": 7200,
+    "4h": 14400,
+    "6h": 21600,
+    "8h": 28800,
+    "12h": 43200,
+    "1d": 86400,
+    "1w": 604800,
+  };
+  return map[normalized] ?? 3600;
+};
+
+const formatExecutionWindowLabel = (raw: string): string => {
+  if (!raw?.trim()) {
+    return "-";
+  }
+
+  const parts = raw.split(/[\s]*[-–—][\s]*/).filter((part) => part.trim().length > 0);
+  const formatPart = (value: string) => {
+    const parsed = Date.parse(value);
+    if (Number.isNaN(parsed)) {
+      return null;
+    }
+    const offsetMs = EXECUTION_WINDOW_OFFSET_MINUTES * 60 * 1000;
+    const adjusted = parsed + offsetMs;
+    const date = new Date(adjusted);
+    const pad = (input: number) => String(input).padStart(2, "0");
+    const year = date.getUTCFullYear();
+    const month = pad(date.getUTCMonth() + 1);
+    const day = pad(date.getUTCDate());
+    const hours = pad(date.getUTCHours());
+    const minutes = pad(date.getUTCMinutes());
+    return `${year}-${month}-${day} ${hours}:${minutes}`;
+  };
+
+  if (parts.length === 1) {
+    const formatted = formatPart(parts[0]);
+    return formatted ? `${formatted} (GMT + 7)` : raw;
+  }
+
+  if (parts.length >= 2) {
+    const start = formatPart(parts[0]);
+    const end = formatPart(parts[1]);
+    if (start && end) {
+      return `${start} - ${end} (GMT + 7)`;
+    }
+  }
+
+  return raw;
+};
 
 type AnalysisSectionProps = {
   response: AgentResponse | null;
@@ -57,15 +124,24 @@ type AnalysisSectionProps = {
   chartEndLabel: string;
   canSaveReport: boolean;
   isSessionSyncing: boolean;
-  saveVerdict: HistoryVerdict | null;
-  onVerdictChange: (verdict: HistoryVerdict) => void;
   saveFeedback: string;
-  onFeedbackChange: (value: string) => void;
+  onFeedbackChange?: (value: string) => void;
   onSaveReport: () => void;
   isSavingReport: boolean;
   saveStatus: "idle" | "success" | "error";
   saveError: string | null;
-  sectionRef?: RefObject<HTMLElement> | MutableRefObject<HTMLElement | null> | null;
+  sectionRef?:
+    | RefObject<HTMLElement>
+    | MutableRefObject<HTMLElement | null>
+    | null;
+  analysisMarkers?: SeriesMarker<Time>[];
+  analysisCandleDetails?: {
+    time: number;
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+  } | null;
 };
 
 const MotionSection = motion.section;
@@ -89,22 +165,20 @@ export function AnalysisSection({
   chartEndLabel,
   canSaveReport,
   isSessionSyncing,
-  saveVerdict,
-  onVerdictChange,
   saveFeedback,
-  onFeedbackChange,
+  onFeedbackChange: _onFeedbackChange,
   onSaveReport,
   isSavingReport,
   saveStatus,
   saveError,
   sectionRef,
+  analysisMarkers = [],
+  analysisCandleDetails = null,
 }: AnalysisSectionProps) {
-  const { messages, __ } = useLanguage();
+  const { messages, __, languageTag } = useLanguage();
   const analysisCopy = messages.analysis;
   const fallbackCopy = messages.analysisFallback;
   const saveCopy = analysisCopy.savePanel;
-  const historyEntryCopy = messages.history.entryCard;
-  const historySummaryCopy = messages.history.summaryRow;
 
   const summaryText = response?.summary?.trim().length
     ? response.summary
@@ -112,14 +186,12 @@ export function AnalysisSection({
   const rationaleText = response?.decision?.rationale?.trim().length
     ? response.decision.rationale
     : fallbackCopy.rationale;
-  const chartNarrativeText =
-    response?.market?.chart?.narrative?.trim().length
-      ? response.market.chart.narrative
-      : "";
-  const chartForecastText =
-    response?.market?.chart?.forecast?.trim().length
-      ? response.market.chart.forecast
-      : "";
+  const chartNarrativeText = response?.market?.chart?.narrative?.trim().length
+    ? response.market.chart.narrative
+    : "";
+  const chartForecastText = response?.market?.chart?.forecast?.trim().length
+    ? response.market.chart.forecast
+    : "";
   const technicalLines = response?.market?.technical ?? [];
   const fundamentalLines = response?.market?.fundamental ?? [];
   const nextStepLines = response?.nextSteps ?? [];
@@ -136,6 +208,20 @@ export function AnalysisSection({
   const indicatorSeriesRef = useRef<IndicatorSeriesMap>({});
   const overlayPriceLinesRef = useRef<IPriceLine[]>([]);
   const [snapshotReady, setSnapshotReady] = useState(false);
+  const overlayCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const ohlcTimeFormatterRef = useRef<
+    Intl.DateTimeFormat |
+    null
+  >(null);
+  if (!ohlcTimeFormatterRef.current) {
+    ohlcTimeFormatterRef.current = new Intl.DateTimeFormat(languageTag, {
+      year: "numeric",
+      month: "short",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
 
   useEffect(() => {
     if (!response || !analysisCandles.length) {
@@ -162,7 +248,9 @@ export function AnalysisSection({
       overlayPriceLinesRef.current = [];
     }
 
-    const chart = createChart(chartContainerRef.current, {
+    const chartRoot = chartContainerRef.current;
+
+    const chart = createChart(chartRoot, {
       layout: {
         background: { color: "#020617" },
         textColor: "#cbd5f5",
@@ -170,10 +258,6 @@ export function AnalysisSection({
       grid: {
         vertLines: { color: "#0f172a" },
         horzLines: { color: "#0f172a" },
-      },
-      crosshair: {
-        vertLine: { visible: false },
-        horzLine: { visible: false },
       },
       rightPriceScale: {
         borderColor: "#1e293b",
@@ -183,8 +267,8 @@ export function AnalysisSection({
         secondsVisible: false,
       },
       autoSize: true,
-      handleScroll: false,
-      handleScale: false,
+      handleScroll: true,
+      handleScale: true,
     });
 
     const candleSeries = chart.addCandlestickSeries({
@@ -208,6 +292,158 @@ export function AnalysisSection({
 
     const limitedCandles = analysisCandles.slice(-SNAPSHOT_LIMIT);
     candleSeries.setData(limitedCandles);
+    candleSeries.setMarkers(analysisMarkers ?? []);
+
+    const timeframeSeconds = mapTimeframeToSeconds(timeframe);
+    const entryPrices = entryZoneValues.length ? entryZoneValues : [];
+    const entryMin = entryPrices.length ? Math.min(...entryPrices) : null;
+    const entryMax = entryPrices.length ? Math.max(...entryPrices) : null;
+    const stopPrice =
+      typeof tradeStopLoss === "number" && Number.isFinite(tradeStopLoss)
+        ? Number(tradeStopLoss.toFixed(2))
+        : null;
+
+    const zones: OverlayZone[] = [];
+    if (entryMin !== null && entryMax !== null) {
+      if (stopPrice !== null) {
+        zones.push({
+          top: Math.max(entryMax, stopPrice),
+          bottom: Math.min(entryMin, stopPrice),
+          label: `SL ${formatPrice(stopPrice)}`,
+          color: "rgba(239,68,68,0.16)",
+          border: "rgba(239,68,68,0.65)",
+        });
+      }
+
+      paddedTargets.forEach((target, index) => {
+        if (target === null) {
+          return;
+        }
+        const formattedTarget = formatPrice(target);
+        zones.push({
+          top: Math.max(entryMax, target),
+          bottom: Math.min(entryMin, target),
+          label: `${TARGET_LABELS[index]} ${formattedTarget}`,
+          color: "rgba(34,197,94,0.18)",
+          border: "rgba(34,197,94,0.65)",
+        });
+      });
+    }
+
+    const toTimestamp = (
+      time: CandlestickData["time"] | undefined
+    ): UTCTimestamp | null => {
+      if (typeof time === "number") {
+        return time as UTCTimestamp;
+      }
+      if (!time) {
+        return null;
+      }
+      if (typeof time === "object") {
+        if ("timestamp" in time && typeof time.timestamp === "number") {
+          return time.timestamp as UTCTimestamp;
+        }
+        const year = "year" in time ? Number(time.year) : 1970;
+        const month = "month" in time ? Number(time.month) - 1 : 0;
+        const day = "day" in time ? Number(time.day) : 1;
+        return Math.floor(
+          new Date(year, month, day).getTime() / 1000
+        ) as UTCTimestamp;
+      }
+      return null;
+    };
+
+    const renderOverlay = () => {
+      const chartRoot = chartContainerRef.current;
+      const overlayCanvas = overlayCanvasRef.current;
+      if (!chartRoot || !overlayCanvas) {
+        return;
+      }
+      const ctx = overlayCanvas.getContext("2d");
+      if (!ctx) {
+        return;
+      }
+
+      const { width, height } = chartRoot.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      overlayCanvas.width = Math.max(1, Math.floor(width * dpr));
+      overlayCanvas.height = Math.max(1, Math.floor(height * dpr));
+      overlayCanvas.style.width = `${width}px`;
+      overlayCanvas.style.height = `${height}px`;
+      ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+      ctx.save();
+      ctx.scale(dpr, dpr);
+
+      if (!zones.length) {
+        ctx.restore();
+        return;
+      }
+
+      const timeScale = chart.timeScale();
+
+      const lastTime = toTimestamp(
+        limitedCandles[limitedCandles.length - 1]?.time
+      );
+      if (lastTime === null) {
+        ctx.restore();
+        return;
+      }
+
+      const futureTime = (lastTime + timeframeSeconds * ZONE_LOOKAHEAD_BARS) as UTCTimestamp;
+      const priceScale = chart.priceScale("right");
+      const priceToCoordinate =
+        priceScale && "priceToCoordinate" in priceScale
+          ? (
+              priceScale as unknown as {
+                priceToCoordinate: (price: number) => number | null;
+              }
+            ).priceToCoordinate.bind(priceScale)
+          : candleSeries.priceToCoordinate.bind(candleSeries);
+
+      const safeStartTime = lastTime as Time;
+      const safeFutureTime = futureTime as Time;
+
+      const startX = timeScale.timeToCoordinate(safeStartTime);
+      const endX = timeScale.timeToCoordinate(safeFutureTime);
+      if (startX === null || endX === null) {
+        ctx.restore();
+        return;
+      }
+
+      const left = Math.min(startX, endX);
+      const right = Math.max(startX, endX);
+
+      zones.forEach((zone) => {
+        const topCoord = priceToCoordinate(zone.top);
+        const bottomCoord = priceToCoordinate(zone.bottom);
+        if (topCoord === null || bottomCoord === null) {
+          return;
+        }
+        const zoneTop = Math.min(topCoord, bottomCoord);
+        const zoneHeight = Math.abs(bottomCoord - topCoord);
+        ctx.fillStyle = zone.color;
+        ctx.fillRect(left, zoneTop, right - left, zoneHeight);
+        ctx.strokeStyle = zone.border;
+        ctx.lineWidth = 1;
+        ctx.strokeRect(left, zoneTop, right - left, zoneHeight);
+
+        const labelPadding = 4;
+        const labelHeight = 16;
+        ctx.font = "10px 'Inter', sans-serif";
+        const textWidth = ctx.measureText(zone.label).width;
+        const labelWidth = textWidth + labelPadding * 2;
+        const labelX = right - labelWidth - 6;
+        const labelY = zoneTop + labelPadding;
+        ctx.fillStyle = "rgba(15,23,42,0.92)";
+        ctx.fillRect(labelX, labelY - labelPadding, labelWidth, labelHeight);
+        ctx.strokeStyle = zone.border;
+        ctx.strokeRect(labelX, labelY - labelPadding, labelWidth, labelHeight);
+        ctx.fillStyle = "#e2e8f0";
+        ctx.fillText(zone.label, labelX + labelPadding, labelY + 2);
+      });
+
+      ctx.restore();
+    };
 
     const indicatorData = buildIndicatorData(limitedCandles, INDICATOR_CONFIG);
     updateIndicatorSeries(
@@ -217,23 +453,64 @@ export function AnalysisSection({
       INDICATOR_CONFIG
     );
 
-    updateOverlayPriceLines(
-      candleSeries,
-      overlayLevels,
-      overlayPriceLinesRef
-    );
+    updateOverlayPriceLines(candleSeries, overlayLevels, overlayPriceLinesRef);
+
+    chart.timeScale().applyOptions({ rightOffset: ZONE_LOOKAHEAD_BARS + 2 });
+
+    renderOverlay();
+
+    const resizeObserver =
+      typeof ResizeObserver !== "undefined"
+        ? new ResizeObserver(() => renderOverlay())
+        : null;
+    if (chartRoot && resizeObserver) {
+      resizeObserver.observe(chartRoot);
+    }
+
+    const rangeHandler = () => {
+      renderOverlay();
+    };
+    chart.timeScale().subscribeVisibleLogicalRangeChange(rangeHandler);
+    const priceScale = chart.priceScale("right");
+    const priceScaleHandler = () => renderOverlay();
+    if (priceScale && "subscribePriceScaleChange" in priceScale) {
+      (priceScale as unknown as {
+        subscribePriceScaleChange: (handler: () => void) => void;
+      }).subscribePriceScaleChange(priceScaleHandler);
+    }
 
     chart.timeScale().fitContent();
+    renderOverlay();
     setSnapshotReady(true);
 
     return () => {
       chart.remove();
+      chart.timeScale().unsubscribeVisibleLogicalRangeChange(rangeHandler);
+      if (priceScale && "unsubscribePriceScaleChange" in priceScale) {
+        (priceScale as unknown as {
+          unsubscribePriceScaleChange: (handler: () => void) => void;
+        }).unsubscribePriceScaleChange(priceScaleHandler);
+      }
       chartRef.current = null;
       seriesRef.current = null;
       indicatorSeriesRef.current = {};
       overlayPriceLinesRef.current = [];
+      if (chartRoot && resizeObserver) {
+        resizeObserver.disconnect();
+      }
     };
-  }, [analysisCandles, indicatorVisibility, overlayLevels, response]);
+  }, [
+    analysisCandles,
+    indicatorVisibility,
+    overlayLevels,
+    response,
+    entryZoneValues,
+    paddedTargets,
+    tradeStopLoss,
+    timeframe,
+    formatPrice,
+    analysisMarkers,
+  ]);
 
   if (!response) {
     return null;
@@ -243,49 +520,19 @@ export function AnalysisSection({
   const actionKey = actionLabel.toLowerCase();
   const isHoldSignal = actionKey === "hold";
 
-  const verdictOptions: { key: HistoryVerdict; label: string; description: string }[] = [
-    {
-      key: "accurate",
-      label: saveCopy.verdictOptions.accurate.label,
-      description: saveCopy.verdictOptions.accurate.description,
-    },
-    {
-      key: "inaccurate",
-      label: saveCopy.verdictOptions.inaccurate.label,
-      description: saveCopy.verdictOptions.inaccurate.description,
-    },
-    {
-      key: "unknown",
-      label: saveCopy.verdictOptions.unknown.label,
-      description: saveCopy.verdictOptions.unknown.description,
-    },
-  ];
-
   const showSavePanel = canSaveReport && !isHoldSignal;
-  const disableVerdictControls = !canSaveReport || isSessionSyncing;
+  const isSaved = canSaveReport && saveStatus === "success";
   const disableSaveButton =
-    !canSaveReport || !saveVerdict || isSessionSyncing || isSavingReport;
+    !canSaveReport || isSessionSyncing || isSavingReport || isSaved;
   const showSaveSuccess = canSaveReport && saveStatus === "success";
-  const showSaveError = canSaveReport && saveStatus === "error" && Boolean(saveError);
+  const showSaveError =
+    canSaveReport && saveStatus === "error" && Boolean(saveError);
   const sessionHint = !canSaveReport
     ? saveCopy.loginPrompt
     : isSessionSyncing
     ? saveCopy.syncing
     : saveCopy.hint;
-
-  const readonlyVerdictKey: HistoryVerdict = (saveVerdict ?? "unknown") as HistoryVerdict;
-  const readonlyVerdictLabel =
-    historyEntryCopy.verdict[readonlyVerdictKey] ?? historySummaryCopy.noVerdict;
-  const readonlyVerdictClass =
-    readonlyVerdictKey === "accurate"
-      ? "border-[var(--swimm-up)]/40 bg-[var(--swimm-up)]/10 text-[var(--swimm-up)]"
-      : readonlyVerdictKey === "inaccurate"
-      ? "border-[var(--swimm-down)]/40 bg-[var(--swimm-down)]/10 text-[var(--swimm-down)]"
-      : "border-[var(--swimm-warn)]/40 bg-[var(--swimm-warn)]/10 text-[var(--swimm-warn)]";
-  const trimmedFeedback = saveFeedback.trim();
-  const readonlyFeedback = trimmedFeedback.length
-    ? trimmedFeedback
-    : historyEntryCopy.feedbackBlock.empty;
+  const executionWindowLabel = formatExecutionWindowLabel(tradeExecutionWindow);
 
   return (
     <MotionSection
@@ -331,13 +578,52 @@ export function AnalysisSection({
             {analysisCopy.snapshot.description}
           </p>
           <div className="relative mt-4 h-64 w-full overflow-hidden rounded-2xl border border-[var(--swimm-neutral-300)] bg-white">
-            <div ref={chartContainerRef} className="pointer-events-none h-full w-full" />
+            <div ref={chartContainerRef} className="h-full w-full" />
+            <canvas ref={overlayCanvasRef} className="pointer-events-none absolute inset-0" />
             {!snapshotReady && (
               <div className="absolute inset-0 flex items-center justify-center text-xs text-[var(--swimm-neutral-300)]">
                 {analysisCopy.snapshot.placeholder}
               </div>
             )}
           </div>
+          {analysisCandleDetails ? (
+            <div className="mt-4 grid gap-3 rounded-2xl border border-[var(--swimm-neutral-200)] bg-[var(--swimm-neutral-50)] px-4 py-3 text-xs text-[var(--swimm-neutral-600)] sm:grid-cols-6">
+              <div className="sm:col-span-2">
+                <div className="text-[10px] uppercase tracking-[0.2em] text-[var(--swimm-neutral-400)]">
+                  {analysisCopy.snapshot.ohlcCapturedAt}
+                </div>
+                <div className="mt-1 font-semibold text-[var(--swimm-navy-900)]">
+                  {ohlcTimeFormatterRef.current?.format(
+                    new Date(analysisCandleDetails.time * 1000)
+                  )}
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase tracking-[0.2em] text-[var(--swimm-neutral-400)]">
+                  {analysisCopy.snapshot.ohlcOpen}
+                </div>
+                <div className="mt-1 font-semibold">{formatPrice(analysisCandleDetails.open)}</div>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase tracking-[0.2em] text-[var(--swimm-neutral-400)]">
+                  {analysisCopy.snapshot.ohlcHigh}
+                </div>
+                <div className="mt-1 font-semibold">{formatPrice(analysisCandleDetails.high)}</div>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase tracking-[0.2em] text-[var(--swimm-neutral-400)]">
+                  {analysisCopy.snapshot.ohlcLow}
+                </div>
+                <div className="mt-1 font-semibold">{formatPrice(analysisCandleDetails.low)}</div>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase tracking-[0.2em] text-[var(--swimm-neutral-400)]">
+                  {analysisCopy.snapshot.ohlcClose}
+                </div>
+                <div className="mt-1 font-semibold">{formatPrice(analysisCandleDetails.close)}</div>
+              </div>
+            </div>
+          ) : null}
           <div className="mt-3 flex flex-wrap items-center gap-3 text-[11px] text-[var(--swimm-neutral-300)]">
             <span className="rounded-full border border-[var(--swimm-primary-500)]/40 px-2 py-1 text-[var(--swimm-primary-700)]">
               {analysisCopy.snapshot.legendEntry}
@@ -371,70 +657,43 @@ export function AnalysisSection({
                 {actionLabel}
               </span>
             </div>
-            <p className="mt-4 text-sm text-[var(--swimm-neutral-500)]">{summaryText}</p>
+            <p className="mt-4 text-sm text-[var(--swimm-neutral-500)]">
+              {summaryText}
+            </p>
             <p className="mt-4 rounded-2xl border border-[var(--swimm-neutral-300)] bg-white px-4 py-3 text-xs text-[var(--swimm-neutral-500)]">
               {rationaleText}
             </p>
-            <div className="mt-6">
-              <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--swimm-neutral-300)]">
-                {canSaveReport ? saveCopy.feedbackLabel : historyEntryCopy.feedbackBlock.title}
-              </div>
-              {canSaveReport ? (
-                <>
-                  <textarea
-                    id="analysis-save-feedback"
-                    value={saveFeedback}
-                    onChange={(event) => onFeedbackChange(event.target.value)}
-                    disabled={!canSaveReport}
-                    className="mt-2 h-28 w-full rounded-2xl border border-[var(--swimm-neutral-300)] bg-white px-4 py-3 text-sm text-[var(--swimm-neutral-500)] outline-none transition focus:border-[var(--swimm-primary-500)] focus:ring-2 focus:ring-[var(--swimm-primary-500)]/30 disabled:cursor-not-allowed disabled:bg-[var(--swimm-neutral-100)]"
-                    placeholder={saveCopy.feedbackPlaceholder}
-                    maxLength={2000}
-                  />
-                  <div className="mt-1 text-[11px] text-[var(--swimm-neutral-300)]">{saveCopy.feedbackHint}</div>
-                </>
-              ) : (
-                <>
-                  <p className="mt-2 whitespace-pre-line rounded-2xl border border-[var(--swimm-neutral-300)] bg-white px-4 py-3 text-sm text-[var(--swimm-neutral-500)]">
-                    {readonlyFeedback}
-                  </p>
-                  <div className={`mt-3 inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold ${readonlyVerdictClass}`}>
-                    {readonlyVerdictLabel}
-                  </div>
-                </>
-              )}
-              {!canSaveReport && !isHoldSignal && saveVerdict === null ? (
-                <div className="mt-3 rounded-2xl border border-dashed border-[var(--swimm-neutral-300)] bg-[var(--swimm-neutral-50)] px-4 py-3 text-xs text-[var(--swimm-neutral-500)]">
-                  {saveCopy.loginPrompt}
-                </div>
-              ) : null}
-            </div>
           </div>
-
-          <div className="rounded-2xl border border-[var(--swimm-neutral-300)] bg-white p-4">
-            <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--swimm-neutral-300)]">
-              {analysisCopy.chartInsight.title}
-            </div>
-            <p className="mt-3 text-xs text-[var(--swimm-neutral-500)]">{chartNarrativeText}</p>
-            <p className="mt-2 text-xs text-[var(--swimm-neutral-500)]">
-              {analysisCopy.chartInsight.forecast} {chartForecastText}
-            </p>
-            <div className="mt-4 grid gap-2 text-[11px] text-[var(--swimm-neutral-500)] sm:grid-cols-2">
-              <div>
-                {analysisCopy.chartInsight.rangeStart}: {chartStartLabel}
-              </div>
-              <div>
-                {analysisCopy.chartInsight.rangeEnd}: {chartEndLabel}
-              </div>
-            </div>
-          </div>
-
           <div className="grid gap-4 md:grid-cols-2">
+            <div className="rounded-2xl border border-[var(--swimm-neutral-300)] bg-white p-4">
+              <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--swimm-neutral-300)]">
+                {analysisCopy.chartInsight.title}
+              </div>
+              <p className="mt-3 text-xs text-[var(--swimm-neutral-500)]">
+                {chartNarrativeText}
+              </p>
+              <p className="mt-2 text-xs text-[var(--swimm-neutral-500)]">
+                {analysisCopy.chartInsight.forecast} {chartForecastText}
+              </p>
+              <div className="mt-4 grid gap-2 text-[11px] text-[var(--swimm-neutral-500)] sm:grid-cols-2">
+                <div>
+                  {analysisCopy.chartInsight.rangeStart}: {chartStartLabel}
+                </div>
+                <div>
+                  {analysisCopy.chartInsight.rangeEnd}: {chartEndLabel}
+                </div>
+              </div>
+            </div>
+
             <div className="rounded-2xl border border-[var(--swimm-neutral-300)] bg-white p-4">
               <div className="text-xs font-semibold uppercase tracking-wide text-[var(--swimm-neutral-500)]">
                 {analysisCopy.technical.title}
               </div>
               <ul className="mt-3 space-y-2 text-xs text-[var(--swimm-neutral-500)]">
-                {(technicalLines.length ? technicalLines : [analysisCopy.technical.empty]).map((item) => (
+                {(technicalLines.length
+                  ? technicalLines
+                  : [analysisCopy.technical.empty]
+                ).map((item) => (
                   <li
                     key={item}
                     className="rounded-xl border border-[var(--swimm-neutral-300)] bg-white px-3 py-2"
@@ -444,14 +703,39 @@ export function AnalysisSection({
                 ))}
               </ul>
             </div>
+
             <div className="rounded-2xl border border-[var(--swimm-neutral-300)] bg-white p-4">
               <div className="text-xs font-semibold uppercase tracking-wide text-[var(--swimm-neutral-500)]">
                 {analysisCopy.fundamental.title}
               </div>
               <ul className="mt-3 space-y-2 text-xs text-[var(--swimm-neutral-500)]">
-                {(fundamentalLines.length ? fundamentalLines : [analysisCopy.fundamental.empty]).map((item) => (
+                {(fundamentalLines.length
+                  ? fundamentalLines
+                  : [analysisCopy.fundamental.empty]
+                ).map((item, index) => (
                   <li
-                    key={item}
+                    key={`${item}-${index}`}
+                    className="rounded-xl border border-[var(--swimm-neutral-300)] bg-white px-3 py-2"
+                  >
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="rounded-2xl border border-[var(--swimm-neutral-300)] bg-white p-4">
+              <div className="text-xs font-semibold uppercase tracking-wide text-[var(--swimm-neutral-500)]">
+                {analysisCopy.highlights.title}
+              </div>
+              <ul className="mt-3 space-y-2 text-xs text-[var(--swimm-neutral-500)]">
+                {(supportiveHighlights.length
+                  ? supportiveHighlights
+                  : analysisCopy.highlights.empty
+                  ? [analysisCopy.highlights.empty]
+                  : []
+                ).map((item, index) => (
+                  <li
+                    key={`${item}-${index}`}
                     className="rounded-xl border border-[var(--swimm-neutral-300)] bg-white px-3 py-2"
                   >
                     {item}
@@ -460,24 +744,6 @@ export function AnalysisSection({
               </ul>
             </div>
           </div>
-
-          {supportiveHighlights.length > 0 && (
-            <div className="rounded-2xl border border-[var(--swimm-neutral-300)] bg-white p-4">
-              <div className="text-xs font-semibold uppercase tracking-wide text-[var(--swimm-neutral-500)]">
-                {analysisCopy.highlights.title}
-              </div>
-              <ul className="mt-3 space-y-2 text-xs text-[var(--swimm-neutral-500)]">
-                {supportiveHighlights.map((highlight) => (
-                  <li
-                    key={highlight}
-                    className="rounded-xl border border-[var(--swimm-neutral-300)] bg-white px-3 py-2"
-                  >
-                    {highlight}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
         </div>
 
         <div className="space-y-6">
@@ -498,7 +764,9 @@ export function AnalysisSection({
                         className="flex items-center justify-between rounded-lg border border-[var(--swimm-neutral-300)] bg-white px-3 py-2"
                       >
                         <span>
-                          {entryZoneValues.length > 1 ? `ENTRY ${index + 1}` : "ENTRY"}
+                          {entryZoneValues.length > 1
+                            ? `ENTRY ${index + 1}`
+                            : "ENTRY"}
                         </span>
                         <span>{formatPrice(entry)}</span>
                       </li>
@@ -533,7 +801,9 @@ export function AnalysisSection({
               </div>
               <div className="flex items-center justify-between text-xs text-[var(--swimm-neutral-500)]">
                 <span>{analysisCopy.tradePlan.stopLoss}</span>
-                <span className="text-[var(--swimm-navy-900)]">{formatPrice(tradeStopLoss)}</span>
+                <span className="text-[var(--swimm-navy-900)]">
+                  {formatPrice(tradeStopLoss)}
+                </span>
               </div>
               <div className="grid gap-3 text-xs text-[var(--swimm-neutral-500)] sm:grid-cols-2">
                 <div className="rounded-lg border border-[var(--swimm-neutral-300)] bg-white px-3 py-3">
@@ -541,7 +811,7 @@ export function AnalysisSection({
                     {analysisCopy.tradePlan.executionWindow}
                   </div>
                   <div className="mt-1 text-[11px] text-[var(--swimm-neutral-500)]">
-                    {tradeExecutionWindow}
+                    {executionWindowLabel}
                   </div>
                 </div>
                 <div className="rounded-lg border border-[var(--swimm-neutral-300)] bg-white px-3 py-3">
@@ -569,9 +839,9 @@ export function AnalysisSection({
               {analysisCopy.nextSteps.title}
             </div>
             <ul className="mt-4 space-y-3 text-sm text-[var(--swimm-neutral-500)]">
-              {nextStepLines.map((step) => (
+              {nextStepLines.map((step, index) => (
                 <li
-                  key={step}
+                  key={`${step}-${index}`}
                   className="flex items-start gap-3 rounded-xl border border-[var(--swimm-neutral-300)] bg-[var(--swimm-neutral-100)] px-4 py-3"
                 >
                   <span className="mt-1 h-2 w-2 rounded-full bg-[var(--swimm-primary-700)]" />
@@ -580,73 +850,52 @@ export function AnalysisSection({
               ))}
             </ul>
           </div>
-
-          {showSavePanel ? (
-            <div className="rounded-3xl border border-[var(--swimm-neutral-300)] bg-white p-6">
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                <div>
-                  <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--swimm-neutral-300)]">
-                    {saveCopy.title}
-                  </div>
-                  <p className="mt-3 text-sm text-[var(--swimm-neutral-500)]">{saveCopy.description}</p>
-                </div>
-                {showSaveSuccess ? (
-                  <span className="rounded-full border border-[var(--swimm-up)]/40 bg-[var(--swimm-up)]/10 px-3 py-1 text-xs font-semibold text-[var(--swimm-up)]">
-                    {saveCopy.successMessage}
-                  </span>
-                ) : null}
-              </div>
-              <div className="mt-6 space-y-6">
-                <div>
-                  <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--swimm-neutral-300)]">
-                    {saveCopy.verdictLabel}
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-3">
-                    {verdictOptions.map((option) => {
-                      const isActive = saveVerdict === option.key;
-                      const verdictClass = isActive
-                        ? "flex min-w-[11rem] flex-1 flex-col gap-1 rounded-2xl border border-[var(--swimm-primary-700)] bg-[var(--swimm-primary-500)]/10 px-4 py-3 text-left text-sm text-[var(--swimm-primary-700)]"
-                        : "flex min-w-[11rem] flex-1 flex-col gap-1 rounded-2xl border border-[var(--swimm-neutral-300)] bg-white px-4 py-3 text-left text-sm text-[var(--swimm-neutral-500)] transition hover:border-[var(--swimm-primary-500)] hover:text-[var(--swimm-primary-700)]";
-                      return (
-                        <button
-                          key={option.key}
-                          type="button"
-                          onClick={() => onVerdictChange(option.key)}
-                          disabled={disableVerdictControls}
-                          className={`${verdictClass} disabled:cursor-not-allowed disabled:border-[var(--swimm-neutral-200)] disabled:text-[var(--swimm-neutral-300)]`}
-                        >
-                          <span className="font-semibold">{option.label}</span>
-                          <span className="text-[11px] text-[var(--swimm-neutral-400)]">{option.description}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div className={`text-xs ${showSaveError ? "text-[var(--swimm-down)]" : "text-[var(--swimm-neutral-400)]"}`}>
-                    {showSaveError ? saveError ?? saveCopy.genericError : sessionHint}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={onSaveReport}
-                    disabled={disableSaveButton}
-                    className="inline-flex items-center justify-center rounded-full border border-[var(--swimm-primary-700)] bg-[var(--swimm-primary-500)]/15 px-5 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-[var(--swimm-primary-700)] transition hover:bg-[var(--swimm-primary-500)]/25 disabled:cursor-not-allowed disabled:border-[var(--swimm-neutral-300)] disabled:bg-[var(--swimm-neutral-200)]/60 disabled:text-[var(--swimm-neutral-400)]"
-                  >
-                    {isSavingReport ? saveCopy.savingButton : saveCopy.saveButton}
-                  </button>
-                </div>
-              </div>
-            </div>
-          ) : null}
-
-          <div className="rounded-3xl border border-[var(--swimm-neutral-300)] bg-white p-6 text-sm text-[var(--swimm-neutral-500)]">
-            <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--swimm-neutral-300)]">
-              {analysisCopy.integration.title}
-            </div>
-            <p className="mt-3">{analysisCopy.integration.body1}</p>
-            <p className="mt-2">{analysisCopy.integration.body2}</p>
-          </div>
         </div>
+
+        {showSavePanel ? (
+          <div className="rounded-3xl border border-[var(--swimm-neutral-300)] bg-white p-6 lg:col-span-2">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--swimm-neutral-300)]">
+                  {saveCopy.title}
+                </div>
+                <p className="mt-3 text-sm text-[var(--swimm-neutral-500)]">
+                  {saveCopy.description}
+                </p>
+              </div>
+              {showSaveSuccess ? (
+                <span className="rounded-full border border-[var(--swimm-up)]/40 bg-[var(--swimm-up)]/10 px-3 py-1 text-xs font-semibold text-[var(--swimm-up)]">
+                  {saveCopy.successMessage}
+                </span>
+              ) : null}
+            </div>
+            <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div
+                className={`text-xs ${
+                  showSaveError
+                    ? "text-[var(--swimm-down)]"
+                    : "text-[var(--swimm-neutral-400)]"
+                }`}
+              >
+                {showSaveError
+                  ? saveError ?? saveCopy.genericError
+                  : sessionHint}
+              </div>
+              <button
+                type="button"
+                onClick={onSaveReport}
+                disabled={disableSaveButton}
+                className="inline-flex items-center justify-center rounded-full border border-[var(--swimm-primary-700)] bg-[var(--swimm-primary-500)]/15 px-5 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-[var(--swimm-primary-700)] transition hover:bg-[var(--swimm-primary-500)]/25 disabled:cursor-not-allowed disabled:border-[var(--swimm-neutral-300)] disabled:bg-[var(--swimm-neutral-200)]/60 disabled:text-[var(--swimm-neutral-400)]"
+              >
+                {isSavingReport
+                  ? saveCopy.savingButton
+                  : isSaved
+                  ? saveCopy.savedButton
+                  : saveCopy.saveButton}
+              </button>
+            </div>
+          </div>
+        ) : null}
       </div>
     </MotionSection>
   );
@@ -753,8 +1002,8 @@ export const buildTradingNarrative = (
     ? tradeRationale
     : response?.decision?.rationale ?? response?.summary ?? "";
 
-export const formatPriceLabel = (formatter: Intl.NumberFormat) =>
-  (value: number | null) =>
+export const formatPriceLabel =
+  (formatter: Intl.NumberFormat) => (value: number | null) =>
     typeof value === "number" && Number.isFinite(value)
       ? `${formatter.format(value)} USDT`
       : "-";

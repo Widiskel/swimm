@@ -2,34 +2,40 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
+import { usePrivy } from "@privy-io/react-auth";
+
 import type { AgentResponse } from "@/features/analysis/types";
 import { DEFAULT_PROVIDER, type CexProvider } from "@/features/market/exchanges";
+import { DEFAULT_MARKET_MODE, type MarketMode } from "@/features/market/constants";
 import { useSession } from "@/providers/session-provider";
-
-export type HistoryVerdict = "accurate" | "inaccurate" | "unknown";
+import type { HistorySnapshot, HistoryVerdict } from "@/features/history/types";
+export type { HistoryVerdict, HistorySnapshot } from "@/features/history/types";
 
 export type HistoryEntry = {
   id: string;
+  sessionId: string;
   createdAt: string;
   updatedAt: string;
   pair: string;
   timeframe: string;
   provider: CexProvider;
+  mode: MarketMode;
   decision: AgentResponse["decision"] | null;
   summary: string;
   response: AgentResponse;
   verdict: HistoryVerdict;
-  feedback: string | null;\r\n  snapshot?: {\r\n    timeframe: string;\r\n    at: string;\r\n    candles: Array<{\r\n      openTime: number;\r\n      open: number;\r\n      high: number;\r\n      low: number;\r\n      close: number;\r\n      volume?: number;\r\n      closeTime?: number;\r\n    }>;\r\n  } | null;
+  feedback: string | null;snapshot?: {  timeframe: string;  at: string;  candles: Array<{    openTime: number;    open: number;    high: number;    low: number;    close: number;    volume?: number;    closeTime?: number;  }>;} | null;
 };
 
 type SaveHistoryPayload = {
   pair: string;
   timeframe: string;
   provider?: CexProvider;
+  mode?: MarketMode;
   response: AgentResponse;
   verdict: HistoryVerdict;
   feedback?: string;
-  snapshot?: {\r\n    timeframe: string;\r\n    at: string;\r\n    candles: Array<{\r\n      openTime: number;\r\n      open: number;\r\n      high: number;\r\n      low: number;\r\n      close: number;\r\n      volume?: number;\r\n      closeTime?: number;\r\n    }>;\r\n  };\r\n};
+  snapshot?: {  timeframe: string;  at: string;  candles: Array<{    openTime: number;    open: number;    high: number;    low: number;    close: number;    volume?: number;    closeTime?: number;  }>;};\r\n};
 
 type HistoryContextValue = {
   entries: HistoryEntry[];
@@ -37,6 +43,7 @@ type HistoryContextValue = {
   error: string | null;
   refresh: () => Promise<void>;
   saveEntry: (payload: SaveHistoryPayload) => Promise<HistoryEntry>;
+  updateEntry: (id: string, payload: UpdateHistoryPayload) => Promise<HistoryEntry>;
   clearEntries: () => Promise<void>;
 };
 
@@ -50,12 +57,13 @@ const buildError = (error: unknown, fallback: string) => {
 };
 
 export function HistoryProvider({ children }: { children: React.ReactNode }) {
-  const { status } = useSession();
+  const { status, refresh: refreshSession } = useSession();
+  const { authenticated, user } = usePrivy();
   const [entries, setEntries] = useState<HistoryEntry[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const refresh = useCallback(async () => {
+  const refreshHistory = useCallback(async () => {
     if (status !== "authenticated") {
       setEntries([]);
       setError(null);
@@ -85,21 +93,13 @@ export function HistoryProvider({ children }: { children: React.ReactNode }) {
   }, [status]);
 
   useEffect(() => {
-    void refresh();
-  }, [refresh]);
+    void refreshHistory();
+  }, [refreshHistory]);
 
-  const saveEntry = useCallback(
-    async ({
-      pair,
-      timeframe,
-      provider = DEFAULT_PROVIDER,
-      response,
-      verdict,
-      feedback,
-    }: SaveHistoryPayload) => {
-      if (status !== "authenticated") {
-        throw new Error("Session required.");
-      }
+  const ensureServerSession = useCallback(async () => {
+    if (!authenticated || !user?.id) {
+      return false;
+    }
 
       const body = {
         pair,
@@ -107,38 +107,169 @@ export function HistoryProvider({ children }: { children: React.ReactNode }) {
         provider,
         response,
         verdict,
-        feedback,\r\n        snapshot,\r\n      };
+        feedback,      snapshot,    };
 
-      const request = await fetch("/api/history", {
+      const response = await fetch("/api/session", {
         method: "POST",
         credentials: "include",
         cache: "no-store",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(body),
+        body: JSON.stringify({
+          userId: user.id,
+          email,
+          name: derivedName ?? null,
+          wallet,
+        }),
       });
 
-      if (!request.ok) {
-        let message = `Failed to save history entry (${request.status})`;
-        try {
-          const payload = (await request.json()) as { error?: string };
-          if (payload.error) {
-            message = payload.error;
-          }
-        } catch (parseError) {
-          console.warn("Failed to parse history save error", parseError);
-        }
-        throw new Error(message);
+      if (!response.ok) {
+        return false;
       }
 
-      const payload = (await request.json()) as { entry: HistoryEntry };
-      const entry = payload.entry;
-      setEntries((prev) => [entry, ...prev]);
-      setError(null);
-      return entry;
+      await refreshSession();
+      return true;
+    } catch (error) {
+      console.warn("Failed to ensure server session", error);
+      return false;
+    }
+  }, [authenticated, refreshSession, user]);
+
+  const saveEntry = useCallback(
+    async ({
+      pair,
+      timeframe,
+      provider = DEFAULT_PROVIDER,
+      mode = DEFAULT_MARKET_MODE,
+      response,
+      verdict,
+      feedback,
+      executed,
+      snapshot,
+    }: SaveHistoryPayload) => {
+      if (status !== "authenticated") {
+        throw new Error("Session required.");
+      }
+
+      const execute = async (hasRetried: boolean): Promise<HistoryEntry> => {
+        const body = {
+          pair,
+          timeframe,
+          provider,
+          mode,
+          response,
+          verdict,
+          feedback,
+          executed: typeof executed === "boolean" ? executed : null,
+          snapshot: snapshot ?? null,
+        };
+
+        const request = await fetch("/api/history", {
+          method: "POST",
+          credentials: "include",
+          cache: "no-store",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(body),
+        });
+
+        if (!request.ok) {
+          if (!hasRetried && request.status === 401 && (await ensureServerSession())) {
+            return execute(true);
+          }
+          let message = `Failed to save history entry (${request.status})`;
+          try {
+            const payload = (await request.json()) as { error?: string };
+            if (payload.error) {
+              message = payload.error;
+            }
+          } catch (parseError) {
+            console.warn("Failed to parse history save error", parseError);
+          }
+          throw new Error(message);
+        }
+
+        const payload = (await request.json()) as { entry: HistoryEntry };
+        const entry = payload.entry;
+        setEntries((prev) => [entry, ...prev]);
+        setError(null);
+        return entry;
+      };
+
+      return execute(false);
     },
-    [status]
+    [ensureServerSession, status]
+  );
+
+  const updateEntry = useCallback(
+    async (
+      id: string,
+      { verdict, feedback, executed, sessionId: sessionIdHint, createdAt: createdAtHint }: UpdateHistoryPayload
+    ) => {
+      if (status !== "authenticated") {
+        throw new Error("Session required.");
+      }
+
+      const body: Record<string, unknown> = {};
+      if (typeof verdict !== "undefined") {
+        body.verdict = verdict;
+      }
+      if (typeof feedback !== "undefined") {
+        body.feedback = feedback;
+      }
+      if (typeof executed !== "undefined") {
+        body.executed = executed;
+      }
+      if (sessionIdHint) {
+        body.sessionId = sessionIdHint;
+      }
+      if (createdAtHint) {
+        body.createdAt = createdAtHint;
+      }
+
+      if (Object.keys(body).length === 0) {
+        throw new Error("Nothing to update.");
+      }
+
+      const execute = async (hasRetried: boolean): Promise<HistoryEntry> => {
+        const request = await fetch(`/api/history/${id}`, {
+          method: "PUT",
+          credentials: "include",
+          cache: "no-store",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(body),
+        });
+
+        if (!request.ok) {
+          if (!hasRetried && request.status === 401 && (await ensureServerSession())) {
+            return execute(true);
+          }
+          let message = `Failed to update history entry (${request.status})`;
+          try {
+            const payload = (await request.json()) as { error?: string };
+            if (payload.error) {
+              message = payload.error;
+            }
+          } catch (parseError) {
+            console.warn("Failed to parse history update error", parseError);
+          }
+          throw new Error(message);
+        }
+
+        const payload = (await request.json()) as { entry: HistoryEntry };
+        const updated = payload.entry;
+        setEntries((prev) => prev.map((entry) => (entry.id === updated.id ? updated : entry)));
+        setError(null);
+        return updated;
+      };
+
+      return execute(false);
+    },
+    [ensureServerSession, status]
   );
 
   const clearEntries = useCallback(async () => {
@@ -169,11 +300,12 @@ export function HistoryProvider({ children }: { children: React.ReactNode }) {
       entries,
       isLoading,
       error,
-      refresh,
+      refresh: refreshHistory,
       saveEntry,
+      updateEntry,
       clearEntries,
     }),
-    [entries, isLoading, error, refresh, saveEntry, clearEntries]
+    [entries, isLoading, error, refreshHistory, saveEntry, updateEntry, clearEntries]
   );
 
   return <HistoryContext.Provider value={value}>{children}</HistoryContext.Provider>;
