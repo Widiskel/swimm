@@ -15,6 +15,7 @@ import {
   type IChartApi,
   type IPriceLine,
   type ISeriesApi,
+  type LogicalRange,
   type SeriesMarker,
   type Time,
   type UTCTimestamp,
@@ -389,6 +390,22 @@ export function AnalysisSection({
     manualQuantity
   );
 
+  type TargetRow = {
+    key: (typeof TARGET_LABELS)[number];
+    label: (typeof TARGET_LABELS)[number];
+    price: number;
+    isStop: false;
+  };
+
+  type StopRow = {
+    key: "stop";
+    label: string;
+    price: number;
+    isStop: true;
+  };
+
+  type PnlRow = TargetRow | StopRow;
+
   const pnlRows = (
     [
       ...paddedTargets
@@ -403,14 +420,7 @@ export function AnalysisSection({
             : null
         )
         .filter(
-          (
-            item
-          ): item is {
-            key: string;
-            label: string;
-            price: number;
-            isStop: boolean;
-          } => item !== null
+          (item): item is TargetRow => item !== null
         ),
       effectiveStop !== null
         ? {
@@ -420,12 +430,7 @@ export function AnalysisSection({
             isStop: true,
           }
         : null,
-    ].filter(Boolean) as Array<{
-      key: string;
-      label: string;
-      price: number;
-      isStop: boolean;
-    }>
+    ].filter(Boolean) as PnlRow[]
   ).map((row) => ({
     ...row,
     recommended: computePnl(row.price, effectiveEntry, recommendedQuantity),
@@ -474,6 +479,10 @@ export function AnalysisSection({
     if (!chartContainerRef.current) {
       return;
     }
+
+    const previousRange = chartRef.current
+      ? chartRef.current.timeScale().getVisibleLogicalRange()
+      : null;
 
     if (chartRef.current) {
       chartRef.current.remove();
@@ -717,7 +726,11 @@ export function AnalysisSection({
       ).subscribePriceScaleChange(priceScaleHandler);
     }
 
-    chart.timeScale().fitContent();
+    if (previousRange) {
+      chart.timeScale().setVisibleLogicalRange(previousRange);
+    } else {
+      chart.timeScale().fitContent();
+    }
     renderOverlay();
     setSnapshotReady(true);
 

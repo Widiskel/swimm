@@ -7,6 +7,7 @@ import {
   type CandlestickData,
   type IChartApi,
   type ISeriesApi,
+  type LogicalRange,
   type MouseEventParams,
 } from "lightweight-charts";
 
@@ -87,6 +88,10 @@ export function HistoryLiveChart({
     ((param: MouseEventParams) => void) | null
   >(null);
   const hoverDataRef = useRef<HoverData | null>(null);
+  const manualRangeRef = useRef<LogicalRange | null>(null);
+  const hasManualRangeRef = useRef(false);
+  const suppressRangeEventRef = useRef(false);
+  const rangeHandlerRef = useRef<((range: LogicalRange | null) => void) | null>(null);
 
   const [candles, setCandles] = useState<CandlestickData[]>([]);
   const [indicatorVisibility, setIndicatorVisibility] =
@@ -159,11 +164,16 @@ export function HistoryLiveChart({
     setHoverData(value);
   }, []);
 
-  const resetChart = useCallback(() => {
+  const teardownChart = useCallback(() => {
     if (chartApiRef.current && crosshairHandlerRef.current) {
       chartApiRef.current.unsubscribeCrosshairMove(
         crosshairHandlerRef.current
       );
+    }
+    if (chartApiRef.current && rangeHandlerRef.current) {
+      chartApiRef.current
+        .timeScale()
+        .unsubscribeVisibleLogicalRangeChange(rangeHandlerRef.current);
     }
     if (chartApiRef.current) {
       chartApiRef.current.remove();
@@ -173,6 +183,10 @@ export function HistoryLiveChart({
     indicatorSeriesRef.current = {};
     crosshairHandlerRef.current = null;
     hoverDataRef.current = null;
+    manualRangeRef.current = null;
+    hasManualRangeRef.current = false;
+    suppressRangeEventRef.current = false;
+    rangeHandlerRef.current = null;
     setHoverState(null);
   }, [setHoverState]);
 
@@ -260,7 +274,7 @@ export function HistoryLiveChart({
             setCandles([]);
             setIsChartVisible(false);
             setChartError(historyCopy.empty);
-            resetChart();
+            teardownChart();
             setHoverState(null);
           }
           return;
@@ -284,7 +298,7 @@ export function HistoryLiveChart({
           setCandles([]);
           setChartMeta(null);
           setIsChartVisible(false);
-          resetChart();
+          teardownChart();
           setHoverState(null);
           setChartError(
             error instanceof Error ? error.message : historyCopy.error
@@ -313,7 +327,7 @@ export function HistoryLiveChart({
     locale,
     mode,
     provider,
-    resetChart,
+    teardownChart,
     setHoverState,
     symbol,
     snapshotCapturedAt,
@@ -328,7 +342,7 @@ export function HistoryLiveChart({
     }
   }, [snapshotCandles]);
 
-  useEffect(() => () => resetChart(), [resetChart]);
+  useEffect(() => () => teardownChart(), [teardownChart]);
 
   useEffect(() => {
     if (!chartContainerRef.current || !candles.length) {
@@ -406,6 +420,19 @@ export function HistoryLiveChart({
 
       chart.subscribeCrosshairMove(handler);
       crosshairHandlerRef.current = handler;
+
+      const rangeHandler = (range: LogicalRange | null) => {
+        if (suppressRangeEventRef.current) {
+          return;
+        }
+        if (range) {
+          manualRangeRef.current = range;
+          hasManualRangeRef.current = true;
+        }
+      };
+
+      chart.timeScale().subscribeVisibleLogicalRangeChange(rangeHandler);
+      rangeHandlerRef.current = rangeHandler;
     }
 
     const chartInstance = chartApiRef.current;
@@ -415,7 +442,22 @@ export function HistoryLiveChart({
       return;
     }
 
-    candleSeries.setData(candles);
+    const timeScale = chartInstance.timeScale();
+    const restoreRange =
+      hasManualRangeRef.current && manualRangeRef.current !== null
+        ? manualRangeRef.current
+        : null;
+
+    if (restoreRange) {
+      suppressRangeEventRef.current = true;
+      candleSeries.setData(candles);
+      timeScale.setVisibleLogicalRange(restoreRange);
+    } else {
+      candleSeries.setData(candles);
+      timeScale.fitContent();
+    }
+
+    suppressRangeEventRef.current = false;
 
     const indicatorData = buildIndicatorData(candles, INDICATOR_CONFIG);
     updateIndicatorSeries(
@@ -437,8 +479,6 @@ export function HistoryLiveChart({
         close: latest.close,
       });
     }
-
-    chartInstance.timeScale().fitContent();
 
     const handleResize = () => {
       if (!chartContainerRef.current || !chartApiRef.current) {

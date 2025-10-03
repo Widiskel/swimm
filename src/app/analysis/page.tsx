@@ -571,6 +571,7 @@ export default function AnalysisPage() {
           transition={{ duration: 0.65, ease: "easeOut" }}
         >
           <motion.div
+            className="flex h-full"
             initial={{ opacity: 0, x: -40 }}
             animate={{ opacity: 1, x: 0 }}
             
@@ -579,6 +580,7 @@ export default function AnalysisPage() {
             <HeroSection />
           </motion.div>
           <PairSelectionCard
+            className="h-full"
             category={assetCategory}
             onCategoryChange={handleAssetCategoryChange}
             provider={provider}
