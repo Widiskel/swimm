@@ -237,7 +237,8 @@ export function HistoryEntryAnalysis({ entry, onUpdateEntry }: HistoryEntryAnaly
           }
           return;
         }
-        const providerParam = entry.provider === "gold" ? "twelvedata" : entry.provider;
+        const providerParam =
+          (entry.provider as string) === "gold" ? "twelvedata" : entry.provider;
         const categoryParam = providerParam === "twelvedata" ? "gold" : "crypto";
         const effectiveMode = providerParam === "twelvedata" ? "spot" : entry.mode ?? DEFAULT_MARKET_MODE;
 

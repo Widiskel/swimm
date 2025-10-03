@@ -7,7 +7,11 @@ import type {
   HistorySnapshotCandle,
   HistoryVerdict,
 } from "@/features/history/types";
-import { DEFAULT_PROVIDER, isCexProvider } from "@/features/market/exchanges";
+import {
+  DEFAULT_PROVIDER,
+  isCexProvider,
+  type CexProvider,
+} from "@/features/market/exchanges";
 import {
   DEFAULT_MARKET_MODE,
   isMarketMode,

@@ -35,6 +35,7 @@ type PairSelectionCardProps = {
   onShowChart: () => void;
   pairs: TradingPair[];
   isLoadingPairs: boolean;
+  className?: string;
 };
 
 const MotionDiv = motion.div;
@@ -51,6 +52,7 @@ export function PairSelectionCard({
   onShowChart,
   pairs,
   isLoadingPairs,
+  className,
 }: PairSelectionCardProps) {
   const { __ } = useLanguage();
   const hasPairs = pairs.length > 0;
@@ -130,7 +132,10 @@ export function PairSelectionCard({
 
   return (
     <MotionDiv
-      className="rounded-3xl border border-[var(--swimm-neutral-300)] bg-white p-8 shadow"
+      className={[
+        "flex h-full flex-col rounded-3xl border border-[var(--swimm-neutral-300)] bg-white p-8 shadow",
+        className ?? "",
+      ].filter(Boolean).join(" ")}
       initial={{ opacity: 0, y: 40 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, amount: 0.3 }}
@@ -145,7 +150,7 @@ export function PairSelectionCard({
           {__("pairSelection.description")}
         </p>
       </div>
-      <div className="mt-6 flex flex-col gap-4">
+      <div className="mt-6 flex flex-1 flex-col gap-4">
         <div>
           <label className="text-xs font-semibold uppercase tracking-wide text-[var(--swimm-neutral-500)]">
             {__("pairSelection.modeLabel")}
@@ -285,7 +290,7 @@ export function PairSelectionCard({
           type="button"
           onClick={onShowChart}
           disabled={!hasPairs}
-          className="inline-flex items-center justify-center rounded-full border border-[var(--swimm-primary-500)] bg-[var(--swimm-primary-500)] px-6 py-3 text-sm font-semibold text-[var(--swimm-navy-900)] shadow-[var(--swimm-glow)] transition-transform duration-200 hover:-translate-y-0.5 hover:bg-[var(--swimm-primary-700)] hover:text-white disabled:cursor-not-allowed disabled:border-[var(--swimm-neutral-300)] disabled:bg-[var(--swimm-neutral-300)]/40 disabled:text-[var(--swimm-neutral-500)]"
+          className="mt-auto inline-flex items-center justify-center rounded-full border border-[var(--swimm-primary-500)] bg-[var(--swimm-primary-500)] px-6 py-3 text-sm font-semibold text-[var(--swimm-navy-900)] shadow-[var(--swimm-glow)] transition-transform duration-200 hover:-translate-y-0.5 hover:bg-[var(--swimm-primary-700)] hover:text-white disabled:cursor-not-allowed disabled:border-[var(--swimm-neutral-300)] disabled:bg-[var(--swimm-neutral-300)]/40 disabled:text-[var(--swimm-neutral-500)]"
         >
           {__("pairSelection.button")}
         </button>
