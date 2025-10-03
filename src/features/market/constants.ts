@@ -1,10 +1,11 @@
 import type { IndicatorConfigItem } from "./types";
 import type { CexProvider } from "@/features/market/exchanges";
 export { CEX_PROVIDERS, DEFAULT_PROVIDER } from "@/features/market/exchanges";
+
 export const PROVIDER_ICON_MAP: Record<CexProvider, string> = {
-  binance: "/cex/binance.png",
-  bybit: "/cex/bybit.webp",
-  gold: "/logo/branding.png",
+  binance: "/market_provider/binance.png",
+  bybit: "/market_provider/bybit.webp",
+  twelvedata: "/market_provider/twelvedata.png",
 };
 
 export const MARKET_MODES = ["spot", "futures"] as const;
@@ -13,6 +14,14 @@ export const DEFAULT_MARKET_MODE: MarketMode = "spot";
 export const isMarketMode = (
   value: string | null | undefined
 ): value is MarketMode => value === "spot" || value === "futures";
+
+export const ASSET_CATEGORIES = ["crypto", "gold"] as const;
+export type AssetCategory = (typeof ASSET_CATEGORIES)[number];
+export const DEFAULT_ASSET_CATEGORY: AssetCategory = "crypto";
+export const CATEGORY_PROVIDER_MAP: Record<AssetCategory, CexProvider[]> = {
+  crypto: ["binance", "bybit"],
+  gold: ["twelvedata"],
+};
 
 export const TIMEFRAME_OPTIONS = ["1m", "5m", "15m", "1h", "4h", "1d"] as const;
 
@@ -87,6 +96,3 @@ export const INDICATOR_CONFIG: IndicatorConfigItem[] = [
 export const TARGET_LABELS = ["TP1", "TP2", "TP3", "TP4", "TP5"] as const;
 
 export const DEFAULT_PAIR_SYMBOL = process.env.BINANCE_SYMBOL ?? "BTCUSDT";
-
-
-

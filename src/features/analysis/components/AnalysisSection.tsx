@@ -2,6 +2,7 @@
 
 import {
   useEffect,
+  useMemo,
   useRef,
   useState,
   type MutableRefObject,
@@ -27,7 +28,12 @@ import {
   updateIndicatorSeries,
 } from "@/features/market/utils/indicators";
 import { updateOverlayPriceLines } from "@/features/market/utils/overlays";
-import { INDICATOR_CONFIG, TARGET_LABELS } from "@/features/market/constants";
+import {
+  INDICATOR_CONFIG,
+  TARGET_LABELS,
+  type AssetCategory,
+  type MarketMode,
+} from "@/features/market/constants";
 import type {
   IndicatorKey,
   IndicatorSeriesMap,
@@ -142,6 +148,8 @@ type AnalysisSectionProps = {
     low: number;
     close: number;
   } | null;
+  marketMode?: MarketMode;
+  assetCategory?: AssetCategory;
 };
 
 const MotionSection = motion.section;
@@ -174,6 +182,8 @@ export function AnalysisSection({
   sectionRef,
   analysisMarkers = [],
   analysisCandleDetails = null,
+  marketMode,
+  assetCategory,
 }: AnalysisSectionProps) {
   const { messages, __, languageTag } = useLanguage();
   const analysisCopy = messages.analysis;
@@ -196,37 +206,235 @@ export function AnalysisSection({
   const fundamentalLines = response?.market?.fundamental ?? [];
   const nextStepLines = response?.nextSteps ?? [];
 
-  const sizingNotesText = tradeSizingNotes?.trim().length ? tradeSizingNotes : "-";
+  const sizingNotesText = tradeSizingNotes?.trim().length
+    ? tradeSizingNotes
+    : "-";
   const sizingCopy = analysisCopy.sizingCalc;
+  const resolvedMode: MarketMode = marketMode ?? "spot";
+  const resolvedCategory: AssetCategory = assetCategory ?? "crypto";
+  const isLeveragedMarket =
+    resolvedMode === "futures" || resolvedCategory === "gold";
+
   const [equity, setEquity] = useState<number>(1000);
   const [riskPct, setRiskPct] = useState<number>(1.0);
+  const [leverage, setLeverage] = useState<number>(
+    isLeveragedMarket ? 20 : 1
+  );
+  const [leverageTouched, setLeverageTouched] = useState(false);
+  const [manualBudget, setManualBudget] = useState<number>(0);
+  const [manualBudgetTouched, setManualBudgetTouched] = useState(false);
+  const [manualEntryPrice, setManualEntryPrice] = useState<number | null>(null);
+  const [manualPriceTouched, setManualPriceTouched] = useState(false);
+
   const primaryEntry = (entryZoneValues?.[0] ?? null) as number | null;
+  const inferredEntryFromChart = analysisCandles.length
+    ? Number(analysisCandles[analysisCandles.length - 1].close.toFixed(2))
+    : null;
   const effectiveEntry =
     primaryEntry !== null && Number.isFinite(primaryEntry)
       ? Number(primaryEntry.toFixed(2))
-      : analysisCandles.length
-      ? Number(analysisCandles[analysisCandles.length - 1].close.toFixed(2))
-      : null;
+      : inferredEntryFromChart;
   const effectiveStop =
-    typeof tradeStopLoss === 'number' && Number.isFinite(tradeStopLoss)
+    typeof tradeStopLoss === "number" && Number.isFinite(tradeStopLoss)
       ? Number(tradeStopLoss.toFixed(2))
       : null;
+
+  const bias = response?.tradePlan?.bias ?? "long";
+  const tradeDirection = bias === "short" ? -1 : 1;
+
   const stopDistance =
     effectiveEntry !== null && effectiveStop !== null
-      ? Number(Math.abs(effectiveEntry - effectiveStop).toFixed(4))
+      ? Math.abs(effectiveEntry - effectiveStop)
       : null;
-  const riskAmount = Number(((equity * (riskPct / 100)) || 0).toFixed(2));
-  const recommendedQty =
-    stopDistance && stopDistance > 0 ? Number((riskAmount / stopDistance).toFixed(6)) : null;
-  const notional =
-    effectiveEntry !== null && recommendedQty !== null
-      ? Number((recommendedQty * effectiveEntry).toFixed(2))
+
+  const normalizedRiskPct = Math.max(0, riskPct);
+  const riskAmount = Number((equity * (normalizedRiskPct / 100)).toFixed(2));
+
+  const recommendedQuantity =
+    stopDistance && stopDistance > 0
+      ? Number((riskAmount / stopDistance).toFixed(6))
       : null;
-  const maxLossFromRecommended =
-    stopDistance !== null && recommendedQty !== null
-      ? Number((stopDistance * recommendedQty).toFixed(2))
+
+  const clampedLeverage = isLeveragedMarket
+    ? Math.min(Math.max(Math.round(leverage), 1), 125)
+    : 1;
+
+  const recommendedNotional =
+    effectiveEntry !== null && recommendedQuantity !== null
+      ? Number((recommendedQuantity * effectiveEntry).toFixed(2))
       : null;
+
+  const recommendedMargin =
+    recommendedNotional !== null
+      ? Number((recommendedNotional / clampedLeverage).toFixed(2))
+      : null;
+
+  const recommendedExposure = isLeveragedMarket
+    ? recommendedMargin
+    : recommendedNotional;
+
+  useEffect(() => {
+    if (!isLeveragedMarket) {
+      if (leverage !== 1) {
+        setLeverage(1);
+      }
+      setLeverageTouched(false);
+      return;
+    }
+    if (!leverageTouched && leverage !== 20) {
+      setLeverage(20);
+    }
+  }, [isLeveragedMarket, leverage, leverageTouched]);
+
+  useEffect(() => {
+    if (!manualPriceTouched && effectiveEntry !== null) {
+      setManualEntryPrice(effectiveEntry);
+    }
+  }, [effectiveEntry, manualPriceTouched]);
+
+  useEffect(() => {
+    if (!manualBudgetTouched && recommendedExposure !== null) {
+      setManualBudget(recommendedExposure);
+    }
+  }, [recommendedExposure, manualBudgetTouched]);
   // No lot input; qty derives from equity and risk only.
+
+  const numberFormatter = useMemo(
+    () =>
+      new Intl.NumberFormat(languageTag, {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }),
+    [languageTag]
+  );
+
+  const quantityFormatter = useMemo(
+    () =>
+      new Intl.NumberFormat(languageTag, {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 6,
+      }),
+    [languageTag]
+  );
+
+  const formatSigned = (value: number | null) => {
+    if (value === null || Number.isNaN(value)) {
+      return "-";
+    }
+    const absValue = Math.abs(value);
+    const sign = value > 0 ? "+" : value < 0 ? "-" : "";
+    return `${sign}${numberFormatter.format(absValue)} USDT`;
+  };
+
+  const formatQuantity = (value: number | null) =>
+    value !== null && Number.isFinite(value)
+      ? quantityFormatter.format(value)
+      : "-";
+
+  const manualEntryPriceResolved =
+    manualEntryPrice !== null ? manualEntryPrice : effectiveEntry;
+
+  const manualBudgetNormalized =
+    manualBudget > 0
+      ? manualBudget
+      : recommendedExposure !== null
+      ? recommendedExposure
+      : null;
+
+  const manualNotional =
+    manualBudgetNormalized !== null && manualEntryPriceResolved !== null
+      ? Number(
+          (
+            manualBudgetNormalized *
+            (isLeveragedMarket ? clampedLeverage : 1)
+          ).toFixed(2)
+        )
+      : null;
+
+  const manualQuantity =
+    manualNotional !== null &&
+    manualEntryPriceResolved !== null &&
+    manualEntryPriceResolved > 0
+      ? Number((manualNotional / manualEntryPriceResolved).toFixed(6))
+      : null;
+
+  const computePnl = (
+    exitPrice: number | null,
+    entryPriceValue: number | null,
+    quantityValue: number | null
+  ) => {
+    if (
+      exitPrice === null ||
+      entryPriceValue === null ||
+      quantityValue === null ||
+      !Number.isFinite(exitPrice) ||
+      !Number.isFinite(entryPriceValue) ||
+      !Number.isFinite(quantityValue)
+    ) {
+      return null;
+    }
+    const delta = exitPrice - entryPriceValue;
+    const raw = tradeDirection * delta * quantityValue;
+    return Number(raw.toFixed(2));
+  };
+
+  const recommendedStopPnl = computePnl(
+    effectiveStop,
+    effectiveEntry,
+    recommendedQuantity
+  );
+  const manualStopPnl = computePnl(
+    effectiveStop,
+    manualEntryPriceResolved,
+    manualQuantity
+  );
+
+  const pnlRows = (
+    [
+      ...paddedTargets
+        .map((target, index) =>
+          target !== null
+            ? {
+                key: TARGET_LABELS[index],
+                label: TARGET_LABELS[index],
+                price: target,
+                isStop: false,
+              }
+            : null
+        )
+        .filter(
+          (
+            item
+          ): item is {
+            key: string;
+            label: string;
+            price: number;
+            isStop: boolean;
+          } => item !== null
+        ),
+      effectiveStop !== null
+        ? {
+            key: "stop",
+            label: sizingCopy.stopLabel ?? analysisCopy.tradePlan.stopLoss,
+            price: effectiveStop,
+            isStop: true,
+          }
+        : null,
+    ].filter(Boolean) as Array<{
+      key: string;
+      label: string;
+      price: number;
+      isStop: boolean;
+    }>
+  ).map((row) => ({
+    ...row,
+    recommended: computePnl(row.price, effectiveEntry, recommendedQuantity),
+    manual: computePnl(row.price, manualEntryPriceResolved, manualQuantity),
+  }));
+
+  const baseAssetSymbol = formattedPair.split("/")[0]?.trim() ?? "";
+
+  const manualNotionalDisplay = manualNotional;
 
   const tradingNarrativeText = tradingNarrative?.trim().length
     ? tradingNarrative
@@ -239,10 +447,7 @@ export function AnalysisSection({
   const overlayPriceLinesRef = useRef<IPriceLine[]>([]);
   const [snapshotReady, setSnapshotReady] = useState(false);
   const overlayCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const ohlcTimeFormatterRef = useRef<
-    Intl.DateTimeFormat |
-    null
-  >(null);
+  const ohlcTimeFormatterRef = useRef<Intl.DateTimeFormat | null>(null);
   if (!ohlcTimeFormatterRef.current) {
     ohlcTimeFormatterRef.current = new Intl.DateTimeFormat(languageTag, {
       year: "numeric",
@@ -419,7 +624,8 @@ export function AnalysisSection({
         return;
       }
 
-      const futureTime = (lastTime + timeframeSeconds * ZONE_LOOKAHEAD_BARS) as UTCTimestamp;
+      const futureTime = (lastTime +
+        timeframeSeconds * ZONE_LOOKAHEAD_BARS) as UTCTimestamp;
       const priceScale = chart.priceScale("right");
       const priceToCoordinate =
         priceScale && "priceToCoordinate" in priceScale
@@ -504,9 +710,11 @@ export function AnalysisSection({
     const priceScale = chart.priceScale("right");
     const priceScaleHandler = () => renderOverlay();
     if (priceScale && "subscribePriceScaleChange" in priceScale) {
-      (priceScale as unknown as {
-        subscribePriceScaleChange: (handler: () => void) => void;
-      }).subscribePriceScaleChange(priceScaleHandler);
+      (
+        priceScale as unknown as {
+          subscribePriceScaleChange: (handler: () => void) => void;
+        }
+      ).subscribePriceScaleChange(priceScaleHandler);
     }
 
     chart.timeScale().fitContent();
@@ -517,9 +725,11 @@ export function AnalysisSection({
       chart.remove();
       chart.timeScale().unsubscribeVisibleLogicalRangeChange(rangeHandler);
       if (priceScale && "unsubscribePriceScaleChange" in priceScale) {
-        (priceScale as unknown as {
-          unsubscribePriceScaleChange: (handler: () => void) => void;
-        }).unsubscribePriceScaleChange(priceScaleHandler);
+        (
+          priceScale as unknown as {
+            unsubscribePriceScaleChange: (handler: () => void) => void;
+          }
+        ).unsubscribePriceScaleChange(priceScaleHandler);
       }
       chartRef.current = null;
       seriesRef.current = null;
@@ -609,7 +819,10 @@ export function AnalysisSection({
           </p>
           <div className="relative mt-4 h-64 w-full overflow-hidden rounded-2xl border border-[var(--swimm-neutral-300)] bg-white">
             <div ref={chartContainerRef} className="h-full w-full" />
-            <canvas ref={overlayCanvasRef} className="pointer-events-none absolute inset-0" />
+            <canvas
+              ref={overlayCanvasRef}
+              className="pointer-events-none absolute inset-0"
+            />
             {!snapshotReady && (
               <div className="absolute inset-0 flex items-center justify-center text-xs text-[var(--swimm-neutral-300)]">
                 {analysisCopy.snapshot.placeholder}
@@ -632,25 +845,33 @@ export function AnalysisSection({
                 <div className="text-[10px] uppercase tracking-[0.2em] text-[var(--swimm-neutral-400)]">
                   {analysisCopy.snapshot.ohlcOpen}
                 </div>
-                <div className="mt-1 font-semibold">{formatPrice(analysisCandleDetails.open)}</div>
+                <div className="mt-1 font-semibold">
+                  {formatPrice(analysisCandleDetails.open)}
+                </div>
               </div>
               <div>
                 <div className="text-[10px] uppercase tracking-[0.2em] text-[var(--swimm-neutral-400)]">
                   {analysisCopy.snapshot.ohlcHigh}
                 </div>
-                <div className="mt-1 font-semibold">{formatPrice(analysisCandleDetails.high)}</div>
+                <div className="mt-1 font-semibold">
+                  {formatPrice(analysisCandleDetails.high)}
+                </div>
               </div>
               <div>
                 <div className="text-[10px] uppercase tracking-[0.2em] text-[var(--swimm-neutral-400)]">
                   {analysisCopy.snapshot.ohlcLow}
                 </div>
-                <div className="mt-1 font-semibold">{formatPrice(analysisCandleDetails.low)}</div>
+                <div className="mt-1 font-semibold">
+                  {formatPrice(analysisCandleDetails.low)}
+                </div>
               </div>
               <div>
                 <div className="text-[10px] uppercase tracking-[0.2em] text-[var(--swimm-neutral-400)]">
                   {analysisCopy.snapshot.ohlcClose}
                 </div>
-                <div className="mt-1 font-semibold">{formatPrice(analysisCandleDetails.close)}</div>
+                <div className="mt-1 font-semibold">
+                  {formatPrice(analysisCandleDetails.close)}
+                </div>
               </div>
             </div>
           ) : null}
@@ -668,22 +889,22 @@ export function AnalysisSection({
         </div>
       </div>
 
-      <div className="mt-8 grid gap-6 lg:grid-cols-[1.2fr_1fr]">
-        <div className="space-y-6">
-          <div className="rounded-3xl border border-[var(--swimm-neutral-300)] bg-white p-6">
+      <div className="mt-8 grid gap-6 lg:grid-cols-[1.2fr_1fr] lg:items-stretch">
+        <div className="flex h-full flex-col gap-4 rounded-3xl border border-[var(--swimm-neutral-300)] bg-white p-6">
+          <div>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--swimm-neutral-300)]">
                 {analysisCopy.summaryTitle}
               </div>
               <span
                 className={[
-                  'rounded-full border px-3 py-1 text-xs font-semibold uppercase',
-                  actionLabel === 'BUY'
-                    ? 'border-[var(--swimm-up)]/40 bg-[var(--swimm-up)]/10 text-[var(--swimm-up)]'
-                    : actionLabel === 'SELL'
-                    ? 'border-[var(--swimm-down)]/40 bg-[var(--swimm-down)]/10 text-[var(--swimm-down)]'
-                    : 'border-[var(--swimm-warn)]/40 bg-[var(--swimm-warn)]/10 text-[var(--swimm-warn)]',
-                ].join(' ')}
+                  "rounded-full border px-3 py-1 text-xs font-semibold uppercase",
+                  actionLabel === "BUY"
+                    ? "border-[var(--swimm-up)]/40 bg-[var(--swimm-up)]/10 text-[var(--swimm-up)]"
+                    : actionLabel === "SELL"
+                    ? "border-[var(--swimm-down)]/40 bg-[var(--swimm-down)]/10 text-[var(--swimm-down)]"
+                    : "border-[var(--swimm-warn)]/40 bg-[var(--swimm-warn)]/10 text-[var(--swimm-warn)]",
+                ].join(" ")}
               >
                 {actionLabel}
               </span>
@@ -695,7 +916,8 @@ export function AnalysisSection({
               {rationaleText}
             </p>
           </div>
-          <div className="grid gap-4 md:grid-cols-2">
+
+          <div className="grid gap-3 md:grid-cols-2">
             <div className="rounded-2xl border border-[var(--swimm-neutral-300)] bg-white p-4">
               <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--swimm-neutral-300)]">
                 {analysisCopy.chartInsight.title}
@@ -745,7 +967,7 @@ export function AnalysisSection({
                   : [analysisCopy.fundamental.empty]
                 ).map((item, index) => (
                   <li
-                    key={String(item)+"-"+String(index)}
+                    key={String(item) + "-" + String(index)}
                     className="rounded-xl border border-[var(--swimm-neutral-300)] bg-white px-3 py-2"
                   >
                     {item}
@@ -766,7 +988,7 @@ export function AnalysisSection({
                   : []
                 ).map((item, index) => (
                   <li
-                    key={String(item)+"-"+String(index)}
+                    key={String(item) + "-" + String(index)}
                     className="rounded-xl border border-[var(--swimm-neutral-300)] bg-white px-3 py-2"
                   >
                     {item}
@@ -777,181 +999,389 @@ export function AnalysisSection({
           </div>
         </div>
 
-        <div className="space-y-6">
-          <div className="rounded-3xl border border-[var(--swimm-neutral-300)] bg-white p-6">
-            <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--swimm-neutral-300)]">
-              {analysisCopy.tradePlan.title}
-            </div>
-            <div className="mt-4 grid gap-4 text-xs text-[var(--swimm-neutral-500)]">
-              <div>
-                <div className="font-semibold text-[var(--swimm-navy-900)]">
-                  {analysisCopy.tradePlan.entryZone}
-                </div>
-                {entryZoneValues.length ? (
-                  <ul className="mt-2 space-y-1">
-                    {entryZoneValues.map((entry, index) => (
-                      <li
-                        key={"entry-"+String(entry)+"-"+String(index)}
-                        className="flex items-center justify-between rounded-lg border border-[var(--swimm-neutral-300)] bg-white px-3 py-2"
-                      >
-                        <span>
-                          {entryZoneValues.length > 1
-                            ? ('ENTRY ' + String(index + 1))
-                            : "ENTRY"}
-                        </span>
-                        <span>{formatPrice(entry)}</span>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="mt-2 text-xs text-[var(--swimm-neutral-300)]">
-                    {analysisCopy.tradePlan.noEntry}
-                  </p>
-                )}
+        <div className="flex h-full flex-col rounded-3xl border border-[var(--swimm-neutral-300)] bg-white p-6">
+          <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--swimm-neutral-300)]">
+            {analysisCopy.tradePlan.title}
+          </div>
+          <div className="mt-4 grid flex-1 gap-4 text-xs text-[var(--swimm-neutral-500)]">
+            <div>
+              <div className="font-semibold text-[var(--swimm-navy-900)]">
+                {analysisCopy.tradePlan.entryZone}
               </div>
-              <div>
-                <div className="text-xs font-semibold uppercase tracking-wide text-[var(--swimm-neutral-500)]">
-                  {analysisCopy.tradePlan.targets}
-                </div>
-                <ul className="mt-2 space-y-1 text-xs text-[var(--swimm-neutral-500)]">
-                  {paddedTargets.map((target, index) => (
+              {entryZoneValues.length ? (
+                <ul className="mt-2 space-y-1">
+                  {entryZoneValues.map((entry, index) => (
                     <li
-                      key={"plan-target-"+String(index)}
+                      key={"entry-" + String(entry) + "-" + String(index)}
                       className="flex items-center justify-between rounded-lg border border-[var(--swimm-neutral-300)] bg-white px-3 py-2"
                     >
-                      <span>{TARGET_LABELS[index]}</span>
-                      <span>{target !== null ? formatPrice(target) : "-"}</span>
+                      <span>
+                        {entryZoneValues.length > 1
+                          ? "ENTRY " + String(index + 1)
+                          : "ENTRY"}
+                      </span>
+                      <span>{formatPrice(entry)}</span>
                     </li>
                   ))}
                 </ul>
-                {paddedTargets.every((target) => target === null) && (
-                  <p className="mt-2 text-xs text-[var(--swimm-neutral-300)]">
-                    {analysisCopy.tradePlan.noTargets}
-                  </p>
-                )}
-              </div>
-              <div className="flex items-center justify-between text-xs text-[var(--swimm-neutral-500)]">
-                <span>{analysisCopy.tradePlan.stopLoss}</span>
-                <span className="text-[var(--swimm-navy-900)]">
-                  {formatPrice(tradeStopLoss)}
-                </span>
-              </div>
-              <div className="grid gap-3 text-xs text-[var(--swimm-neutral-500)] sm:grid-cols-2">
-                <div className="rounded-lg border border-[var(--swimm-neutral-300)] bg-white px-3 py-3">
-                  <div className="font-semibold text-[var(--swimm-neutral-500)]">
-                    {analysisCopy.tradePlan.executionWindow}
-                  </div>
-                  <div className="mt-1 text-[11px] text-[var(--swimm-neutral-500)]">
-                    {executionWindowLabel}
-                  </div>
-                </div>
-                <div className="rounded-lg border border-[var(--swimm-neutral-300)] bg-white px-3 py-3">
-                  <div className="font-semibold text-[var(--swimm-neutral-500)]">
-                    {analysisCopy.tradePlan.sizingNotes}
-                  </div>
-                  <div className="mt-1 text-[11px] text-[var(--swimm-neutral-500)]">
-                    {sizingNotesText}
-                  </div>
-                </div>
-              </div>
-              <div>
-                <div className="text-xs font-semibold uppercase tracking-wide text-[var(--swimm-neutral-500)]">
-                  {analysisCopy.tradePlan.narrativeTitle}
-                </div>
-                <p className="mt-2 whitespace-pre-line text-xs text-[var(--swimm-neutral-500)]">
-                  {tradingNarrativeText}
+              ) : (
+                <p className="mt-2 text-xs text-[var(--swimm-neutral-300)]">
+                  {analysisCopy.tradePlan.noEntry}
                 </p>
+              )}
+            </div>
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-[var(--swimm-neutral-500)]">
+                {analysisCopy.tradePlan.targets}
+              </div>
+              <ul className="mt-2 space-y-1 text-xs text-[var(--swimm-neutral-500)]">
+                {paddedTargets.map((target, index) => (
+                  <li
+                    key={"plan-target-" + String(index)}
+                    className="flex items-center justify-between rounded-lg border border-[var(--swimm-neutral-300)] bg-white px-3 py-2"
+                  >
+                    <span>{TARGET_LABELS[index]}</span>
+                    <span>{target !== null ? formatPrice(target) : "-"}</span>
+                  </li>
+                ))}
+              </ul>
+              {paddedTargets.every((target) => target === null) && (
+                <p className="mt-2 text-xs text-[var(--swimm-neutral-300)]">
+                  {analysisCopy.tradePlan.noTargets}
+                </p>
+              )}
+            </div>
+            <div className="flex items-center justify-between text-xs text-[var(--swimm-neutral-500)]">
+              <span>{analysisCopy.tradePlan.stopLoss}</span>
+              <span className="text-[var(--swimm-navy-900)]">
+                {formatPrice(tradeStopLoss)}
+              </span>
+            </div>
+            <div className="grid gap-3 text-xs text-[var(--swimm-neutral-500)] sm:grid-cols-2">
+              <div className="rounded-lg border border-[var(--swimm-neutral-300)] bg-white px-3 py-3">
+                <div className="font-semibold text-[var(--swimm-neutral-500)]">
+                  {analysisCopy.tradePlan.executionWindow}
+                </div>
+                <div className="mt-1 text-[11px] text-[var(--swimm-neutral-500)]">
+                  {executionWindowLabel}
+                </div>
+              </div>
+              <div className="rounded-lg border border-[var(--swimm-neutral-300)] bg-white px-3 py-3">
+                <div className="font-semibold text-[var(--swimm-neutral-500)]">
+                  {analysisCopy.tradePlan.sizingNotes}
+                </div>
+                <div className="mt-1 text-[11px] text-[var(--swimm-neutral-500)]">
+                  {sizingNotesText}
+                </div>
               </div>
             </div>
-          </div>
-
-          <div className="rounded-3xl border border-[var(--swimm-neutral-300)] bg-white p-6">
-            <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--swimm-neutral-300)]">
-              {sizingCopy.title}
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-[var(--swimm-neutral-500)]">
+                {analysisCopy.tradePlan.narrativeTitle}
+              </div>
+              <p className="mt-2 whitespace-pre-line text-xs text-[var(--swimm-neutral-500)]">
+                {tradingNarrativeText}
+              </p>
             </div>
-            <div className="mt-4 grid gap-4 text-xs text-[var(--swimm-neutral-500)] md:grid-cols-2">
-              <div className="space-y-2">
-                <label className="block text-[11px] text-[var(--swimm-neutral-500)]">
-                  {sizingCopy.equityLabel}
-                </label>
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  min={0}
-                  step={1}
-                  value={equity}
-                  onChange={(e) => setEquity(Number(e.target.value))}
-                  className="w-full rounded-lg border border-[var(--swimm-neutral-300)] bg-white px-3 py-2 text-[var(--swimm-navy-900)]"
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="block text-[11px] text-[var(--swimm-neutral-500)]">
-                  {sizingCopy.riskPercentLabel}
-                </label>
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  min={0}
-                  step={0.1}
-                  value={riskPct}
-                  onChange={(e) => setRiskPct(Number(e.target.value))}
-                  className="w-full rounded-lg border border-[var(--swimm-neutral-300)] bg-white px-3 py-2 text-[var(--swimm-navy-900)]"
-                />
-              </div>
-              {/* Lot input removed: sizing uses equity and risk only */}
-            </div>
-
-            <div className="mt-4 grid gap-3 text-xs md:grid-cols-2">
-              <div className="flex items-center justify-between rounded-lg border border-[var(--swimm-neutral-300)] bg-[var(--swimm-neutral-50)] px-3 py-2">
-                <span>{sizingCopy.entryUsed}</span>
-                <span className="text-[var(--swimm-navy-900)]">{formatPrice(effectiveEntry)}</span>
-              </div>
-              <div className="flex items-center justify-between rounded-lg border border-[var(--swimm-neutral-300)] bg-[var(--swimm-neutral-50)] px-3 py-2">
-                <span>{sizingCopy.stopUsed}</span>
-                <span className="text-[var(--swimm-navy-900)]">{formatPrice(effectiveStop)}</span>
-              </div>
-              <div className="flex items-center justify-between rounded-lg border border-[var(--swimm-neutral-300)] bg-[var(--swimm-neutral-50)] px-3 py-2">
-                <span>{sizingCopy.stopDistance}</span>
-                <span className="text-[var(--swimm-navy-900)]">{stopDistance ?? '-'}</span>
-              </div>
-              <div className="flex items-center justify-between rounded-lg border border-[var(--swimm-neutral-300)] bg-[var(--swimm-neutral-50)] px-3 py-2">
-                <span>{sizingCopy.recommendedQty}</span>
-                <span className="text-[var(--swimm-navy-900)]">{recommendedQty ?? '-'}</span>
-              </div>
-              <div className="flex items-center justify-between rounded-lg border border-[var(--swimm-neutral-300)] bg-[var(--swimm-neutral-50)] px-3 py-2">
-                <span>{sizingCopy.notional}</span>
-                <span className="text-[var(--swimm-navy-900)]">{notional ?? '-'}</span>
-              </div>
-              <div className="flex items-center justify-between rounded-lg border border-[var(--swimm-neutral-300)] bg-[var(--swimm-neutral-50)] px-3 py-2">
-                <span>{sizingCopy.maxLoss}</span>
-                <span className="text-[var(--swimm-navy-900)]">{maxLossFromRecommended ?? '-'}</span>
-              </div>
-              {/* No risk-from-lot display; lot input removed */}
-            </div>
-
-            <p className="mt-3 text-[10px] text-[var(--swimm-neutral-400)]">{sizingCopy.note}</p>
-          </div>
-
-          <div className="rounded-3xl border border-[var(--swimm-neutral-300)] bg-white p-6">
-            <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--swimm-neutral-300)]">
-              {analysisCopy.nextSteps.title}
-            </div>
-            <ul className="mt-4 space-y-3 text-sm text-[var(--swimm-neutral-500)]">
-              {nextStepLines.map((step, index) => (
-                <li
-                  key={String(step)+"-"+String(index)}
-                  className="flex items-start gap-3 rounded-xl border border-[var(--swimm-neutral-300)] bg-[var(--swimm-neutral-100)] px-4 py-3"
-                >
-                  <span className="mt-1 h-2 w-2 rounded-full bg-[var(--swimm-primary-700)]" />
-                  <span>{step}</span>
-                </li>
-              ))}
-            </ul>
           </div>
         </div>
 
+        <div className="rounded-3xl border border-[var(--swimm-neutral-300)] bg-white p-6 lg:col-span-2 lg:self-start">
+          <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--swimm-neutral-300)]">
+            {sizingCopy.title}
+          </div>
+          <div className="mt-4 grid gap-3 text-xs text-[var(--swimm-neutral-500)] md:grid-cols-3">
+            <div className="space-y-2">
+              <label className="block text-[11px] text-[var(--swimm-neutral-500)]">
+                {sizingCopy.equityLabel}
+              </label>
+              <input
+                type="number"
+                inputMode="decimal"
+                min={0}
+                step={1}
+                value={equity}
+                onChange={(event) =>
+                  setEquity(Math.max(0, Number(event.target.value)))
+                }
+                className="w-full rounded-lg border border-[var(--swimm-neutral-300)] bg-white px-3 py-2 text-[var(--swimm-navy-900)]"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="block text-[11px] text-[var(--swimm-neutral-500)]">
+                {sizingCopy.riskPercentLabel}
+              </label>
+              <input
+                type="number"
+                inputMode="decimal"
+                min={0}
+                step={0.1}
+                value={riskPct}
+                onChange={(event) =>
+                  setRiskPct(Math.max(0, Number(event.target.value)))
+                }
+                className="w-full rounded-lg border border-[var(--swimm-neutral-300)] bg-white px-3 py-2 text-[var(--swimm-navy-900)]"
+              />
+            </div>
+            {isLeveragedMarket ? (
+              <div className="space-y-2">
+                <label className="block text-[11px] text-[var(--swimm-neutral-500)]">
+                  {sizingCopy.leverageLabel}
+                </label>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min={1}
+                  max={125}
+                  step={1}
+                  value={clampedLeverage}
+                  onChange={(event) => {
+                    setLeverageTouched(true);
+                    const parsed = Number(event.target.value);
+                    if (Number.isFinite(parsed)) {
+                      setLeverage(Math.min(Math.max(parsed, 1), 125));
+                    }
+                  }}
+                  className="w-full rounded-lg border border-[var(--swimm-neutral-300)] bg-white px-3 py-2 text-[var(--swimm-navy-900)]"
+                />
+              </div>
+            ) : null}
+          </div>
+
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            <div className="space-y-2 rounded-2xl border border-[var(--swimm-neutral-300)] bg-[var(--swimm-neutral-50)] p-4">
+              <div className="text-xs font-semibold uppercase tracking-wide text-[var(--swimm-neutral-500)]">
+                {isLeveragedMarket
+                  ? sizingCopy.recommendedMargin
+                  : sizingCopy.recommendedAllocation}
+              </div>
+              <div className="text-lg font-semibold text-[var(--swimm-navy-900)]">
+                {recommendedExposure !== null
+                  ? formatPrice(recommendedExposure)
+                  : "-"}
+              </div>
+              <div className="grid gap-1 text-[11px] text-[var(--swimm-neutral-500)]">
+                <div>
+                  {sizingCopy.entryPriceLabel}: {formatPrice(effectiveEntry)}
+                </div>
+                <div>
+                  {sizingCopy.stopPriceLabel}: {formatPrice(effectiveStop)}
+                </div>
+                <div>
+                  {sizingCopy.positionSizeLabel}:{" "}
+                  {recommendedQuantity !== null
+                    ? `${formatQuantity(recommendedQuantity)} ${baseAssetSymbol}`
+                    : "-"}
+                </div>
+                <div>
+                  {sizingCopy.notionalLabel}:{" "}
+                  {recommendedNotional !== null
+                    ? formatPrice(recommendedNotional)
+                    : "-"}
+                </div>
+                {isLeveragedMarket ? (
+                  <div>
+                    {sizingCopy.marginLabel}:{" "}
+                    {recommendedMargin !== null
+                      ? formatPrice(recommendedMargin)
+                      : "-"}
+                  </div>
+                ) : null}
+                <div>
+                  {sizingCopy.riskAmountLabel}:{" "}
+                  {formatSigned(recommendedStopPnl)}
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3 rounded-2xl border border-[var(--swimm-neutral-300)] bg-white p-4">
+              <div className="text-xs font-semibold uppercase tracking-wide text-[var(--swimm-neutral-500)]">
+                {sizingCopy.manualPlanTitle}
+              </div>
+              <div className="space-y-2">
+                <label className="block text-[11px] text-[var(--swimm-neutral-500)]">
+                  {isLeveragedMarket
+                    ? sizingCopy.manualMarginLabel
+                    : sizingCopy.manualAllocationLabel}
+                </label>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min={0}
+                  step={0.01}
+                  value={manualBudget}
+                  onChange={(event) => {
+                    setManualBudgetTouched(true);
+                    const value = event.target.value;
+                    if (value === "") {
+                      setManualBudget(0);
+                      return;
+                    }
+                    const parsed = Number(value);
+                    if (Number.isFinite(parsed)) {
+                      setManualBudget(Math.max(0, parsed));
+                    }
+                  }}
+                  className="w-full rounded-lg border border-[var(--swimm-neutral-300)] bg-white px-3 py-2 text-[var(--swimm-navy-900)]"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="block text-[11px] text-[var(--swimm-neutral-500)]">
+                  {sizingCopy.manualEntryPriceLabel}
+                </label>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min={0}
+                  step={0.01}
+                  value={manualEntryPrice ?? ""}
+                  onChange={(event) => {
+                    setManualPriceTouched(true);
+                    const value = event.target.value;
+                    if (value === "") {
+                      setManualEntryPrice(null);
+                      return;
+                    }
+                    const parsed = Number(value);
+                    if (Number.isFinite(parsed)) {
+                      setManualEntryPrice(Math.max(0, parsed));
+                    }
+                  }}
+                  className="w-full rounded-lg border border-[var(--swimm-neutral-300)] bg-white px-3 py-2 text-[var(--swimm-navy-900)]"
+                />
+              </div>
+              <div className="grid gap-1 text-[11px] text-[var(--swimm-neutral-500)]">
+                <div>
+                  {sizingCopy.positionSizeLabel}:{" "}
+                  {manualQuantity !== null
+                    ? `${formatQuantity(manualQuantity)} ${baseAssetSymbol}`
+                    : "-"}
+                </div>
+                {isLeveragedMarket ? (
+                  <>
+                    <div>
+                      {sizingCopy.marginLabel}:{" "}
+                      {manualBudgetNormalized !== null
+                        ? formatPrice(manualBudgetNormalized)
+                        : "-"}
+                    </div>
+                    <div>
+                      {sizingCopy.notionalLabel}:{" "}
+                      {manualNotionalDisplay !== null
+                        ? formatPrice(manualNotionalDisplay)
+                        : "-"}
+                    </div>
+                  </>
+                ) : (
+                  <div>
+                    {sizingCopy.notionalLabel}:{" "}
+                    {manualNotionalDisplay !== null
+                      ? formatPrice(manualNotionalDisplay)
+                      : "-"}
+                  </div>
+                )}
+                <div>
+                  {sizingCopy.riskAmountLabel}:{" "}
+                  {formatSigned(manualStopPnl)}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-4 rounded-2xl border border-[var(--swimm-neutral-300)] bg-white p-4">
+            <div className="text-xs font-semibold uppercase tracking-wide text-[var(--swimm-neutral-500)]">
+              {sizingCopy.pnlHeader}
+            </div>
+            <div className="mt-3 overflow-x-auto">
+              <table className="min-w-full divide-y divide-[var(--swimm-neutral-200)] text-xs">
+                <thead>
+                  <tr className="text-[11px] uppercase tracking-[0.2em] text-[var(--swimm-neutral-400)]">
+                    <th className="py-2 text-left">{sizingCopy.targetColumn}</th>
+                    <th className="py-2 text-left">{sizingCopy.priceColumn}</th>
+                    <th className="py-2 text-left">{sizingCopy.recommendedColumn}</th>
+                    <th className="py-2 text-left">{sizingCopy.manualColumn}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[var(--swimm-neutral-200)]">
+                  {pnlRows.length ? (
+                    pnlRows.map((row) => (
+                      <tr
+                        key={row.key}
+                        className={row.isStop ? "bg-[var(--swimm-neutral-50)]" : ""}
+                      >
+                        <td className="py-2 font-semibold text-[var(--swimm-neutral-600)]">
+                          {row.label}
+                        </td>
+                        <td className="py-2 text-[var(--swimm-neutral-500)]">
+                          {formatPrice(row.price)}
+                        </td>
+                        <td
+                          className={`py-2 ${
+                            row.recommended === null
+                              ? "text-[var(--swimm-neutral-400)]"
+                              : row.recommended > 0
+                              ? "text-[var(--swimm-up)]"
+                              : row.recommended < 0
+                              ? "text-[var(--swimm-down)]"
+                              : "text-[var(--swimm-neutral-500)]"
+                          }`}
+                        >
+                          {formatSigned(row.recommended)}
+                        </td>
+                        <td
+                          className={`py-2 ${
+                            row.manual === null
+                              ? "text-[var(--swimm-neutral-400)]"
+                              : row.manual > 0
+                              ? "text-[var(--swimm-up)]"
+                              : row.manual < 0
+                              ? "text-[var(--swimm-down)]"
+                              : "text-[var(--swimm-neutral-500)]"
+                          }`}
+                        >
+                          {formatSigned(row.manual)}
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td
+                        colSpan={4}
+                        className="py-4 text-center text-[var(--swimm-neutral-400)]"
+                      >
+                        {sizingCopy.pnlEmpty}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <p className="mt-3 text-[10px] text-[var(--swimm-neutral-400)]">
+            {sizingCopy.note}
+          </p>
+        </div>
+
+        <div className="rounded-3xl border border-[var(--swimm-neutral-300)] bg-white p-6 lg:col-span-2 h-min">
+          <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--swimm-neutral-300)]">
+            {analysisCopy.nextSteps.title}
+          </div>
+          <ul className="mt-4 space-y-3 text-sm text-[var(--swimm-neutral-500)]">
+            {nextStepLines.map((step, index) => (
+              <li
+                key={String(step) + "-" + String(index)}
+                className="flex items-start gap-3 rounded-xl border border-[var(--swimm-neutral-300)] bg-[var(--swimm-neutral-100)] px-4 py-3"
+              >
+                <span className="mt-1 h-2 w-2 rounded-full bg-[var(--swimm-primary-700)]" />
+                <span>{step}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+
         {showSavePanel ? (
-          <div className="rounded-3xl border border-[var(--swimm-neutral-300)] bg-white p-6 lg:col-span-2">
+        <div className="rounded-3xl border border-[var(--swimm-neutral-300)] bg-white p-6 lg:col-span-2 lg:self-start">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--swimm-neutral-300)]">
@@ -968,8 +1398,19 @@ export function AnalysisSection({
               ) : null}
             </div>
             <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <div className={[ 'text-xs', showSaveError ? 'text-[var(--swimm-down)]' : 'text-[var(--swimm-neutral-400)]' ].join(' ')}>
-                {showSaveError ? (saveError ? saveError : saveCopy.genericError) : sessionHint}
+              <div
+                className={[
+                  "text-xs",
+                  showSaveError
+                    ? "text-[var(--swimm-down)]"
+                    : "text-[var(--swimm-neutral-400)]",
+                ].join(" ")}
+              >
+                {showSaveError
+                  ? saveError
+                    ? saveError
+                    : saveCopy.genericError
+                  : sessionHint}
               </div>
               <button
                 type="button"
@@ -984,9 +1425,9 @@ export function AnalysisSection({
                   : saveCopy.saveButton}
               </button>
             </div>
-            </div>
-          ) : null}
-            </div>
+          </div>
+        ) : null}
+      </div>
     </MotionSection>
   );
 }
@@ -1037,7 +1478,8 @@ export const buildOverlayLevels = (
   entryZoneValues.forEach((price, index) => {
     levels.push({
       price: Number(price.toFixed(2)),
-      label: entryZoneValues.length > 1 ? ('ENTRY ' + String(index + 1)) : "ENTRY",
+      label:
+        entryZoneValues.length > 1 ? "ENTRY " + String(index + 1) : "ENTRY",
       color: "#17dce0",
     });
   });
@@ -1046,7 +1488,7 @@ export const buildOverlayLevels = (
     if (target !== null && Number.isFinite(target)) {
       levels.push({
         price: Number(target.toFixed(2)),
-        label: ("TP" + String(index + 1)),
+        label: "TP" + String(index + 1),
         color: "#16c784",
       });
     }
@@ -1095,26 +1537,5 @@ export const buildTradingNarrative = (
 export const formatPriceLabel =
   (formatter: Intl.NumberFormat) => (value: number | null) =>
     typeof value === "number" && Number.isFinite(value)
-      ? (formatter.format(value) + " USDT")
+      ? formatter.format(value) + " USDT"
       : "-";
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

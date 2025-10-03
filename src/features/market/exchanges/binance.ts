@@ -268,6 +268,9 @@ const shouldIncludeSpotSymbol = (item: BinanceExchangeInfoSymbol) => {
   if (!base || !quote) {
     return false;
   }
+  if (base.length < 2) {
+    return false;
+  }
   if (!QUOTE_ASSET_ALLOW_LIST.has(quote)) {
     return false;
   }
@@ -291,6 +294,9 @@ const shouldIncludeFuturesSymbol = (item: BinanceFuturesExchangeInfoSymbol) => {
   const base = normalise(item.baseAsset);
   const quote = normalise(item.quoteAsset);
   if (!base || !quote) {
+    return false;
+  }
+  if (base.length < 2) {
     return false;
   }
   if (!QUOTE_ASSET_ALLOW_LIST.has(quote)) {

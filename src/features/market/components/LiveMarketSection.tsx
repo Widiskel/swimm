@@ -221,8 +221,11 @@ export const LiveMarketSection = forwardRef<
           limit: "500",
           provider: providerValue,
           locale,
+          category: providerValue === "twelvedata" ? "gold" : "crypto",
         });
-        if (modeValue) {
+        if (providerValue === "twelvedata") {
+          params.set("mode", "spot");
+        } else if (modeValue) {
           params.set("mode", modeValue);
         }
         const res = await fetch(`/api/market?${params.toString()}`);

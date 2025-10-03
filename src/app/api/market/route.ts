@@ -20,7 +20,7 @@ import {
   isMarketMode,
   type MarketMode,
 } from "@/features/market/constants";
-import { fetchGoldCandles, fetchGoldMarketSummary } from "@/features/market/exchanges/gold";
+import { fetchGoldCandles, fetchGoldMarketSummary } from "@/features/market/exchanges/twelvedata";
 import { isLocale, type Locale } from "@/i18n/messages";
 import { translate } from "@/i18n/translate";
 import { getSessionFromCookie } from "@/lib/session";
@@ -31,7 +31,7 @@ const ALLOWED_INTERVALS = new Set(["1m", "5m", "15m", "1h", "4h", "1d"]);
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const providerParam = searchParams.get("provider")?.toLowerCase() ?? DEFAULT_PROVIDER;
-  const provider = isCexProvider(providerParam) ? providerParam : providerParam === "gold" ? "gold" : DEFAULT_PROVIDER;
+  const provider = isCexProvider(providerParam) ? providerParam : DEFAULT_PROVIDER;
   const symbolParamRaw = searchParams.get("symbol")?.toUpperCase();
   const modeParam = searchParams.get("mode")?.toLowerCase() ?? DEFAULT_MARKET_MODE;
   const mode: MarketMode = isMarketMode(modeParam) ? modeParam : DEFAULT_MARKET_MODE;
@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
     ? symbolParamRaw.replace(/[^A-Z0-9]/g, "")
     : provider === "bybit"
     ? (process.env.BYBIT_SYMBOL ?? "BTCUSDT")
-    : provider === "gold"
+    : provider === "twelvedata"
     ? "XAUUSD"
     : (process.env.BINANCE_SYMBOL ?? "BTCUSDT");
   const intervalParam = searchParams.get("interval")?.toLowerCase() ?? "15m";
@@ -145,7 +145,7 @@ export async function GET(request: NextRequest) {
           fetchBybitMarketSummary(symbolParam),
           fetchBybitOrderBook(symbolParam, 50),
         ]
-      : provider === "gold"
+      : provider === "twelvedata"
       ? [
           fetchGoldCandles(symbolParam, intervalParam, limit),
           fetchGoldMarketSummary(symbolParam, locale),
@@ -158,7 +158,7 @@ export async function GET(request: NextRequest) {
         ]
   );
 
-  const computedOrderBook = provider === "gold"
+  const computedOrderBook = provider === "twelvedata"
     ? (() => {
         const list = candles as unknown as Array<{ close: number }>;
         const last = list && list.length ? list[list.length - 1] : null;
@@ -177,10 +177,10 @@ export async function GET(request: NextRequest) {
     summary:
       provider === "bybit"
         ? formatBybitSummary(summary as BinanceMarketSummary | null, locale)
-        : provider === "gold"
+        : provider === "twelvedata"
         ? (summary as { summary: string; stats: unknown }).summary
         : formatBinanceSummary(summary as BinanceMarketSummary | null, locale),
-    summaryStats: provider === "gold" ? (summary as { summary: string; stats: unknown }).stats : summary,
+    summaryStats: provider === "twelvedata" ? (summary as { summary: string; stats: unknown }).stats : summary,
     updatedAt: new Date().toISOString(),
   });
 }

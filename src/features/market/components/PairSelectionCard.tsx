@@ -1,16 +1,19 @@
 "use client";
 
 import Image from "next/image";
-import { Fragment, useCallback, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { Dialog, Transition } from "@headlessui/react";
 import Fuse from "fuse.js";
 import { motion } from "framer-motion";
 
 import { useLanguage } from "@/providers/language-provider";
 import {
+  ASSET_CATEGORIES,
+  CATEGORY_PROVIDER_MAP,
   CEX_PROVIDERS,
   MARKET_MODES,
   PROVIDER_ICON_MAP,
+  type AssetCategory,
   type MarketMode,
 } from "@/features/market/constants";
 import type { CexProvider } from "@/features/market/exchanges";
@@ -21,6 +24,8 @@ type TradingPair = {
 };
 
 type PairSelectionCardProps = {
+  category: AssetCategory;
+  onCategoryChange: (category: AssetCategory) => void;
   provider: CexProvider;
   onProviderChange: (provider: CexProvider) => void;
   mode: MarketMode;
@@ -35,6 +40,8 @@ type PairSelectionCardProps = {
 const MotionDiv = motion.div;
 
 export function PairSelectionCard({
+  category,
+  onCategoryChange,
   provider,
   onProviderChange,
   mode,
@@ -52,12 +59,12 @@ export function PairSelectionCard({
 
   const providerOptions = useMemo(
     () =>
-      CEX_PROVIDERS.map((value) => ({
+      CATEGORY_PROVIDER_MAP[category].map((value) => ({
         value,
         label: __("pairSelection.providerOptions." + value),
         icon: PROVIDER_ICON_MAP[value],
       })),
-    [__]
+    [__, category]
   );
 
   const modeOptions = useMemo(
@@ -111,6 +118,16 @@ export function PairSelectionCard({
     [closeSelector, onPairChange]
   );
 
+  useEffect(() => {
+    const providersForCategory = CATEGORY_PROVIDER_MAP[category];
+    if (!providersForCategory.includes(provider)) {
+      onProviderChange(providersForCategory[0]);
+    }
+    if (category !== "crypto" && mode !== "spot") {
+      onModeChange("spot");
+    }
+  }, [category, mode, onModeChange, onProviderChange, provider]);
+
   return (
     <MotionDiv
       className="rounded-3xl border border-[var(--swimm-neutral-300)] bg-white p-8 shadow"
@@ -129,6 +146,35 @@ export function PairSelectionCard({
         </p>
       </div>
       <div className="mt-6 flex flex-col gap-4">
+        <div>
+          <label className="text-xs font-semibold uppercase tracking-wide text-[var(--swimm-neutral-500)]">
+            {__("pairSelection.modeLabel")}
+          </label>
+          <p className="mt-1 text-xs text-[var(--swimm-neutral-500)]">
+            {__("pairSelection.modeHint")}
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {ASSET_CATEGORIES.map((option) => {
+              const label = __("pairSelection.assetOptions." + option);
+              const isActive = option === category;
+              return (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={() => onCategoryChange(option)}
+                  aria-pressed={isActive}
+                  className={`rounded-full border px-4 py-2 text-sm font-semibold transition ${
+                    isActive
+                      ? "border-[var(--swimm-primary-500)] bg-[var(--swimm-primary-500)]/10 text-[var(--swimm-primary-700)]"
+                      : "border-[var(--swimm-neutral-300)] bg-white text-[var(--swimm-neutral-600)] hover:border-[var(--swimm-primary-500)]"
+                  }`}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
         <div>
           <label className="text-xs font-semibold uppercase tracking-wide text-[var(--swimm-neutral-500)]">
             {__("pairSelection.selectLabel")}
@@ -163,39 +209,41 @@ export function PairSelectionCard({
             </span>
           </button>
         </div>
-        <div>
-          <label className="text-xs font-semibold uppercase tracking-wide text-[var(--swimm-neutral-500)]">
-            {__("pairSelection.modeLabel")}
-          </label>
-          <p className="mt-1 text-xs text-[var(--swimm-neutral-500)]">
-            {__("pairSelection.modeHint")}
-          </p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {modeOptions.map((option) => {
-              const isActive = option.value === mode;
-              return (
-                <button
-                  key={option.value}
-                  type="button"
-                  onClick={() => {
-                    if (option.value !== mode) {
-                      onModeChange(option.value);
-                    }
-                  }}
-                  title={option.label}
-                  aria-pressed={isActive}
-                  className={`rounded-full border px-4 py-2 text-sm font-semibold transition ${
-                    isActive
-                      ? "border-[var(--swimm-primary-500)] bg-[var(--swimm-primary-500)]/10 text-[var(--swimm-primary-700)]"
-                      : "border-[var(--swimm-neutral-300)] bg-white text-[var(--swimm-neutral-600)] hover:border-[var(--swimm-primary-500)]"
-                  }`}
-                >
-                  {option.label}
-                </button>
-              );
-            })}
+        {category === "crypto" ? (
+          <div>
+            <label className="text-xs font-semibold uppercase tracking-wide text-[var(--swimm-neutral-500)]">
+              {__("pairSelection.cryptoMarketModeLabel")}
+            </label>
+            <p className="mt-1 text-xs text-[var(--swimm-neutral-500)]">
+              {__("pairSelection.cryptoMarketModeHint")}
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {modeOptions.map((option) => {
+                const isActive = option.value === mode;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => {
+                      if (option.value !== mode) {
+                        onModeChange(option.value);
+                      }
+                    }}
+                    title={option.label}
+                    aria-pressed={isActive}
+                    className={`rounded-full border px-4 py-2 text-sm font-semibold transition ${
+                      isActive
+                        ? "border-[var(--swimm-primary-500)] bg-[var(--swimm-primary-500)]/10 text-[var(--swimm-primary-700)]"
+                        : "border-[var(--swimm-neutral-300)] bg-white text-[var(--swimm-neutral-600)] hover:border-[var(--swimm-primary-500)]"
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
-        </div>
+        ) : null}
         <div>
           <label className="text-xs font-semibold uppercase tracking-wide text-[var(--swimm-neutral-500)]">
             {__("pairSelection.providerLabel")}

@@ -58,6 +58,7 @@ export type HistoryLiveChartProps = {
   mode?: MarketMode | null;
   timeframe: string;
   snapshotCapturedAt?: string | null;
+  snapshotCandles?: CandlestickData[];
 };
 
 export function HistoryLiveChart({
@@ -66,6 +67,7 @@ export function HistoryLiveChart({
   mode,
   timeframe,
   snapshotCapturedAt,
+  snapshotCandles,
 }: HistoryLiveChartProps) {
   const { languageTag, messages, __, locale } = useLanguage();
   const historyCopy = messages.history.liveComparison;
@@ -250,11 +252,17 @@ export function HistoryLiveChart({
         );
 
         if (!parsedCandles.length) {
-          setCandles([]);
-          setIsChartVisible(false);
-          setChartError(historyCopy.empty);
-          resetChart();
-          setHoverState(null);
+          if (snapshotCandles?.length) {
+            setCandles(snapshotCandles);
+            setIsChartVisible(true);
+            setChartError(null);
+          } else {
+            setCandles([]);
+            setIsChartVisible(false);
+            setChartError(historyCopy.empty);
+            resetChart();
+            setHoverState(null);
+          }
           return;
         }
 
@@ -265,14 +273,23 @@ export function HistoryLiveChart({
         if (cancelled) {
           return;
         }
-        setCandles([]);
-        setChartMeta(null);
-        setIsChartVisible(false);
-        resetChart();
-        setHoverState(null);
-        setChartError(
-          error instanceof Error ? error.message : historyCopy.error
-        );
+        if (snapshotCandles?.length) {
+          setCandles(snapshotCandles);
+          setChartMeta(null);
+          setIsChartVisible(true);
+          setChartError(
+            error instanceof Error ? error.message : historyCopy.error
+          );
+        } else {
+          setCandles([]);
+          setChartMeta(null);
+          setIsChartVisible(false);
+          resetChart();
+          setHoverState(null);
+          setChartError(
+            error instanceof Error ? error.message : historyCopy.error
+          );
+        }
       } finally {
         if (!cancelled && !silent) {
           setIsChartLoading(false);
@@ -300,7 +317,16 @@ export function HistoryLiveChart({
     setHoverState,
     symbol,
     snapshotCapturedAt,
+    snapshotCandles,
   ]);
+
+  useEffect(() => {
+    if (snapshotCandles?.length) {
+      setCandles(snapshotCandles);
+      setIsChartVisible(true);
+      setChartError(null);
+    }
+  }, [snapshotCandles]);
 
   useEffect(() => () => resetChart(), [resetChart]);
 

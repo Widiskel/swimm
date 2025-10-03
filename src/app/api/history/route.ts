@@ -84,7 +84,7 @@ export const mapHistoryDoc = (
   session: sessionData,
   pair: doc.pair,
   timeframe: doc.timeframe,
-  provider: doc.provider,
+  provider: doc.provider === "gold" ? "twelvedata" : doc.provider,
   mode: isMarketMode(doc.mode) ? doc.mode : DEFAULT_MARKET_MODE,
   decision: doc.decision,
   summary: doc.summary,
@@ -233,8 +233,11 @@ const sanitizePayload = (payload: unknown): SanitizedHistoryPayload => {
     return { error: "Agent response is required." };
   }
 
-  const normalizedProvider = isCexProvider((provider as string) ?? null)
-    ? (provider as string)
+  const providerString = typeof provider === "string" ? provider.toLowerCase() : DEFAULT_PROVIDER;
+  const normalizedProvider = isCexProvider(providerString as CexProvider)
+    ? (providerString as CexProvider)
+    : providerString === "gold"
+    ? "twelvedata"
     : DEFAULT_PROVIDER;
   const normalizedMode = isMarketMode((mode as MarketMode) ?? null)
     ? (mode as MarketMode)

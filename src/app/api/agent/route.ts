@@ -17,7 +17,7 @@ import {
   isBybitPairTradable,
 } from "@/features/market/exchanges/bybit";
 import { DEFAULT_PROVIDER, isCexProvider, type CexProvider } from "@/features/market/exchanges";
-import { fetchGoldCandles, fetchGoldMarketSummary } from "@/features/market/exchanges/gold";
+import { fetchGoldCandles, fetchGoldMarketSummary } from "@/features/market/exchanges/twelvedata";
 import {
   DEFAULT_MARKET_MODE,
   isMarketMode,
@@ -1518,7 +1518,11 @@ export async function POST(request: Request) {
   })();
 
   const providerLabel = translate(locale, `market.summary.providerLabel.${provider}`);
-  const isSupportedSymbol = provider === "gold" ? requestedSymbol.toUpperCase() === "XAUUSD" : (provider === "bybit" ? await isBybitPairTradable(requestedSymbol) : await isPairTradable(requestedSymbol, binanceAuth));
+  const isSupportedSymbol = provider === "twelvedata"
+    ? requestedSymbol.toUpperCase() === "XAUUSD"
+    : provider === "bybit"
+    ? await isBybitPairTradable(requestedSymbol, mode)
+    : await isPairTradable(requestedSymbol, binanceAuth, mode);
 
 
   if (!isSupportedSymbol) {
@@ -1569,24 +1573,33 @@ export async function POST(request: Request) {
   let candles: BinanceCandle[] = [];
   if (provider === "bybit") {
     [summaryData, candles] = await Promise.all([
-      fetchBybitMarketSummary(symbol, bybitAuth),
-      fetchBybitCandles(symbol, timeframe, { limit: 500 }, bybitAuth),
+      fetchBybitMarketSummary(symbol, bybitAuth, mode),
+      fetchBybitCandles(symbol, timeframe, { limit: 500 }, bybitAuth, mode),
     ]);
-  } else if (provider === "gold") {
+  } else if (provider === "twelvedata") {
     const [goldInfo, goldCandles] = await Promise.all([
       fetchGoldMarketSummary(symbol, locale),
       fetchGoldCandles(symbol, timeframe, 500),
     ]);
-    summaryData = { symbol, lastPrice: goldInfo.stats?.lastPrice ?? 0, summaryText: goldInfo.summary };
-    candles = goldCandles as unknown as BinanceCandle[];
+    summaryData = goldInfo;
+    candles = goldCandles.map((item) => ({
+      openTime: item.openTime,
+      open: item.open,
+      high: item.high,
+      low: item.low,
+      close: item.close,
+      volume: item.volume,
+      closeTime: item.closeTime,
+    })) as unknown as BinanceCandle[];
   } else {
     [summaryData, candles] = await Promise.all([
-      fetchBinanceMarketSummary(symbol, binanceAuth),
+      fetchBinanceMarketSummary(symbol, binanceAuth, mode),
       fetchBinanceCandles(
         symbol,
         CEX_INTERVAL_MAP[timeframe],
         { limit: 500 },
-        binanceAuth
+        binanceAuth,
+        mode
       ),
     ]);
   }
@@ -1596,27 +1609,32 @@ export async function POST(request: Request) {
     historyInsightsPromise,
   ]);
   const resolvedSymbol =
-    provider === "gold"
+    provider === "twelvedata"
       ? symbol
       : ((summaryData as { symbol?: string } | null)?.symbol ?? symbol);
   const marketSummary =
     provider === "bybit"
-      ? formatBybitSummary(summaryData as BinanceMarketSummary | null, locale)
-      : provider === "gold"
-      ? ((summaryData as { summaryText?: string }).summaryText as string)
-      : formatBinanceSummary(summaryData as BinanceMarketSummary | null, locale);
+      ? formatBybitSummary(summaryData as BinanceMarketSummary | null, locale, mode)
+      : provider === "twelvedata"
+      ? (summaryData as { summary: string }).summary
+      : formatBinanceSummary(summaryData as BinanceMarketSummary | null, locale, mode);
   const marketAnalytics = buildMarketAnalytics(candles, timeframe, locale);
   const resolvedLastPrice =
     (typeof marketAnalytics.lastClose === "number" && marketAnalytics.lastClose > 0
       ? marketAnalytics.lastClose
-      : undefined) ?? (((summaryData as { lastPrice?: number }).lastPrice ?? 0) > 0 ? (summaryData as { lastPrice?: number }).lastPrice! : 0);
+      : undefined) ??
+    (provider === "twelvedata"
+      ? ((summaryData as { stats?: { lastPrice?: number } }).stats?.lastPrice ?? 0)
+      : (summaryData as { lastPrice?: number }).lastPrice ?? 0);
   const marketContext: MarketContext = {
     symbol: resolvedSymbol,
     timeframe,
     interval:
       provider === "bybit"
         ? mapTimeframeToBybitIntervalSymbol(timeframe)
-        : provider === "gold" ? timeframe : CEX_INTERVAL_MAP[timeframe],
+        : provider === "twelvedata"
+        ? timeframe
+        : CEX_INTERVAL_MAP[timeframe],
     candles,
     lastPrice: resolvedLastPrice,
     mode,
@@ -1715,8 +1733,6 @@ export async function POST(request: Request) {
     clearTimeout(timeout);
   }
 }
-
-
 
 
 

@@ -23,12 +23,16 @@ import { HeroSection } from "@/features/market/components/HeroSection";
 import { LiveMarketSection, type LiveMarketHandle } from "@/features/market/components/LiveMarketSection";
 import { PairSelectionCard } from "@/features/market/components/PairSelectionCard";
 import {
+  ASSET_CATEGORIES,
+  CATEGORY_PROVIDER_MAP,
   DEFAULT_PAIR_SYMBOL,
   INDICATOR_CONFIG,
   TIMEFRAME_OPTIONS,
   DEFAULT_PROVIDER,
   DEFAULT_MARKET_MODE,
+  DEFAULT_ASSET_CATEGORY,
   type MarketMode,
+  type AssetCategory,
 } from "@/features/market/constants";
 import type { CexProvider } from "@/features/market/exchanges";
 import type { IndicatorKey, OverlayLevel } from "@/features/market/types";
@@ -87,6 +91,7 @@ export default function AnalysisPage() {
   const { saveEntry } = useHistory();
   const { status: sessionStatus, isSyncing: isSessionSyncing } = useSession();
 
+  const [assetCategory, setAssetCategory] = useState<AssetCategory>(DEFAULT_ASSET_CATEGORY);
   const [provider, setProvider] = useState<CexProvider>(DEFAULT_PROVIDER);
   const [marketMode, setMarketMode] = useState<MarketMode>(DEFAULT_MARKET_MODE);
   const [availablePairs, setAvailablePairs] = useState<TradingPair[]>([]);
@@ -123,7 +128,7 @@ export default function AnalysisPage() {
         spot: "BTCUSDT",
         futures: "BTCUSDT",
       },
-      gold: {
+      twelvedata: {
         spot: "XAUUSD",
         futures: "XAUUSD",
       },
@@ -136,6 +141,7 @@ export default function AnalysisPage() {
       provider,
       locale,
       mode: marketMode,
+      category: assetCategory,
     });
     const res = await fetch(`/api/symbols?${params.toString()}`);
     if (!res.ok) {
@@ -143,7 +149,7 @@ export default function AnalysisPage() {
     }
     const payload = (await res.json()) as { symbols?: TradingPair[] };
     return payload.symbols ?? [];
-  }, [locale, marketMode, provider]);
+  }, [assetCategory, locale, marketMode, provider]);
 
   useEffect(() => {
     let cancelled = false;
@@ -258,11 +264,31 @@ export default function AnalysisPage() {
 
   const canRunAnalysis = ready && authenticated && latestCandles.length > 0 && !isRunning;
 
+  const handleAssetCategoryChange = (nextCategory: AssetCategory) => {
+    if (nextCategory === assetCategory) {
+      return;
+    }
+    setAssetCategory(nextCategory);
+    const nextProvider = CATEGORY_PROVIDER_MAP[nextCategory][0];
+    setProvider(nextProvider);
+    const stored = lastPairByProviderRef.current[nextProvider]?.[DEFAULT_MARKET_MODE];
+    setMarketMode(DEFAULT_MARKET_MODE);
+    setSelectedPair(stored ?? "");
+    setResponse(null);
+    setAnalysisCandles([]);
+    setLatestCandles([]);
+    setAnalysisError(null);
+    liveMarketRef.current?.reset();
+  };
+
   const handleProviderChange = (nextProvider: CexProvider) => {
     if (nextProvider === provider) {
       return;
     }
     setProvider(nextProvider);
+    if (nextProvider === "twelvedata" && marketMode !== "spot") {
+      setMarketMode("spot");
+    }
     setResponse(null);
     setAnalysisCandles([]);
     setLatestCandles([]);
@@ -271,6 +297,9 @@ export default function AnalysisPage() {
   };
 
   const handleModeChange = (nextMode: MarketMode) => {
+    if (provider === "twelvedata" && nextMode !== "spot") {
+      return;
+    }
     if (nextMode === marketMode) {
       return;
     }
@@ -550,6 +579,8 @@ export default function AnalysisPage() {
             <HeroSection />
           </motion.div>
           <PairSelectionCard
+            category={assetCategory}
+            onCategoryChange={handleAssetCategoryChange}
             provider={provider}
             onProviderChange={handleProviderChange}
             mode={marketMode}
@@ -606,6 +637,8 @@ export default function AnalysisPage() {
           isSavingReport={isSavingReport}
           saveStatus={saveStatus}
           saveError={saveError}
+          marketMode={marketMode}
+          assetCategory={assetCategory}
         />
         {/* Update ticker */}
         {showUpdatedToast && (
@@ -619,5 +652,3 @@ export default function AnalysisPage() {
     </div>
   );
 }
-
-

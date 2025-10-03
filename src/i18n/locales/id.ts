@@ -14,13 +14,11 @@ const id = {
     tagline: "Soon you Will Make Money",
     logoAlt: "Lambang SWIMM",
     brandingAlt: "Logo SWIMM dengan teks",
-    goldLiveBadge: "Pasar XAU live",
     nav: {
       home: "Beranda",
       analysis: "Analisis",
       history: "Riwayat",
       profile: "Profil",
-      gold: "Emas (XAUUSD)",
     },
     mobileMenuLabel: "Buka menu navigasi",
     mobileMenuCloseLabel: "Tutup menu navigasi",
@@ -54,18 +52,24 @@ const id = {
     description:
       'Tentukan pair lalu klik "Tampilkan chart" untuk menampilkan candlestick. Timeframe bisa diganti langsung di kartu chart.',
     selectLabel: "Trading pair",
-    modeLabel: "Mode pasar",
-    modeHint: "Pilih antara pasar spot atau futures perpetual",
-    providerLabel: "CEX provider",
-    providerHint: "Pilih bursa sumber harga dan data pasar",
+    modeLabel: "Fokus aset",
+    modeHint: "Pilih antara aset kripto atau emas",
+    providerLabel: "Provider data",
+    providerHint: "Pilih sumber harga dan data pasar",
     modeOptions: {
       spot: "Spot",
       futures: "Futures",
     },
+    assetOptions: {
+      crypto: "Kripto",
+      gold: "Emas",
+    },
+    cryptoMarketModeLabel: "Tipe pasar",
+    cryptoMarketModeHint: "Pilih antara pasar spot atau futures",
     providerOptions: {
       binance: "Binance",
       bybit: "Bybit",
-      gold: "Emas (XAUUSD)",
+      twelvedata: "Twelve Data",
     },
     button: "Tampilkan chart",
     loading: "Memuat daftar pair...",
@@ -127,6 +131,7 @@ const id = {
       providerLabel: {
         binance: "Binance",
         bybit: "Bybit",
+        twelvedata: "Twelve Data",
       },
     },
     errors: {
@@ -357,14 +362,26 @@ const id = {
       title: "Perhitungan ukuran posisi",
       equityLabel: "Ekuitas akun",
       riskPercentLabel: "Risiko per transaksi (%)",
-      lotQtyLabel: "Lot (qty, opsional)",
-      entryUsed: "Entry yang dipakai",
-      stopUsed: "Stop yang dipakai",
-      stopDistance: "Jarak ke stop",
-      recommendedQty: "Qty rekomendasi",
-      notional: "Notional di harga entry",
-      maxLoss: "Kerugian maksimal (kena stop)",
-      riskFromLot: "Risiko dari lot (%)",
+      leverageLabel: "Leverage (x)",
+      recommendedAllocation: "Nominal rekomendasi",
+      recommendedMargin: "Margin rekomendasi",
+      positionSizeLabel: "Ukuran posisi",
+      notionalLabel: "Nilai notional",
+      marginLabel: "Margin yang dibutuhkan",
+      riskAmountLabel: "Risiko di stop",
+      entryPriceLabel: "Harga entry",
+      stopPriceLabel: "Harga stop",
+      manualPlanTitle: "Perhitungan manual",
+      manualAllocationLabel: "Nominal manual",
+      manualMarginLabel: "Margin manual",
+      manualEntryPriceLabel: "Harga entry manual",
+      pnlHeader: "Proyeksi profit / loss",
+      targetColumn: "Skenario",
+      priceColumn: "Harga keluar",
+      recommendedColumn: "PnL rekomendasi",
+      manualColumn: "PnL manual",
+      pnlEmpty: "Target belum tersedia untuk menghitung PnL.",
+      stopLabel: "Stop loss",
       note: "Perhitungan bersifat estimasi. Pastikan fee, tick size, dan aturan kontrak sesuai exchange Anda.",
     },
     nextSteps: {
@@ -806,7 +823,3 @@ const id = {
 };
 
 export default id;
-
-
-
-

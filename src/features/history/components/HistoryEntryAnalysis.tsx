@@ -14,7 +14,12 @@ import {
   formatPriceLabel,
   buildFormattedPair,
 } from "@/features/analysis/components/AnalysisSection";
-import { INDICATOR_CONFIG, DEFAULT_MARKET_MODE } from "@/features/market/constants";
+import {
+  INDICATOR_CONFIG,
+  DEFAULT_MARKET_MODE,
+  type AssetCategory,
+  type MarketMode,
+} from "@/features/market/constants";
 import type { IndicatorKey } from "@/features/market/types";
 import { mapTimeframeToSeconds } from "@/features/analysis/components/AnalysisSection";
 import type { HistoryEntry, HistorySnapshot, HistoryVerdict } from "@/providers/history-provider";
@@ -45,6 +50,73 @@ const mapTimeframeToInterval = (value: string): string => {
     return "1d";
   }
   return "1h";
+};
+
+const toIsoTime = (time: CandlestickData["time"]): string | null => {
+  if (typeof time === "number" && Number.isFinite(time)) {
+    return new Date(time * 1000).toISOString();
+  }
+  if (typeof time === "string") {
+    const parsed = Date.parse(time);
+    if (Number.isFinite(parsed)) {
+      return new Date(parsed).toISOString();
+    }
+    return null;
+  }
+  if (time && typeof time === "object") {
+    const maybeDay = time as { year?: number; month?: number; day?: number };
+    if (
+      typeof maybeDay.year === "number" &&
+      typeof maybeDay.month === "number" &&
+      typeof maybeDay.day === "number"
+    ) {
+      const epochMs = Date.UTC(maybeDay.year, maybeDay.month - 1, maybeDay.day);
+      if (Number.isFinite(epochMs)) {
+        return new Date(epochMs).toISOString();
+      }
+    }
+  }
+  return null;
+};
+
+const buildRangePoints = (candles: CandlestickData[]) => {
+  const points = candles
+    .map((item) => {
+      const isoTime = toIsoTime(item.time);
+      if (!isoTime) {
+        return null;
+      }
+      return { time: isoTime, close: item.close };
+    })
+    .filter((item): item is NonNullable<typeof item> => item !== null);
+  return points as Parameters<typeof buildChartRangeLabels>[0];
+};
+
+const sanitizeCandles = (candles: CandlestickData[]) => {
+  const map = new Map<number, CandlestickData>();
+  for (const item of candles) {
+    if (typeof item.time !== "number" || !Number.isFinite(item.time)) {
+      continue;
+    }
+    map.set(item.time, item);
+  }
+  return Array.from(map.entries())
+    .sort((a, b) => a[0] - b[0])
+    .map(([, value]) => value);
+};
+
+const buildSnapshotCandles = (snapshot: HistorySnapshot | null | undefined) => {
+  if (!snapshot?.candles?.length) {
+    return [] as CandlestickData[];
+  }
+  const mapped = snapshot.candles.map<CandlestickData>((item) => ({
+    time: (item.openTime / 1000) as CandlestickData["time"],
+    open: Number(item.open.toFixed(2)),
+    high: Number(item.high.toFixed(2)),
+    low: Number(item.low.toFixed(2)),
+    close: Number(item.close.toFixed(2)),
+  }));
+  return sanitizeCandles(mapped);
 };
 
 type HistoryEntryAnalysisProps = {
@@ -91,6 +163,10 @@ export function HistoryEntryAnalysis({ entry, onUpdateEntry }: HistoryEntryAnaly
   const timeframe = viewTimeframe;
   const interval = mapTimeframeToInterval(timeframe);
   const symbol = entry.pair ?? entry.response.market?.pair ?? "BTCUSDT";
+  const derivedMode: MarketMode = entry.mode ?? DEFAULT_MARKET_MODE;
+  const derivedCategory: AssetCategory =
+    entry.provider === "twelvedata" ? "gold" : "crypto";
+  const snapshotCandles = useMemo(() => buildSnapshotCandles(entry.snapshot), [entry.snapshot]);
 
   useEffect(() => {
     setVerdictValue(entry.verdict);
@@ -100,6 +176,8 @@ export function HistoryEntryAnalysis({ entry, onUpdateEntry }: HistoryEntryAnaly
     setExecutionError(null);
     setExecutedState(entry.executed);
   }, [entry.id, entry.verdict, entry.feedback, entry.executed]);
+
+  const fetchSnapshotMessage = messages.live.errors.fetchSnapshot;
 
   const capturedAtMs = useMemo(() => {
     const fromSnapshot = entry.snapshot?.capturedAt
@@ -143,28 +221,89 @@ export function HistoryEntryAnalysis({ entry, onUpdateEntry }: HistoryEntryAnaly
     const load = async () => {
       setIsFetching(true);
       try {
-        if (entry.snapshot && entry.snapshot.candles && entry.snapshot.candles.length) {
+        if (entry.snapshot && snapshotCandles.length) {
           const base = entry.snapshot.timeframe?.toLowerCase?.() || originalTimeframe;
-          const candles: CandlestickData[] = entry.snapshot.candles.map(k => ({
-            time: (k.openTime/1000) as CandlestickData["time"],
-            open: Number(k.open.toFixed(2)),
-            high: Number(k.high.toFixed(2)),
-            low: Number(k.low.toFixed(2)),
-            close: Number(k.close.toFixed(2)),
-          }));
-          const reshaped = resample(candles, base, timeframe).slice(-220);
+          const reshaped = resample(snapshotCandles, base, timeframe);
+          const normalized = sanitizeCandles(reshaped).slice(-220);
           if (!cancelled) {
-            setAnalysisCandles(reshaped);
-            const [startLabel, endLabel] = buildChartRangeLabels(reshaped.map(item => ({ time: new Date((item.time as number)*1000).toISOString(), close: item.close })), languageTag);
-            setChartStart(startLabel); setChartEnd(endLabel);
+            setAnalysisCandles(normalized);
+            const [startLabel, endLabel] = buildChartRangeLabels(
+              buildRangePoints(normalized),
+              languageTag
+            );
+            setChartStart(startLabel);
+            setChartEnd(endLabel);
+            setMarketError(null);
           }
           return;
         }
+        const providerParam = entry.provider === "gold" ? "twelvedata" : entry.provider;
+        const categoryParam = providerParam === "twelvedata" ? "gold" : "crypto";
+        const effectiveMode = providerParam === "twelvedata" ? "spot" : entry.mode ?? DEFAULT_MARKET_MODE;
+
         const params = new URLSearchParams();
-        params.set("symbol", symbol); params.set("interval", interval); params.set("limit","300");
+        params.set("symbol", symbol);
+        params.set("interval", interval);
+        params.set("provider", providerParam);
+        params.set("category", categoryParam);
+        params.set("mode", effectiveMode);
+
+        const fallbackCaptured = capturedAtMs ?? Date.now();
+        const startRange = Math.max(fallbackCaptured - 7 * 24 * 60 * 60 * 1000, 0);
+        const endRange = capturedAtMs ?? Date.now();
+        const intervalMsMap: Record<string, number> = {
+          "1m": 60_000,
+          "5m": 5 * 60_000,
+          "15m": 15 * 60_000,
+          "1h": 60 * 60_000,
+          "4h": 4 * 60 * 60_000,
+          "1d": 24 * 60 * 60_000,
+        };
+        const intervalMs = intervalMsMap[interval] ?? intervalMsMap["1h"];
+        const estimatedLimit = Math.min(
+          Math.ceil((endRange - startRange) / intervalMs) + 10,
+          5000
+        );
+        params.set("limit", String(estimatedLimit));
+        params.set("start", String(startRange));
+        params.set("end", String(endRange));
+
         const response = await fetch(`/api/market?${params.toString()}`);
-        if (!response.ok) throw new Error(`Market request failed with ${response.status}`);
-        const payload = (await response.json()) as { candles?: { openTime:number; open:number; high:number; low:number; close:number; volume:number; }[]; };
+        if (!response.ok) {
+          const errorText = await response.text().catch(() => "");
+          let parsedMessage = errorText.trim();
+          if (parsedMessage) {
+            try {
+              const parsed = JSON.parse(parsedMessage) as { error?: string };
+              if (typeof parsed.error === "string" && parsed.error.trim().length) {
+                parsedMessage = parsed.error.trim();
+              }
+            } catch (_ignored) {
+              // ignore json parse error, fallback to raw text
+            }
+          }
+          const finalMessage = parsedMessage || `Market request failed with ${response.status}`;
+          if (!cancelled && finalMessage.toLowerCase().includes("pair is not supported")) {
+            setAnalysisCandles([]);
+            setChartStart("-");
+            setChartEnd("-");
+            setMarketError(finalMessage);
+            setIsFetching(false);
+            return;
+          }
+          throw new Error(finalMessage);
+        }
+
+        const payload = (await response.json()) as {
+          candles?: {
+            openTime: number;
+            open: number;
+            high: number;
+            low: number;
+            close: number;
+            volume: number;
+          }[];
+        };
         const candles: CandlestickData[] = (payload.candles ?? []).map((item) => ({
           time: (item.openTime / 1000) as CandlestickData["time"],
           open: Number(item.open.toFixed(2)),
@@ -172,19 +311,54 @@ export function HistoryEntryAnalysis({ entry, onUpdateEntry }: HistoryEntryAnaly
           low: Number(item.low.toFixed(2)),
           close: Number(item.close.toFixed(2)),
         }));
+        const sanitizedCandles = sanitizeCandles(candles);
+
         if (!cancelled) {
-          setAnalysisCandles(candles.slice(-220));
-          if (candles.length) {
-            const [startLabel, endLabel] = buildChartRangeLabels(candles.map((item) => ({ time: new Date((item.time as number) * 1000).toISOString(), close: item.close })), languageTag);
-            setChartStart(startLabel); setChartEnd(endLabel);
-          } else { setChartStart("-"); setChartEnd("-"); }
+          if (!sanitizedCandles.length) {
+            setAnalysisCandles([]);
+            setChartStart("-");
+            setChartEnd("-");
+            setMarketError(fetchSnapshotMessage);
+          } else {
+            const limited = sanitizedCandles.slice(-220);
+            setAnalysisCandles(limited);
+            const [startLabel, endLabel] = buildChartRangeLabels(
+              buildRangePoints(limited),
+              languageTag
+            );
+            setChartStart(startLabel);
+            setChartEnd(endLabel);
+            setMarketError(null);
+          }
         }
-      } finally { if (!cancelled) setIsFetching(false); }
+      } catch (error) {
+        if (!cancelled) {
+          console.error("Failed to load history candles", error);
+          setAnalysisCandles([]);
+          setChartStart("-");
+          setChartEnd("-");
+          setMarketError(
+            error instanceof Error ? error.message : fetchSnapshotMessage
+          );
+        }
+      } finally {
+        if (!cancelled) setIsFetching(false);
+      }
     };
 
     void load();
     return () => { cancelled = true; };
-  }, [entry, symbol, interval, timeframe, languageTag, originalTimeframe]);
+  }, [
+    entry,
+    symbol,
+    interval,
+    timeframe,
+    languageTag,
+    originalTimeframe,
+    capturedAtMs,
+    fetchSnapshotMessage,
+    snapshotCandles,
+  ]);
 
   const priceFormatter = useMemo(
     () =>
@@ -324,6 +498,7 @@ export function HistoryEntryAnalysis({ entry, onUpdateEntry }: HistoryEntryAnaly
         mode={entry.mode}
         timeframe={entry.decision?.timeframe ?? entry.timeframe ?? timeframe}
         snapshotCapturedAt={entry.snapshot?.capturedAt ?? entry.createdAt}
+        snapshotCandles={snapshotCandles}
       />
 
       <AnalysisSection
@@ -353,6 +528,8 @@ export function HistoryEntryAnalysis({ entry, onUpdateEntry }: HistoryEntryAnaly
         isSavingReport={false}
         saveStatus="idle"
         saveError={null}
+        marketMode={derivedMode}
+        assetCategory={derivedCategory}
         sectionRef={sectionRef}
       />
 

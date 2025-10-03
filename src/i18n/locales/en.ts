@@ -14,13 +14,11 @@ const en = {
     tagline: "Soon You Will Make Money",
     logoAlt: "SWIMM emblem",
     brandingAlt: "SWIMM wordmark",
-    goldLiveBadge: "Live XAU market",
     nav: {
       home: "Home",
       analysis: "Analysis",
       history: "History",
       profile: "Profile",
-      gold: "Gold (XAUUSD)",
     },
     mobileMenuLabel: "Open navigation menu",
     mobileMenuCloseLabel: "Close navigation menu",
@@ -54,18 +52,24 @@ const en = {
     description:
       'Pick a pair, then click "Show chart" to stream candlesticks. Timeframe can be adjusted inside the chart card.',
     selectLabel: "Trading pair",
-    modeLabel: "Market mode",
-    modeHint: "Choose between spot markets or perpetual futures",
-    providerLabel: "CEX provider",
-    providerHint: "Choose the exchange to source prices and order data",
+    modeLabel: "Market focus",
+    modeHint: "Pick between crypto assets or precious metals",
+    providerLabel: "Data provider",
+    providerHint: "Choose the source exchange or feed",
     modeOptions: {
       spot: "Spot",
       futures: "Futures",
     },
+    assetOptions: {
+      crypto: "Crypto",
+      gold: "Gold",
+    },
+    cryptoMarketModeLabel: "Market type",
+    cryptoMarketModeHint: "Choose between spot markets or perpetual futures",
     providerOptions: {
       binance: "Binance",
       bybit: "Bybit",
-      gold: "Gold (XAUUSD)",
+      twelvedata: "Twelve Data",
     },
     button: "Show chart",
     loading: "Loading pairs...",
@@ -126,6 +130,7 @@ const en = {
       providerLabel: {
         binance: "Binance",
         bybit: "Bybit",
+        twelvedata: "Twelve Data",
       },
     },
     errors: {
@@ -356,14 +361,26 @@ const en = {
       title: "Position sizing",
       equityLabel: "Account equity",
       riskPercentLabel: "Risk per trade (%)",
-      lotQtyLabel: "Lot (qty, optional)",
-      entryUsed: "Entry used",
-      stopUsed: "Stop used",
-      stopDistance: "Stop distance",
-      recommendedQty: "Recommended qty",
-      notional: "Notional at entry",
-      maxLoss: "Max loss (at stop)",
-      riskFromLot: "Risk from lot (%)",
+      leverageLabel: "Leverage (x)",
+      recommendedAllocation: "Recommended allocation",
+      recommendedMargin: "Recommended margin",
+      positionSizeLabel: "Position size",
+      notionalLabel: "Notional value",
+      marginLabel: "Margin required",
+      riskAmountLabel: "Risk at stop",
+      entryPriceLabel: "Entry price",
+      stopPriceLabel: "Stop loss",
+      manualPlanTitle: "Manual planner",
+      manualAllocationLabel: "Manual allocation",
+      manualMarginLabel: "Manual margin",
+      manualEntryPriceLabel: "Manual entry price",
+      pnlHeader: "Profit / loss projection",
+      targetColumn: "Scenario",
+      priceColumn: "Exit price",
+      recommendedColumn: "Recommended PnL",
+      manualColumn: "Manual PnL",
+      pnlEmpty: "Targets are not available to project PnL.",
+      stopLabel: "Stop loss",
       note: "Sizing is an estimate. Confirm fees, tick sizes, and contract rules with your exchange.",
     },
     nextSteps: {
@@ -823,8 +840,3 @@ const en = {
 };
 
 export default en;
-
-
-
-
-
