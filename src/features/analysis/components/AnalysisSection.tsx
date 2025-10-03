@@ -817,6 +817,15 @@ export function AnalysisSection({
         </div>
       </div>
 
+      <div className="mt-6 rounded-2xl border border-[var(--swimm-neutral-200)] bg-[var(--swimm-neutral-50)] px-4 py-3 text-xs text-[var(--swimm-neutral-600)]">
+        <span className="font-semibold text-[var(--swimm-navy-900)]">
+          {analysisCopy.disclaimer.title}
+        </span>
+        <span className="ml-2 block text-[var(--swimm-neutral-500)] md:inline">
+          {analysisCopy.disclaimer.body}
+        </span>
+      </div>
+
       <div className="mt-8 space-y-6">
         <div className="rounded-3xl border border-[var(--swimm-neutral-300)] bg-white p-6">
           <div className="flex flex-wrap items-center justify-between gap-3">

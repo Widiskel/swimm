@@ -384,6 +384,11 @@ const id = {
       stopLabel: "Stop loss",
       note: "Perhitungan bersifat estimasi. Pastikan fee, tick size, dan aturan kontrak sesuai exchange Anda.",
     },
+    disclaimer: {
+      title: "Gunakan SWIMM secara bijak",
+      body:
+        "SWIMM memberikan insight analitis, bukan instruksi trading. Risiko pasar sepenuhnya menjadi tanggung jawab Anda — verifikasi setiap rencana, sesuaikan ukuran posisi, dan jangan mengeksekusi tanpa keputusan pribadi.",
+    },
     nextSteps: {
       title: "Next steps",
     },
@@ -714,7 +719,7 @@ const id = {
     indonesian: "Bahasa Indonesia",
   },
   landing: {
-    hero: {
+    introduction: {
       badge: "Pusat Inteligensi SWIMM",
       heading: "Inteligensi kripto multi-pair dengan panduan bahasa natural.",
       description:
@@ -725,25 +730,25 @@ const id = {
       ctaSecondaryGuest: "Jelajahi fitur",
       privyWaiting:
         "Menunggu koneksi Privy... tombol akan aktif setelah autentikasi siap.",
+      highlights: [
+        {
+          title: "Prakiraan Multi-Pair",
+          description:
+            "Proyeksi AI untuk BTC, ETH, SOL, dan aset yang bergantian.",
+        },
+        {
+          title: "Sentimen Terpadu",
+          description:
+            "Gabungkan headline hasil scraping, ringkasan, dan data kustom untuk keputusan berimbang.",
+        },
+        {
+          title: "Rencana Trading",
+          description:
+            "Entry, target, stop, dan panduan sizing yang selaras dengan timeframe Anda.",
+        },
+      ],
     },
-    highlights: [
-      {
-        title: "Prakiraan Multi-Pair",
-        description:
-          "Proyeksi AI untuk BTC, ETH, SOL, dan aset yang bergantian.",
-      },
-      {
-        title: "Sentimen Terpadu",
-        description:
-          "Gabungkan headline hasil scraping, ringkasan, dan data kustom untuk keputusan berimbang.",
-      },
-      {
-        title: "Rencana Trading",
-        description:
-          "Entry, target, stop, dan panduan sizing yang selaras dengan timeframe Anda.",
-      },
-    ],
-    features: {
+    why: {
       heading: "Mengapa trader memilih SWIMM",
       description:
         "Setiap ringkasan menggabungkan sinyal teknikal, katalis, dan proyeksi AI untuk meminimalkan bias.",
@@ -781,8 +786,16 @@ const id = {
         },
       ],
     },
-    workflow: {
-      heading: "Tiga langkah mudah",
+    spotlight: {
+      badge: "Sorotan fitur",
+      title: "Analisa emas dalam sekali klik",
+      description:
+        "Analisa emas spot (XAUUSD) dengan agent SWIMM yang sama — stream candlestick lalu hasilkan entry, target, stop, dan narasi.",
+      cta: "Buka analisa Emas",
+      tags: ["Candlestick live", "Rencana AI", "Parameter risiko"],
+    },
+    gettingStarted: {
+      heading: "Mulai bersama SWIMM",
       description:
         "SWIMM merampingkan workflow riset menjadi satu pusat komando sehingga Anda dapat mengeksekusi dengan mantap.",
       ctaAuthenticated: "Buka analisa sekarang",
@@ -796,23 +809,21 @@ const id = {
         },
         {
           id: "02",
-          title: "Pilih Pair & Timeframe",
+          title: "Pilih pair & timeframe",
           description:
             "Beralih dari scalping ke swing pada simbol yang didukung hanya dalam detik.",
         },
         {
           id: "03",
-          title: "Eksekusi Percaya Diri",
+          title: "Eksekusi percaya diri",
           description: "Ikuti entry, target, dan parameter risiko berbasis AI.",
         },
       ],
     },
-    goldSpotlight: {
-      badge: "Sorotan Emas",
-      title: "Pasar XAU live",
-      description:
-        "Analisa emas spot (XAUUSD) dengan agent SWIMM yang sama — stream candlestick lalu hasilkan entry, target, stop, dan narasi.",
-      cta: "Buka analisa Emas",
+    disclaimer: {
+      heading: "Trading tetap tanggung jawab Anda",
+      body:
+        "SWIMM memberikan insight analitis, bukan instruksi trading. Tinjau ulang setiap rekomendasi dengan riset pribadi, toleransi risiko, dan kondisi pasar sebelum membuka posisi.",
     },
     footer: {
       copyright: "Soon you Will Make Money",

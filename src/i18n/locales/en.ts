@@ -383,6 +383,11 @@ const en = {
       stopLabel: "Stop loss",
       note: "Sizing is an estimate. Confirm fees, tick sizes, and contract rules with your exchange.",
     },
+    disclaimer: {
+      title: "Use SWIMM responsibly",
+      body:
+        "SWIMM delivers analytical guidance only. Market risk remains entirely yours — verify each plan, adjust sizing, and never trade without an independent decision.",
+    },
     nextSteps: {
       title: "Next steps",
     },
@@ -730,7 +735,7 @@ const en = {
     indonesian: "Bahasa Indonesia",
   },
   landing: {
-    hero: {
+    introduction: {
       badge: "SWIMM Intelligence Hub",
       heading: "Multi-pair crypto intelligence with natural-language guidance.",
       description:
@@ -741,25 +746,25 @@ const en = {
       ctaSecondaryGuest: "Explore features",
       privyWaiting:
         "Waiting for Privy connection... buttons activate once authentication is ready.",
+      highlights: [
+        {
+          title: "Multi-Pair Forecasting",
+          description:
+            "AI projections across BTC, ETH, SOL, and rotating assets.",
+        },
+        {
+          title: "Unified Sentiment",
+          description:
+            "Blend scraped headlines, briefs, and custom data for balanced decisions.",
+        },
+        {
+          title: "Trade Plans",
+          description:
+            "Entries, targets, stops, and sizing guidance aligned to your timeframe.",
+        },
+      ],
     },
-    highlights: [
-      {
-        title: "Multi-Pair Forecasting",
-        description:
-          "AI projections across BTC, ETH, SOL, and rotating assets.",
-      },
-      {
-        title: "Unified Sentiment",
-        description:
-          "Blend scraped headlines, briefs, and custom data for balanced decisions.",
-      },
-      {
-        title: "Trade Plans",
-        description:
-          "Entries, targets, stops, and sizing guidance aligned to your timeframe.",
-      },
-    ],
-    features: {
+    why: {
       heading: "Why traders choose SWIMM",
       description:
         "Each briefing blends technical signals, catalysts, and AI projections to minimise bias.",
@@ -797,8 +802,16 @@ const en = {
         },
       ],
     },
-    workflow: {
-      heading: "Three simple steps",
+    spotlight: {
+      badge: "Feature spotlight",
+      title: "Gold analysis in one click",
+      description:
+        "Analyze spot gold (XAUUSD) with the same SWIMM agent — stream candles, then generate entries, targets, stops, and narrative.",
+      cta: "Open Gold analysis",
+      tags: ["Live candles", "LLM trade plans", "Risk parameters"],
+    },
+    gettingStarted: {
+      heading: "Getting started with SWIMM",
       description:
         "SWIMM condenses research workflows into one command centre so you can execute decisively.",
       ctaAuthenticated: "Open analysis now",
@@ -812,24 +825,22 @@ const en = {
         },
         {
           id: "02",
-          title: "Pick Pair & Timeframe",
+          title: "Pick pair & timeframe",
           description:
             "Switch from scalps to swings across supported symbols in seconds.",
         },
         {
           id: "03",
-          title: "Execute with Confidence",
+          title: "Execute with confidence",
           description:
             "Follow AI-backed entries, targets, and risk parameters.",
         },
       ],
     },
-    goldSpotlight: {
-      badge: "Gold Spotlight",
-      title: "Live XAU market",
-      description:
-        "Analyze spot gold (XAUUSD) with the same SWIMM agent — stream candles, then generate entries, targets, stops, and narrative.",
-      cta: "Open Gold analysis",
+    disclaimer: {
+      heading: "Trade responsibly",
+      body:
+        "SWIMM provides analytical insights, not trading instructions. Review every recommendation against your own research, risk tolerance, and market conditions before entering a position.",
     },
     footer: {
       copyright: "Soon You Will Make Money",
