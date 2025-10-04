@@ -8,7 +8,22 @@ import { translate } from "@/i18n/translate";
 import type { Locale } from "@/i18n/messages";
 import type { MarketMode } from "@/features/market/constants";
 
-const BYBIT_REST_URL = process.env.BYBIT_API_URL ?? "https://api.bybit.com";
+const parseBybitHosts = (value: string | undefined) =>
+  value
+    ?.split(",")
+    .map((item) => item.trim())
+    .filter(Boolean) ?? [];
+
+const DEFAULT_BYBIT_HOSTS = ["https://api.bybit.com", "https://api.bybitglobal.com"];
+
+const BYBIT_HOSTS = (() => {
+  const envHosts = parseBybitHosts(process.env.BYBIT_API_HOSTS);
+  return [...envHosts, ...DEFAULT_BYBIT_HOSTS].filter(
+    (host, index, self) => host && self.indexOf(host) === index
+  );
+})();
+
+const BYBIT_REST_URL = BYBIT_HOSTS[0];
 const DEFAULT_SYMBOL = process.env.BYBIT_SYMBOL ?? "BTCUSDT";
 const DEFAULT_FUTURES_SYMBOL = process.env.BYBIT_FUTURES_SYMBOL ?? DEFAULT_SYMBOL;
 
@@ -131,18 +146,33 @@ const fetchInstruments = async (
   mode: MarketMode,
   auth?: BybitRequestAuth
 ): Promise<BybitInstrumentInfo[]> => {
-  const url = new URL("/v5/market/instruments-info", BYBIT_REST_URL);
-  url.searchParams.set("category", mode === "futures" ? "linear" : "spot");
-  const response = await fetch(url, {
-    method: "GET",
-    headers: withHeaders(auth),
-    cache: "no-store",
-  });
-  if (!response.ok) {
-    throw new Error(`Bybit instruments responded with ${response.status}`);
+  let lastError: unknown = null;
+  for (const host of BYBIT_HOSTS) {
+    try {
+      const url = new URL("/v5/market/instruments-info", host);
+      url.searchParams.set("category", mode === "futures" ? "linear" : "spot");
+      const response = await fetch(url, {
+        method: "GET",
+        headers: withHeaders(auth),
+        cache: "no-store",
+      });
+      if (!response.ok) {
+        if (response.status >= 500 || response.status === 403 || response.status === 429) {
+          lastError = new Error(`Bybit instruments responded with ${response.status}`);
+          continue;
+        }
+        throw new Error(`Bybit instruments responded with ${response.status}`);
+      }
+      const payload = (await response.json()) as BybitInstrumentsResponse;
+      return payload.result?.list ?? [];
+    } catch (error) {
+      lastError = error;
+      continue;
+    }
   }
-  const payload = (await response.json()) as BybitInstrumentsResponse;
-  return payload.result?.list ?? [];
+  throw lastError instanceof Error
+    ? lastError
+    : new Error("Failed to fetch Bybit instruments");
 };
 
 export const fetchBybitTradablePairs = async (

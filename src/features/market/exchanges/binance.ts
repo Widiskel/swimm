@@ -165,10 +165,28 @@ const buildPairLabel = (base: string, quote: string) => `${base} / ${quote}`;
 
 type BinanceHostMode = "spot" | "futures";
 
-const getHostList = (mode: BinanceHostMode): string[] =>
-  (mode === "futures" ? BINANCE_FUTURES_HOSTS : BINANCE_SPOT_HOSTS).filter(
-    Boolean
+const parseHostList = (value: string | undefined) =>
+  value
+    ?.split(",")
+    .map((item) => item.trim())
+    .filter(Boolean) ?? [];
+
+const getHostList = (mode: BinanceHostMode): string[] => {
+  const envRaw =
+    mode === "futures"
+      ? process.env.BINANCE_FUTURES_PROXY_URL ??
+        process.env.BINANCE_FUTURES_HOSTS
+      : process.env.BINANCE_SPOT_PROXY_URL ??
+        process.env.BINANCE_SPOT_HOSTS;
+  const envHosts = parseHostList(envRaw);
+  const defaults = (mode === "futures"
+    ? BINANCE_FUTURES_HOSTS
+    : BINANCE_SPOT_HOSTS
+  ).filter(Boolean);
+  return [...envHosts, ...defaults].filter((host, index, self) =>
+    host && self.indexOf(host) === index
   );
+};
 
 const shouldRetryError = (error: unknown): boolean => {
   if (!error || typeof error !== "object") {
@@ -188,7 +206,11 @@ const shouldRetryError = (error: unknown): boolean => {
   return retryableCodes.has(code);
 };
 
-const shouldRetryResponse = (response: Response) => response.status >= 500;
+const shouldRetryResponse = (response: Response) =>
+  response.status >= 500 ||
+  response.status === 451 ||
+  response.status === 403 ||
+  response.status === 429;
 
 const requestBinance = async (
   path: string,
