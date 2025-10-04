@@ -17,6 +17,16 @@ const DEFAULT_BYBIT_HOSTS = [
 
 const BYBIT_HOSTS = BYBIT_PROXY_URL ? [BYBIT_PROXY_URL] : DEFAULT_BYBIT_HOSTS;
 
+const buildRequestUrl = (base: string, path: string) => {
+  const baseUrl = new URL(base);
+  const prefix = baseUrl.pathname.replace(/\/$/, "");
+  if (prefix.length > 0) {
+    const joined = `${prefix}${path.startsWith("/") ? path : `/${path}`}`;
+    return new URL(`${baseUrl.origin}${joined}`);
+  }
+  return new URL(path, baseUrl);
+};
+
 const BYBIT_REST_URL = BYBIT_HOSTS[0];
 const DEFAULT_SYMBOL = process.env.BYBIT_SYMBOL ?? "BTCUSDT";
 const DEFAULT_FUTURES_SYMBOL = process.env.BYBIT_FUTURES_SYMBOL ?? DEFAULT_SYMBOL;
@@ -143,7 +153,7 @@ const fetchInstruments = async (
   let lastError: unknown = null;
   for (const host of BYBIT_HOSTS) {
     try {
-      const url = new URL("/v5/market/instruments-info", host);
+      const url = buildRequestUrl(host, "/v5/market/instruments-info");
       url.searchParams.set("category", mode === "futures" ? "linear" : "spot");
       const response = await fetch(url, {
         method: "GET",
@@ -282,7 +292,7 @@ export const fetchBybitCandles = async (
     const fallbackSymbol = mode === "futures" ? DEFAULT_FUTURES_SYMBOL : DEFAULT_SYMBOL;
     const resolvedSymbol = resolveSymbol(symbol, fallbackSymbol);
     const bybitInterval = mapTimeframeToBybitInterval(interval);
-    const url = new URL("/v5/market/kline", BYBIT_REST_URL);
+      const url = buildRequestUrl(BYBIT_REST_URL, "/v5/market/kline");
     url.searchParams.set("category", mode === "futures" ? "linear" : "spot");
     url.searchParams.set("symbol", resolvedSymbol);
     url.searchParams.set("interval", bybitInterval);
@@ -380,7 +390,7 @@ export const fetchBybitCandles = async (
       ) {
         safety += 1;
         requestLimit = Math.min(1000, targetLimit - combined.length);
-        const pagedUrl = new URL("/v5/market/kline", BYBIT_REST_URL);
+        const pagedUrl = buildRequestUrl(BYBIT_REST_URL, "/v5/market/kline");
         pagedUrl.searchParams.set("category", mode === "futures" ? "linear" : "spot");
         pagedUrl.searchParams.set("symbol", resolvedSymbol);
         pagedUrl.searchParams.set("interval", bybitInterval);
@@ -478,7 +488,7 @@ export const fetchBybitMarketSummary = async (
   try {
     const fallbackSymbol = mode === "futures" ? DEFAULT_FUTURES_SYMBOL : DEFAULT_SYMBOL;
     const resolvedSymbol = resolveSymbol(symbol, fallbackSymbol);
-    const url = new URL("/v5/market/tickers", BYBIT_REST_URL);
+    const url = buildRequestUrl(BYBIT_REST_URL, "/v5/market/tickers");
     url.searchParams.set("category", mode === "futures" ? "linear" : "spot");
     url.searchParams.set("symbol", resolvedSymbol);
 
@@ -543,7 +553,7 @@ export const fetchBybitOrderBook = async (
   try {
     const fallbackSymbol = mode === "futures" ? DEFAULT_FUTURES_SYMBOL : DEFAULT_SYMBOL;
     const resolvedSymbol = resolveSymbol(symbol, fallbackSymbol);
-    const url = new URL("/v5/market/orderbook", BYBIT_REST_URL);
+    const url = buildRequestUrl(BYBIT_REST_URL, "/v5/market/orderbook");
     url.searchParams.set("category", mode === "futures" ? "linear" : "spot");
     url.searchParams.set("symbol", resolvedSymbol);
     url.searchParams.set("limit", String(Math.min(Math.max(limit, 1), 200)));

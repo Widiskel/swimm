@@ -4,6 +4,16 @@ import type { MarketMode } from "@/features/market/constants";
 
 const BINANCE_PROXY_URL = process.env.BINANCE_PROXY_URL?.trim();
 
+const buildRequestUrl = (base: string, path: string) => {
+  const baseUrl = new URL(base);
+  const prefix = baseUrl.pathname.replace(/\/$/, "");
+  if (prefix.length > 0) {
+    const joined = `${prefix}${path.startsWith("/") ? path : `/${path}`}`;
+    return new URL(`${baseUrl.origin}${joined}`);
+  }
+  return new URL(path, baseUrl);
+};
+
 const FALLBACK_SPOT_HOSTS = [
   "https://api.binance.com",
   "https://api-gcp.binance.com",
@@ -216,7 +226,7 @@ const requestBinance = async (
 
   for (const host of hosts) {
     try {
-      const url = new URL(path, host);
+      const url = buildRequestUrl(host, path);
       if (searchParams) {
         for (const [key, value] of Object.entries(searchParams)) {
           url.searchParams.set(key, value);
