@@ -559,6 +559,9 @@ const id = {
       "Analisa realtime tersedia setelah Anda masuk. Akses agen SWIMM untuk forecasting harga dan playbook siap eksekusi.",
     signInButton: "Masuk",
     backHome: "Kembali ke beranda",
+    updatedToast: "Analisa terbaru siap · {time}",
+    agentFailure: "Agent gagal merespon.",
+    agentGenericError: "Terjadi masalah saat menjalankan agent. Coba ulangi.",
   },
   history: {
     connecting: "Memeriksa status login Anda...",

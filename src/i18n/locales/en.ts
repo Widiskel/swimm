@@ -576,6 +576,9 @@ const en = {
       "Real-time analytics unlock after you sign in. Launch the SWIMM agent for price forecasts and execution-ready playbooks.",
     signInButton: "Sign in",
     backHome: "Back to home",
+    updatedToast: "Fresh analysis ready · {time}",
+    agentFailure: "The agent failed to respond.",
+    agentGenericError: "Something went wrong while running the agent. Please try again.",
   },
   history: {
     connecting: "Checking your sign-in status...",

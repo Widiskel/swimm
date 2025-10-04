@@ -434,7 +434,7 @@ export default function AnalysisPage() {
       });
 
       if (!res.ok) {
-        let message = "Agent gagal merespon";
+        let message = analysisCopy.agentFailure;
         try {
           const errorPayload = (await res.json()) as { error?: unknown };
           if (errorPayload && typeof errorPayload.error === "string") {
@@ -458,11 +458,12 @@ export default function AnalysisPage() {
       }
       hasUserAnalyzedRef.current = true;
       // Show a lightweight update toast
-      const now = new Date();
-      const hh = String(now.getHours()).padStart(2, "0");
-      const mm = String(now.getMinutes()).padStart(2, "0");
-      const ss = String(now.getSeconds()).padStart(2, "0");
-      setLastUpdatedLabel(`${hh}:${mm}:${ss}`);
+      const formatter = new Intl.DateTimeFormat(languageTag, {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      });
+      setLastUpdatedLabel(formatter.format(new Date()));
       setShowUpdatedToast(true);
       window.setTimeout(() => setShowUpdatedToast(false), 2500);
       if (typeof window !== "undefined") {
@@ -472,10 +473,10 @@ export default function AnalysisPage() {
       }
     } catch (runError) {
       console.error(runError);
-      if (runError instanceof Error) {
+      if (runError instanceof Error && runError.message) {
         setAnalysisError(runError.message);
       } else {
-        setAnalysisError("Terjadi masalah saat menjalankan agent. Coba ulangi.");
+        setAnalysisError(analysisCopy.agentGenericError);
       }
     } finally {
       setIsRunning(false);
@@ -646,7 +647,7 @@ export default function AnalysisPage() {
         {showUpdatedToast && (
           <div className="fixed bottom-4 right-4 z-50">
             <div className="rounded-full border border-[var(--swimm-primary-500)]/40 bg-[var(--swimm-primary-500)]/10 px-4 py-2 text-xs font-semibold text-[var(--swimm-primary-700)] shadow-[var(--swimm-glow)]">
-              Analisa diperbarui · {lastUpdatedLabel}
+              {__("analysisPage.updatedToast", { time: lastUpdatedLabel })}
             </div>
           </div>
         )}
