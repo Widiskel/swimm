@@ -401,6 +401,7 @@ export default function AnalysisPage() {
           provider,
           mode: marketMode,
           locale,
+          category: assetCategory,
         }),
       });
 

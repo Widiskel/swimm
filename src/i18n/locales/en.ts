@@ -234,6 +234,7 @@ const en = {
         datasetPreviewLabel: "Content (truncated)",
         keyMetrics: "(Key metrics unavailable)",
         analysisFocus: "(No focus hint available)",
+        cryptoNews: "(No CryptoPanic headlines)",
       },
       datasetNameLabel: "Dataset name",
       tavily: {
@@ -243,6 +244,13 @@ const en = {
         excerptLabel: "Excerpt",
         rawExcerptLabel: "Excerpt (raw)",
       },
+      news: {
+        sourceLabel: "Source",
+        publishedLabel: "Published",
+        urlLabel: "URL",
+      },
+      timeframeGuidance:
+        "Timeframe directive: operate on {timeframe}. Keep entries within ±{entry}% of market price, place stops around {stop}%, and step targets by roughly {target}%.",
       dataMode: {
         scrape: "Scrape news URLs",
         upload: "Upload dataset",
@@ -267,6 +275,7 @@ const en = {
         tavilySummary: "Tavily summary",
         tavilyResults: "Tavily search results",
         tavilyArticles: "Tavily article extracts",
+        cryptoNews: "CryptoPanic headlines",
         instructions: "Instructions",
       },
       instructions:
@@ -344,6 +353,14 @@ const en = {
     highlights: {
       title: "Supporting notes",
       empty: "No supporting notes captured yet.",
+    },
+    news: {
+      title: "Market headlines",
+      empty: "No recent headlines available for this pair.",
+      rateLimit: "CryptoPanic rate limit reached; headlines may be incomplete.",
+      sourceLabel: "Source",
+      publishedLabel: "Published",
+      openLink: "Open article",
     },
     tradePlan: {
       title: "Trade plan",
@@ -766,6 +783,23 @@ const en = {
             "Entries, targets, stops, and sizing guidance aligned to your timeframe.",
         },
       ],
+      metrics: [
+        {
+          value: "2.3s",
+          label: "Agent turnaround",
+          caption: "Average response time across supported pairs",
+        },
+        {
+          value: "40+",
+          label: "Actionable signals",
+          caption: "Daily long/short playbooks across crypto & metals",
+        },
+        {
+          value: "3",
+          label: "Data providers",
+          caption: "Binance, Bybit, and Twelve Data feeds in one view",
+        },
+      ],
     },
     why: {
       heading: "Why traders choose SWIMM",
@@ -812,6 +846,27 @@ const en = {
         "Analyze spot gold (XAUUSD) with the same SWIMM agent — stream candles, then generate entries, targets, stops, and narrative.",
       cta: "Open Gold analysis",
       tags: ["Live candles", "LLM trade plans", "Risk parameters"],
+    },
+    providers: {
+      heading: "Integrated market coverage",
+      description:
+        "Institutional-grade pricing, liquidity depth, and macro context aggregated into a single analytic surface.",
+      items: [
+        "Binance spot & futures data",
+        "Bybit derivatives order flow",
+        "Twelve Data metals & FX feed",
+      ],
+    },
+    preview: {
+      title: "Live agent snapshot",
+      subtitle: "Illustrative SWIMM output refreshed every closed candle.",
+      rows: [
+        "BTCUSDT • 1H bias LONG",
+        "Confidence 72%  |  Risk per trade 1.2%",
+        "Entry 67,250  |  Stop 65,980  |  Targets 67,880 / 68,540",
+        "Narrative: Higher lows supported by increasing spot bid volume.",
+      ],
+      footer: "Auto-updates with real-time candles, order flow, and breaking news.",
     },
     gettingStarted: {
       heading: "Getting started with SWIMM",

@@ -1,5 +1,6 @@
 const TAVILY_SEARCH_URL = "https://api.tavily.com/search";
 const TAVILY_EXTRACT_URL = "https://api.tavily.com/extract";
+const RESPONSE_SNIPPET_LENGTH = 300;
 
 const toStringOrUndefined = (value: unknown) =>
   typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
@@ -103,33 +104,49 @@ export const fetchTavilySearch = async (
   }
 
   try {
+    const payload = {
+      api_key: apiKey,
+      query: trimmedQuery,
+      search_depth: options.searchDepth ?? "advanced",
+      max_results: options.maxResults ?? 6,
+      include_answer: true,
+      include_raw_content: true,
+    };
+
+    console.log("[Tavily] Request", {
+      url: TAVILY_SEARCH_URL,
+      body: { ...payload, api_key: "***" },
+    });
+
     const response = await fetch(TAVILY_SEARCH_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        api_key: apiKey,
-        query: trimmedQuery,
-        search_depth: options.searchDepth ?? "advanced",
-        max_results: options.maxResults ?? 6,
-        include_answer: true,
-        include_raw_content: true,
-      }),
+      body: JSON.stringify(payload),
     });
+
+    const responseSnippet = await response
+      .clone()
+      .text()
+      .then((text) => text.slice(0, RESPONSE_SNIPPET_LENGTH))
+      .catch(() => "");
+    console.log(
+      `[Tavily] Response ${response.status} ${response.statusText} ${responseSnippet}`
+    );
 
     if (!response.ok) {
       console.error("Failed to fetch Tavily search", response.status, response.statusText);
       return null;
     }
 
-    const payload = (await response.json()) as Record<string, unknown>;
-    const results = Array.isArray(payload.results)
-      ? payload.results
+    const searchPayload = (await response.json()) as Record<string, unknown>;
+    const results = Array.isArray(searchPayload.results)
+      ? searchPayload.results
           .map((item) => sanitizeSearchResult(item))
           .filter((item): item is TavilySearchResult => Boolean(item))
       : [];
 
     return {
-      answer: toStringOrUndefined(payload.answer) ?? null,
+      answer: toStringOrUndefined(searchPayload.answer) ?? null,
       query: trimmedQuery,
       results,
     };
@@ -158,27 +175,43 @@ export const fetchTavilyExtract = async (
   }
 
   try {
+    const payload = {
+      api_key: apiKey,
+      urls: sanitizedUrls,
+      include_images: false,
+      include_html: false,
+      include_links: false,
+      include_raw_content: true,
+    };
+
+    console.log("[Tavily] Extract Request", {
+      url: TAVILY_EXTRACT_URL,
+      body: { ...payload, api_key: "***" },
+    });
+
     const response = await fetch(TAVILY_EXTRACT_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        api_key: apiKey,
-        urls: sanitizedUrls,
-        include_images: false,
-        include_html: false,
-        include_links: false,
-        include_raw_content: true,
-      }),
+      body: JSON.stringify(payload),
     });
+
+    const responseSnippet = await response
+      .clone()
+      .text()
+      .then((text) => text.slice(0, RESPONSE_SNIPPET_LENGTH))
+      .catch(() => "");
+    console.log(
+      `[Tavily] Extract Response ${response.status} ${response.statusText} ${responseSnippet}`
+    );
 
     if (!response.ok) {
       console.error("Failed to extract Tavily content", response.status, response.statusText);
       return [];
     }
 
-    const payload = (await response.json()) as Record<string, unknown>;
-    const results = Array.isArray(payload.results)
-      ? payload.results
+    const extractPayload = (await response.json()) as Record<string, unknown>;
+    const results = Array.isArray(extractPayload.results)
+      ? extractPayload.results
           .map((item) => sanitizeExtractResult(item))
           .filter((item): item is TavilyExtractedArticle => Boolean(item))
       : [];

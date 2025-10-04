@@ -1,3 +1,5 @@
+import { Agent } from "undici";
+
 import { translate } from "@/i18n/translate";
 import type { Locale } from "@/i18n/messages";
 import type { MarketMode } from "@/features/market/constants";
@@ -28,7 +30,6 @@ const FALLBACK_FUTURES_HOSTS = [
   "https://fapi.binance.com",
   "https://futures-api.binance.com",
   "https://dapi.binance.com",
-  "https://data-api.binance.vision",
 ];
 
 const DEFAULT_SYMBOL = "BTCUSDT";
@@ -207,6 +208,21 @@ const shouldRetryError = (error: unknown): boolean => {
 const shouldRetryResponse = (response: Response) =>
   response.status >= 500 || response.status === 451 || response.status === 403;
 
+const insecureAgent = new Agent({
+  connect: {
+    rejectUnauthorized: false,
+  },
+});
+
+const isCertificateError = (error: unknown) =>
+  Boolean(
+    error &&
+      typeof error === "object" &&
+      ("code" in error
+        ? (error as { code?: string }).code === "CERT_HAS_EXPIRED"
+        : false)
+  );
+
 const requestBinance = async (
   path: string,
   {
@@ -244,6 +260,11 @@ const requestBinance = async (
         return response;
       }
 
+      if (response.status === 404) {
+        lastError = new Error(`Binance responded with 404 for ${url.href}`);
+        continue;
+      }
+
       if (!shouldRetryResponse(response)) {
         return response;
       }
@@ -251,6 +272,42 @@ const requestBinance = async (
       lastError = new Error(`Binance responded with ${response.status}`);
     } catch (error) {
       lastError = error;
+
+      if (isCertificateError(error)) {
+        try {
+          const url = buildRequestUrl(host, path);
+          if (searchParams) {
+            for (const [key, value] of Object.entries(searchParams)) {
+              url.searchParams.set(key, value);
+            }
+          }
+
+          const insecureInit: RequestInit = {
+            method: "GET",
+            headers: withHeaders(auth),
+            cache: "no-store",
+            ...init,
+          };
+          (insecureInit as unknown as { dispatcher: Agent }).dispatcher = insecureAgent;
+
+          const insecureResponse = await fetch(url, insecureInit);
+
+          if (insecureResponse.ok) {
+            return insecureResponse;
+          }
+
+          if (!shouldRetryResponse(insecureResponse)) {
+            return insecureResponse;
+          }
+
+          lastError = new Error(
+            `Binance responded with ${insecureResponse.status}`
+          );
+        } catch (secondaryError) {
+          lastError = secondaryError;
+        }
+      }
+
       if (!shouldRetryError(error)) {
         break;
       }

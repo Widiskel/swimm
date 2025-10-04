@@ -20,8 +20,10 @@ import { DEFAULT_PROVIDER, isCexProvider, type CexProvider } from "@/features/ma
 import { fetchGoldCandles, fetchGoldMarketSummary } from "@/features/market/exchanges/twelvedata";
 import {
   DEFAULT_MARKET_MODE,
+  DEFAULT_ASSET_CATEGORY,
   isMarketMode,
   type MarketMode,
+  type AssetCategory,
 } from "@/features/market/constants";
 import {
   fetchTavilyExtract,
@@ -29,6 +31,11 @@ import {
   type TavilyExtractedArticle,
   type TavilySearchData,
 } from "@/lib/tavily";
+import {
+  fetchCryptoPanicHeadlines,
+  type CryptoHeadline,
+} from "@/lib/cryptopanic";
+import { installFetchLogger } from "@/lib/log-fetch";
 import { getMongoDb } from "@/lib/mongodb";
 import { getSessionFromCookie } from "@/lib/session";
 import { getUserSettings } from "@/lib/user-settings";
@@ -50,6 +57,7 @@ type AgentRequest = {
   provider?: string;
   locale?: string;
   mode?: string;
+  category?: string;
 };
 
 type AgentDecision = "buy" | "sell" | "hold";
@@ -103,14 +111,46 @@ type AgentPayload = {
   tradePlan: TradePlan;
 };
 
+installFetchLogger();
+
 const FIREWORKS_API_URL = "https://api.fireworks.ai/inference/v1/chat/completions";
 const DEFAULT_FIREWORKS_MODEL =
   "accounts/sentientfoundation/models/dobby-unhinged-llama-3-3-70b-new";
 const TAVILY_ARTICLE_LIMIT = 5;
+const KNOWN_CRYPTO_QUOTES = [
+  "USDT",
+  "USDC",
+  "USD",
+  "BUSD",
+  "FDUSD",
+  "TUSD",
+  "BTC",
+  "ETH",
+  "EUR",
+  "TRY",
+  "GBP",
+  "JPY",
+  "AUD",
+  "BNB",
+];
 
 const ALLOWED_TIMEFRAMES = ["1m", "5m", "15m", "1h", "4h", "1d"] as const;
 type Timeframe = (typeof ALLOWED_TIMEFRAMES)[number];
 const DEFAULT_TIMEFRAME: Timeframe = "5m";
+
+const TIMEFRAME_CONFIG: Record<Timeframe, { entryPct: number; stopPct: number; tpStepPct: number }> = {
+  "1m": { entryPct: 0.0015, stopPct: 0.004, tpStepPct: 0.0025 },
+  "5m": { entryPct: 0.0025, stopPct: 0.006, tpStepPct: 0.0035 },
+  "15m": { entryPct: 0.004, stopPct: 0.01, tpStepPct: 0.006 },
+  "1h": { entryPct: 0.0075, stopPct: 0.02, tpStepPct: 0.01 },
+  "4h": { entryPct: 0.0125, stopPct: 0.035, tpStepPct: 0.0175 },
+  "1d": { entryPct: 0.02, stopPct: 0.05, tpStepPct: 0.025 },
+};
+
+const resolveTimeframeConfig = (timeframe: Timeframe) =>
+  TIMEFRAME_CONFIG[timeframe] ?? TIMEFRAME_CONFIG[DEFAULT_TIMEFRAME];
+
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const tAgent = (locale: Locale, path: string, replacements?: Replacements) =>
   translate(locale, `agentApi.${path}`, replacements);
@@ -798,7 +838,7 @@ const buildMarketAnalytics = (
     : tAgent(locale, "marketAnalytics.forecast.flat");
 
   const promptSeries = trimmed
-    .slice(-60)
+    .slice(-40)
     .map(
       (item) =>
         `${new Date(item.openTime).toISOString()}|O:${item.open.toFixed(2)} H:${item.high.toFixed(2)} L:${item.low.toFixed(2)} C:${item.close.toFixed(2)} V:${item.volume.toFixed(2)}`
@@ -873,10 +913,18 @@ const buildUserMessage = (
     tavilySearch: TavilySearchData | null;
     tavilyArticles: TavilyExtractedArticle[];
     pairSymbol: string;
+    cryptoNews: CryptoHeadline[];
   },
   locale: Locale
 ) => {
   const formattedPair = formatPairLabel(params.pairSymbol);
+  const timeframeConfig = resolveTimeframeConfig(params.timeframe);
+  const timeframeHint = tAgent(locale, "userPrompt.timeframeGuidance", {
+    timeframe: params.timeframe.toUpperCase(),
+    entry: (timeframeConfig.entryPct * 100).toFixed(2),
+    stop: (timeframeConfig.stopPct * 100).toFixed(2),
+    target: (timeframeConfig.tpStepPct * 100).toFixed(2),
+  });
   const placeholders = {
     urls: tAgent(locale, "userPrompt.placeholders.urls"),
     dataset: tAgent(locale, "userPrompt.placeholders.dataset"),
@@ -891,6 +939,7 @@ const buildUserMessage = (
     datasetPreviewLabel: tAgent(locale, "userPrompt.placeholders.datasetPreviewLabel"),
     keyMetrics: tAgent(locale, "userPrompt.placeholders.keyMetrics"),
     analysisFocus: tAgent(locale, "userPrompt.placeholders.analysisFocus"),
+    cryptoNews: tAgent(locale, "userPrompt.placeholders.cryptoNews"),
   } as const;
 
   const dataModeMap: Record<DataMode, string> = {
@@ -928,8 +977,8 @@ const buildUserMessage = (
     : placeholders.keyMetrics;
 
   const analysisFocusBlock = params.marketAnalytics.analysisFocus
-    ? params.marketAnalytics.analysisFocus
-    : placeholders.analysisFocus;
+    ? [params.marketAnalytics.analysisFocus, timeframeHint].join("\n")
+    : [placeholders.analysisFocus, timeframeHint].join("\n");
 
   const tavilyAnswer = params.tavilySearch?.answer
     ? excerpt(params.tavilySearch.answer, 800)
@@ -937,6 +986,7 @@ const buildUserMessage = (
 
   const tavilyResultsBlock = params.tavilySearch?.results?.length
     ? params.tavilySearch.results
+        .slice(0, 3)
         .map((result, index) => {
           const parts = [
             `${index + 1}. ${result.title}${
@@ -964,6 +1014,7 @@ const buildUserMessage = (
 
   const tavilyArticlesBlock = params.tavilyArticles.length
     ? params.tavilyArticles
+        .slice(0, 3)
         .map((article, index) => {
           const parts = [
             `${index + 1}. ${article.title}`,
@@ -990,6 +1041,22 @@ const buildUserMessage = (
         .join("\n\n")
     : placeholders.tavilyArticles;
 
+  const cryptoNewsBlock = params.cryptoNews.length
+    ? params.cryptoNews
+        .map((headline, index) => {
+          const parts = [
+            `${index + 1}. ${headline.title}`,
+            headline.source ? `   ${tAgent(locale, "userPrompt.news.sourceLabel")}: ${headline.source}` : null,
+            headline.publishedAt
+              ? `   ${tAgent(locale, "userPrompt.news.publishedLabel")}: ${headline.publishedAt}`
+              : null,
+            headline.url ? `   ${tAgent(locale, "userPrompt.news.urlLabel")}: ${headline.url}` : null,
+          ];
+          return parts.filter(Boolean).join("\n");
+        })
+        .join("\n\n")
+    : placeholders.cryptoNews;
+
   const labels = {
     objective: tAgent(locale, "userPrompt.labels.objective"),
     dataMode: tAgent(locale, "userPrompt.labels.dataMode"),
@@ -1009,6 +1076,7 @@ const buildUserMessage = (
     tavilySummary: tAgent(locale, "userPrompt.labels.tavilySummary"),
     tavilyResults: tAgent(locale, "userPrompt.labels.tavilyResults"),
     tavilyArticles: tAgent(locale, "userPrompt.labels.tavilyArticles"),
+    cryptoNews: tAgent(locale, "userPrompt.labels.cryptoNews"),
     instructions: tAgent(locale, "userPrompt.labels.instructions"),
   } as const;
 
@@ -1069,6 +1137,9 @@ const buildUserMessage = (
     "",
     `${labels.tavilyArticles}:`,
     tavilyArticlesBlock,
+    "",
+    `${labels.cryptoNews}:`,
+    cryptoNewsBlock,
     "",
     `${labels.instructions}:`,
     ...instructions.map((item) => `- ${item}`),
@@ -1319,42 +1390,126 @@ const buildTradePlan = (
   const normalizedPrimary =
     primaryEntry !== null ? Number(primaryEntry.toFixed(2)) : null;
 
+  const timeframeSettings = resolveTimeframeConfig(marketSupport.context.timeframe);
+  const entryOffsetPct = timeframeSettings.entryPct;
+  const stopPct = timeframeSettings.stopPct;
+  const tpStepPct = timeframeSettings.tpStepPct;
+
   const fallbackEntries = normalizedPrimary !== null
     ? action === "buy"
-      ? [Number((normalizedPrimary * 0.985).toFixed(2)), normalizedPrimary]
+      ? [
+          Number((normalizedPrimary * (1 - entryOffsetPct)).toFixed(4)),
+          Number(normalizedPrimary.toFixed(4)),
+        ]
       : action === "sell"
-      ? [normalizedPrimary, Number((normalizedPrimary * 1.015).toFixed(2))]
-      : [normalizedPrimary]
+      ? [
+          Number(normalizedPrimary.toFixed(4)),
+          Number((normalizedPrimary * (1 + entryOffsetPct)).toFixed(4)),
+        ]
+      : [Number(normalizedPrimary.toFixed(4))]
     : [];
 
-  const entries = (entryArrayCandidate.length
-    ? entryArrayCandidate.map((value) => Number(value.toFixed(2)))
+  const rawEntries = (entryArrayCandidate.length
+    ? entryArrayCandidate.map((value) => Number(value.toFixed(4)))
     : fallbackEntries
-  ).slice(0, 4);
+  ).filter((value) => Number.isFinite(value));
+
+  let entries = rawEntries.slice(0, 4);
+
+  if (bias === "long") {
+    entries = [...entries].sort((a, b) => a - b);
+  } else if (bias === "short") {
+    entries = [...entries].sort((a, b) => b - a);
+  }
 
   const stopLossCandidate = ensureNumber(draft?.stopLoss);
   const fallbackStopLoss = normalizedPrimary !== null
     ? action === "buy"
-      ? Number((normalizedPrimary * 0.96).toFixed(2))
+      ? Number((normalizedPrimary * (1 - stopPct)).toFixed(4))
       : action === "sell"
-      ? Number((normalizedPrimary * 1.04).toFixed(2))
+      ? Number((normalizedPrimary * (1 + stopPct)).toFixed(4))
       : null
     : null;
-  const stopLoss =
-    stopLossCandidate !== null ? Number(stopLossCandidate.toFixed(2)) : fallbackStopLoss;
+  let stopLoss =
+    stopLossCandidate !== null ? Number(stopLossCandidate.toFixed(4)) : fallbackStopLoss;
 
   const takeProfitCandidate = ensureNumericArray(draft?.takeProfits);
   const fallbackTakeProfits = normalizedPrimary !== null
     ? action === "buy"
-      ? [1.02, 1.035, 1.05, 1.065, 1.08].map((multiplier) => normalizedPrimary * multiplier)
+      ? [1, 2, 3, 4, 5].map((step) => normalizedPrimary * (1 + tpStepPct * step))
       : action === "sell"
-      ? [0.98, 0.965, 0.95, 0.935, 0.92].map((multiplier) => normalizedPrimary * multiplier)
+      ? [1, 2, 3, 4, 5].map((step) => normalizedPrimary * (1 - tpStepPct * step))
       : []
     : [];
-  const takeProfits = (takeProfitCandidate.length ? takeProfitCandidate : fallbackTakeProfits)
-    .map((value) => Number(value.toFixed(2)))
+  let takeProfits = (takeProfitCandidate.length ? takeProfitCandidate : fallbackTakeProfits)
+    .map((value) => Number(value.toFixed(4)))
     .filter((value, index, array) => Number.isFinite(value) && array.indexOf(value) === index)
     .slice(0, 5);
+
+  if (bias === "long") {
+    takeProfits = [...takeProfits].sort((a, b) => a - b);
+  } else if (bias === "short") {
+    takeProfits = [...takeProfits].sort((a, b) => b - a);
+  }
+
+  const comparisonEntry =
+    entries.length > 0
+      ? entries[0]
+      : normalizedPrimary !== null
+      ? normalizedPrimary
+      : marketPrice !== null
+      ? marketPrice
+      : null;
+
+  if (comparisonEntry !== null) {
+    const maxEntryDeviation = stopPct * 3;
+    const filteredEntries = entries.filter((value) => {
+      const diffPct = Math.abs(value - comparisonEntry) / Math.max(Math.abs(comparisonEntry), 1e-8);
+      return diffPct <= maxEntryDeviation;
+    });
+    if (filteredEntries.length) {
+      entries = filteredEntries;
+    } else if (fallbackEntries.length) {
+      entries = [...fallbackEntries];
+    }
+
+    const maxTpDeviation = tpStepPct * 8;
+    const filteredTps = takeProfits.filter((value) => {
+      const diffPct = Math.abs(value - comparisonEntry) / Math.max(Math.abs(comparisonEntry), 1e-8);
+      return diffPct <= maxTpDeviation;
+    });
+    if (filteredTps.length) {
+      takeProfits = filteredTps;
+    } else if (fallbackTakeProfits.length) {
+      takeProfits = fallbackTakeProfits;
+    }
+  }
+
+  entries = entries.slice(0, 4);
+  takeProfits = takeProfits.slice(0, 5);
+
+  if (entries.length > 0) {
+    const referenceEntry = entries[0];
+    if (bias === "long") {
+      const invalidStop =
+        stopLoss === null ||
+        stopLoss >= referenceEntry ||
+        Math.abs(stopLoss - referenceEntry) / Math.max(Math.abs(referenceEntry), 1e-8) > stopPct * 2.5;
+      if (invalidStop) {
+        const base = normalizedPrimary ?? referenceEntry;
+        stopLoss = Number((base * (1 - stopPct)).toFixed(4));
+      }
+    } else if (bias === "short") {
+      const invalidStop =
+        stopLoss === null ||
+        stopLoss <= referenceEntry ||
+        Math.abs(stopLoss - referenceEntry) / Math.max(Math.abs(referenceEntry), 1e-8) > stopPct * 2.5;
+      if (invalidStop) {
+        const base = normalizedPrimary ?? referenceEntry;
+        stopLoss = Number((base * (1 + stopPct)).toFixed(4));
+      }
+    }
+  }
 
   const executionWindow = ensureString(
     draft?.executionWindow,
@@ -1521,6 +1676,9 @@ export async function POST(request: Request) {
   const provider: CexProvider = isCexProvider(providerParam) ? providerParam : DEFAULT_PROVIDER;
   const modeParam = typeof body.mode === "string" ? body.mode.toLowerCase() : DEFAULT_MARKET_MODE;
   const mode: MarketMode = isMarketMode(modeParam) ? modeParam : DEFAULT_MARKET_MODE;
+  const categoryParam =
+    typeof body.category === "string" ? body.category.toLowerCase() : DEFAULT_ASSET_CATEGORY;
+  const assetCategory: AssetCategory = categoryParam === "gold" ? "gold" : "crypto";
 
   const requestedSymbol = (() => {
     const explicit = body.pairSymbol?.toUpperCase();
@@ -1565,18 +1723,24 @@ export async function POST(request: Request) {
   const dataMode = body.dataMode ?? "scrape";
   const timeframe = normalizeTimeframe(body.timeframe);
 
+  const baseCurrency = extractBaseCurrency(symbol);
+  const cryptoHeadlinesPromise =
+    assetCategory === "crypto" && baseCurrency
+      ? fetchCryptoPanicHeadlines(baseCurrency)
+      : Promise.resolve({ headlines: [], limited: false });
+
   const historyInsightsPromise = session
     ? buildHistoryInsightsForPrompt(session.userId, symbol, timeframe, locale)
     : Promise.resolve(null);
 
   const explicitNewsUrls = dataMode === "scrape" ? urls : [];
-  const newsPromise = (async () => {
+  const tavilyContentPromise = (async () => {
     let search = objective.length > 0
-      ? await fetchTavilySearch(objective, { maxResults: 6 })
+      ? await fetchTavilySearch(objective, { maxResults: 3 })
       : null;
 
     if (!search) {
-      search = await fetchTavilySearch(`${symbol} ${timeframe.toUpperCase()}`, { maxResults: 4 });
+      search = await fetchTavilySearch(`${symbol} ${timeframe.toUpperCase()}`, { maxResults: 3 });
     }
 
     const seen = new Set<string>();
@@ -1602,7 +1766,7 @@ export async function POST(request: Request) {
     }
 
     if (search?.results?.length) {
-      for (const item of search.results) {
+      for (const item of search.results.slice(0, 3)) {
         const normalized = normalizeNewsUrl(item.url);
         if (normalized) {
           push(normalized);
@@ -1614,7 +1778,7 @@ export async function POST(request: Request) {
     }
 
     const articles = collected.length
-      ? await fetchTavilyExtract(collected, { maxUrls: TAVILY_ARTICLE_LIMIT })
+      ? await fetchTavilyExtract(collected, { maxUrls: Math.min(collected.length, 3) })
       : [];
 
     return { search, articles };
@@ -1664,9 +1828,14 @@ export async function POST(request: Request) {
     ]);
   }
 
-  const [{ search: tavilySearch, articles: tavilyArticles }, historyInsights] = await Promise.all([
-    newsPromise,
+  const [
+    { search: tavilySearch, articles: tavilyArticles },
+    historyInsights,
+    cryptoHeadlinesResult,
+  ] = await Promise.all([
+    tavilyContentPromise,
     historyInsightsPromise,
+    cryptoHeadlinesPromise,
   ]);
   const resolvedSymbol =
     provider === "twelvedata"
@@ -1679,6 +1848,10 @@ export async function POST(request: Request) {
       ? (summaryData as { summary: string }).summary
       : formatBinanceSummary(summaryData as BinanceMarketSummary | null, locale, mode);
   const marketAnalytics = buildMarketAnalytics(candles, timeframe, locale);
+  const cryptoNewsHeadlines =
+    assetCategory === "crypto" ? cryptoHeadlinesResult.headlines : [];
+  const cryptoNewsRateLimited =
+    assetCategory === "crypto" ? cryptoHeadlinesResult.limited : false;
   const resolvedLastPrice =
     (typeof marketAnalytics.lastClose === "number" && marketAnalytics.lastClose > 0
       ? marketAnalytics.lastClose
@@ -1710,13 +1883,8 @@ export async function POST(request: Request) {
   const timeout = setTimeout(() => controller.abort(), 45_000);
 
   try {
-    const response = await fetch(FIREWORKS_API_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
+    const buildBody = () =>
+      JSON.stringify({
         model: process.env.FIREWORKS_MODEL ?? DEFAULT_FIREWORKS_MODEL,
         temperature: 0.15,
         max_tokens: 1_000,
@@ -1748,21 +1916,51 @@ export async function POST(request: Request) {
               tavilySearch,
               tavilyArticles,
               pairSymbol: marketSupport.context.symbol,
+              cryptoNews: cryptoNewsHeadlines,
             }, locale),
           },
         ],
-      }),
-      signal: controller.signal,
-    });
+      });
 
-    if (!response.ok) {
+    let modelResponse: Response | null = null;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const response = await fetch(FIREWORKS_API_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: buildBody(),
+        signal: controller.signal,
+      });
+
+      if (response.ok) {
+        modelResponse = response;
+        break;
+      }
+
       const errorText = await response.text().catch(() => "");
+      const shouldRetry = response.status >= 500 && attempt === 0;
+      console.warn(
+        `[Fireworks] attempt ${attempt + 1} failed: ${response.status} ${
+          response.statusText
+        } ${errorText.slice(0, 160)}`
+      );
+      if (shouldRetry) {
+        await wait(800);
+        continue;
+      }
+
       throw new Error(
         `Sentient Models error (${response.status}): ${errorText || response.statusText}`
       );
     }
 
-    const result = (await response.json()) as {
+    if (!modelResponse) {
+      throw new Error("Sentient Models error: unknown failure");
+    }
+
+    const result = (await modelResponse.json()) as {
       choices?: Array<{ message?: { content?: string } }>;
     };
     const content = result.choices?.[0]?.message?.content;
@@ -1774,7 +1972,11 @@ export async function POST(request: Request) {
     const draft = parseModelPayload(content);
     const payload = buildAgentPayload(draft, objective, timeframe, marketSupport, locale);
 
-    return NextResponse.json(payload);
+    return NextResponse.json({
+      ...payload,
+      newsHeadlines: cryptoNewsHeadlines,
+      newsRateLimited: cryptoNewsRateLimited,
+    });
   } catch (error) {
     const message =
       error instanceof Error && error.name === "AbortError"
@@ -1797,9 +1999,18 @@ export async function POST(request: Request) {
 
 
 
-
-
-
-
-
-
+const extractBaseCurrency = (symbol: string | null | undefined): string | null => {
+  if (!symbol) {
+    return null;
+  }
+  const upper = symbol.trim().toUpperCase();
+  if (!upper) {
+    return null;
+  }
+  const quote = KNOWN_CRYPTO_QUOTES.find((candidate) => upper.endsWith(candidate));
+  if (!quote) {
+    return null;
+  }
+  const base = upper.slice(0, upper.length - quote.length).replace(/[^A-Z0-9]/g, "");
+  return base.length >= 2 ? base : null;
+};

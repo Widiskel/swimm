@@ -3,7 +3,12 @@ import { createProxyMiddleware } from "http-proxy-middleware";
 
 const app = express();
 
-const binanceTarget = process.env.BINANCE_TARGET ?? "https://api.binance.com";
+const binanceSpotTarget =
+  process.env.BINANCE_TARGET ?? "https://api.binance.com";
+const binanceFuturesTarget =
+  process.env.BINANCE_FUTURES_TARGET ?? "https://fapi.binance.com";
+const binanceDeliveryTarget =
+  process.env.BINANCE_DELIVERY_TARGET ?? "https://dapi.binance.com";
 const bybitTarget = process.env.BYBIT_TARGET ?? "https://api.bybit.com";
 
 const logProxyRequest = (label) => (proxyReq, req) => {
@@ -20,10 +25,20 @@ const logProxyResponse = (label) => (proxyRes, req) => {
 app.use(
   "/binance",
   createProxyMiddleware({
-    target: binanceTarget,
+    target: binanceSpotTarget,
     changeOrigin: true,
     pathRewrite: { "^/binance": "" },
     followRedirects: true,
+    router: (req) => {
+      const path = req.originalUrl.replace(/^\/binance/, "");
+      if (path.startsWith("/fapi")) {
+        return binanceFuturesTarget;
+      }
+      if (path.startsWith("/dapi")) {
+        return binanceDeliveryTarget;
+      }
+      return binanceSpotTarget;
+    },
     onProxyReq: logProxyRequest("BINANCE"),
     onProxyRes: logProxyResponse("BINANCE"),
   })

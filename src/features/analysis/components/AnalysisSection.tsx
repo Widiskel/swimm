@@ -192,6 +192,7 @@ export function AnalysisSection({
   const analysisCopy = messages.analysis;
   const fallbackCopy = messages.analysisFallback;
   const saveCopy = analysisCopy.savePanel;
+  const newsCopy = analysisCopy.news;
 
   const summaryText = response?.summary?.trim().length
     ? response.summary
@@ -208,6 +209,8 @@ export function AnalysisSection({
   const technicalLines = response?.market?.technical ?? [];
   const fundamentalLines = response?.market?.fundamental ?? [];
   const nextStepLines = response?.nextSteps ?? [];
+  const newsHeadlines = response?.newsHeadlines ?? [];
+  const newsRateLimited = Boolean(response?.newsRateLimited);
 
   const sizingNotesText = tradeSizingNotes?.trim().length
     ? tradeSizingNotes
@@ -318,6 +321,29 @@ export function AnalysisSection({
         maximumFractionDigits: 6,
       }),
     [languageTag]
+  );
+
+  const newsDateFormatter = useMemo(
+    () =>
+      new Intl.DateTimeFormat(languageTag, {
+        dateStyle: "medium",
+        timeStyle: "short",
+      }),
+    [languageTag]
+  );
+
+  const formatNewsDate = useCallback(
+    (value: string) => {
+      if (!value) {
+        return "-";
+      }
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) {
+        return value;
+      }
+      return newsDateFormatter.format(date);
+    },
+    [newsDateFormatter]
   );
 
   const formatSigned = (value: number | null) => {
@@ -1029,6 +1055,52 @@ export function AnalysisSection({
             </div>
           </div>
         </div>
+
+        {(newsHeadlines.length > 0 || newsRateLimited) && (
+          <div className="rounded-3xl border border-[var(--swimm-neutral-300)] bg-white p-6">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--swimm-neutral-300)]">
+                {newsCopy.title}
+              </div>
+              {newsRateLimited ? (
+                <span className="rounded-full border border-[var(--swimm-warning,#f59e0b)]/40 bg-[var(--swimm-warning,#f59e0b)]/10 px-3 py-1 text-[10px] font-semibold text-[var(--swimm-warning,#b45309)]">
+                  {newsCopy.rateLimit}
+                </span>
+              ) : null}
+            </div>
+            {newsHeadlines.length ? (
+              <ul className="mt-4 space-y-3 text-xs text-[var(--swimm-neutral-500)]">
+                {newsHeadlines.map((headline, index) => (
+                  <li
+                    key={(headline.url || headline.title) + String(index)}
+                    className="rounded-2xl border border-[var(--swimm-neutral-200)] bg-[var(--swimm-neutral-50)] px-4 py-3"
+                  >
+                    <div className="flex flex-col gap-2">
+                      <a
+                        href={headline.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="font-semibold text-[var(--swimm-primary-700)] transition hover:underline"
+                      >
+                        {headline.title}
+                      </a>
+                      <div className="flex flex-wrap gap-4 text-[11px] text-[var(--swimm-neutral-400)]">
+                        <span>
+                          {newsCopy.sourceLabel}: {headline.source || "-"}
+                        </span>
+                        <span>
+                          {newsCopy.publishedLabel}: {formatNewsDate(headline.publishedAt)}
+                        </span>
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-3 text-xs text-[var(--swimm-neutral-400)]">{newsCopy.empty}</p>
+            )}
+          </div>
+        )}
 
         <div className="flex h-full flex-col rounded-3xl border border-[var(--swimm-neutral-300)] bg-white p-6">
           <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--swimm-neutral-300)]">

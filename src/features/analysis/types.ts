@@ -36,4 +36,11 @@ export type AgentResponse = {
     sizingNotes: string;
     rationale: string;
   };
+  newsHeadlines?: Array<{
+    title: string;
+    url: string;
+    source: string;
+    publishedAt: string;
+  }>;
+  newsRateLimited?: boolean;
 };

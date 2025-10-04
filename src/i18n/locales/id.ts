@@ -235,6 +235,7 @@ const id = {
         datasetPreviewLabel: "Isi (dipangkas)",
         keyMetrics: "(Metrik kunci belum tersedia)",
         analysisFocus: "(Belum ada fokus analisa)",
+        cryptoNews: "(Tidak ada headline CryptoPanic)",
       },
       datasetNameLabel: "Nama dataset",
       tavily: {
@@ -244,6 +245,13 @@ const id = {
         excerptLabel: "Kutipan",
         rawExcerptLabel: "Kutipan (raw)",
       },
+      news: {
+        sourceLabel: "Sumber",
+        publishedLabel: "Terbit",
+        urlLabel: "URL",
+      },
+      timeframeGuidance:
+        "Panduan timeframe: gunakan {timeframe}. Jaga entry ±{entry}% dari harga pasar, tempatkan stop sekitar {stop}%, dan atur target bertahap sekitar {target}%.",
       dataMode: {
         scrape: "Scrape URL berita",
         upload: "Unggah dataset",
@@ -268,6 +276,7 @@ const id = {
         tavilySummary: "Ringkasan Tavily",
         tavilyResults: "Hasil pencarian Tavily",
         tavilyArticles: "Konten Tavily",
+        cryptoNews: "Headline CryptoPanic",
         instructions: "Instruksi",
       },
       instructions:
@@ -345,6 +354,14 @@ const id = {
     highlights: {
       title: "Catatan pendukung",
       empty: "Belum ada catatan pendukung.",
+    },
+    news: {
+      title: "Headline pasar",
+      empty: "Belum ada headline terbaru untuk pair ini.",
+      rateLimit: "Batas penggunaan CryptoPanic tercapai; headline mungkin tidak lengkap.",
+      sourceLabel: "Sumber",
+      publishedLabel: "Terbit",
+      openLink: "Buka artikel",
     },
     tradePlan: {
       title: "Trade plan",
@@ -733,23 +750,40 @@ const id = {
       ctaSecondaryGuest: "Jelajahi fitur",
       privyWaiting:
         "Menunggu koneksi Privy... tombol akan aktif setelah autentikasi siap.",
-      highlights: [
-        {
-          title: "Prakiraan Multi-Pair",
-          description:
-            "Proyeksi AI untuk BTC, ETH, SOL, dan aset yang bergantian.",
-        },
-        {
-          title: "Sentimen Terpadu",
-          description:
-            "Gabungkan headline hasil scraping, ringkasan, dan data kustom untuk keputusan berimbang.",
-        },
-        {
-          title: "Rencana Trading",
-          description:
-            "Entry, target, stop, dan panduan sizing yang selaras dengan timeframe Anda.",
-        },
-      ],
+    highlights: [
+      {
+        title: "Prakiraan Multi-Pair",
+        description:
+          "Proyeksi AI untuk BTC, ETH, SOL, dan aset yang bergantian.",
+      },
+      {
+        title: "Sentimen Terpadu",
+        description:
+          "Gabungkan headline hasil scraping, ringkasan, dan data kustom untuk keputusan berimbang.",
+      },
+      {
+        title: "Rencana Trading",
+        description:
+          "Entry, target, stop, dan panduan sizing yang selaras dengan timeframe Anda.",
+      },
+    ],
+    metrics: [
+      {
+        value: "2,3 dtk",
+        label: "Respons agent",
+        caption: "Rata-rata waktu jawaban di seluruh pair",
+      },
+      {
+        value: "40+",
+        label: "Sinyal siap pakai",
+        caption: "Playbook long/short harian untuk kripto & emas",
+      },
+      {
+        value: "3",
+        label: "Provider data",
+        caption: "Feed Binance, Bybit, dan Twelve Data dalam satu layar",
+      },
+    ],
     },
     why: {
       heading: "Mengapa trader memilih SWIMM",
@@ -789,14 +823,35 @@ const id = {
         },
       ],
     },
-    spotlight: {
-      badge: "Sorotan fitur",
-      title: "Analisa emas dalam sekali klik",
-      description:
-        "Analisa emas spot (XAUUSD) dengan agent SWIMM yang sama — stream candlestick lalu hasilkan entry, target, stop, dan narasi.",
-      cta: "Buka analisa Emas",
-      tags: ["Candlestick live", "Rencana AI", "Parameter risiko"],
-    },
+  spotlight: {
+    badge: "Sorotan fitur",
+    title: "Analisa emas dalam sekali klik",
+    description:
+      "Analisa emas spot (XAUUSD) dengan agent SWIMM yang sama — stream candlestick lalu hasilkan entry, target, stop, dan narasi.",
+    cta: "Buka analisa Emas",
+    tags: ["Candlestick live", "Rencana AI", "Parameter risiko"],
+  },
+  providers: {
+    heading: "Cakupan pasar terpadu",
+    description:
+      "Harga institusional, kedalaman likuiditas, dan konteks makro digabung jadi satu permukaan analitik.",
+    items: [
+      "Data spot & futures Binance",
+      "Order flow derivatif Bybit",
+      "Feed emas & FX dari Twelve Data",
+    ],
+  },
+  preview: {
+    title: "Snapshot agent live",
+    subtitle: "Contoh keluaran SWIMM yang diperbarui setiap candle tertutup.",
+    rows: [
+      "BTCUSDT • 1H bias LONG",
+      "Kepercayaan 72%  |  Risiko per trade 1,2%",
+      "Entry 67.250  |  Stop 65.980  |  Target 67.880 / 68.540",
+      "Narasi: Higher low bertahan dengan bid spot yang menguat.",
+    ],
+    footer: "Otomatis terbarui dengan candle, order flow, dan berita terbaru.",
+  },
     gettingStarted: {
       heading: "Mulai bersama SWIMM",
       description:

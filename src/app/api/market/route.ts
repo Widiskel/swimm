@@ -25,8 +25,11 @@ import { isLocale, type Locale } from "@/i18n/messages";
 import { translate } from "@/i18n/translate";
 import { getSessionFromCookie } from "@/lib/session";
 import { getUserSettings } from "@/lib/user-settings";
+import { installFetchLogger } from "@/lib/log-fetch";
 
 const ALLOWED_INTERVALS = new Set(["1m", "5m", "15m", "1h", "4h", "1d"]);
+
+installFetchLogger();
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
