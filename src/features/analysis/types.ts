@@ -41,6 +41,24 @@ export type AgentResponse = {
     url: string;
     source: string;
     publishedAt: string;
+    description?: string | null;
+    originalUrl?: string | null;
+    image?: string | null;
+    author?: string | null;
+    sentimentScore?: number | null;
+    sentimentLabel?: "bullish" | "neutral" | "bearish";
+    panicScore1h?: number | null;
+    votes?: {
+      positive: number;
+      negative: number;
+      important: number;
+      liked: number;
+      disliked: number;
+      lol: number;
+      toxic: number;
+      saved: number;
+      comments: number;
+    } | null;
   }>;
   newsRateLimited?: boolean;
 };

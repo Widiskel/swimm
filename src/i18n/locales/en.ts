@@ -248,6 +248,13 @@ const en = {
         sourceLabel: "Source",
         publishedLabel: "Published",
         urlLabel: "URL",
+        sentimentLabel: "Sentiment",
+        sentimentUnknown: "N/A",
+        sentimentValues: {
+          bullish: "Bullish",
+          neutral: "Neutral",
+          bearish: "Bearish",
+        },
       },
       timeframeGuidance:
         "Timeframe directive: operate on {timeframe}. Keep entries within ±{entry}% of market price, place stops around {stop}%, and step targets by roughly {target}%.",
@@ -361,6 +368,13 @@ const en = {
       sourceLabel: "Source",
       publishedLabel: "Published",
       openLink: "Open article",
+      sentimentLabel: "Sentiment",
+      sentimentUnknown: "-",
+      sentimentValue: {
+        bullish: "Bullish",
+        neutral: "Neutral",
+        bearish: "Bearish",
+      },
     },
     tradePlan: {
       title: "Trade plan",

@@ -1044,6 +1044,18 @@ const buildUserMessage = (
   const cryptoNewsBlock = params.cryptoNews.length
     ? params.cryptoNews
         .map((headline, index) => {
+          const sentimentScore =
+            typeof headline.sentimentScore === "number" && Number.isFinite(headline.sentimentScore)
+              ? Math.round(headline.sentimentScore)
+              : null;
+          const sentimentKey =
+            typeof headline.sentimentLabel === "string"
+              ? `userPrompt.news.sentimentValues.${headline.sentimentLabel}`
+              : "userPrompt.news.sentimentValues.neutral";
+          const sentimentLabel = tAgent(locale, sentimentKey);
+          const sentimentLine = `   ${tAgent(locale, "userPrompt.news.sentimentLabel")}: ${
+            sentimentLabel || tAgent(locale, "userPrompt.news.sentimentUnknown")
+          }${sentimentScore !== null ? ` (${sentimentScore})` : ""}`;
           const parts = [
             `${index + 1}. ${headline.title}`,
             headline.source ? `   ${tAgent(locale, "userPrompt.news.sourceLabel")}: ${headline.source}` : null,
@@ -1051,6 +1063,7 @@ const buildUserMessage = (
               ? `   ${tAgent(locale, "userPrompt.news.publishedLabel")}: ${headline.publishedAt}`
               : null,
             headline.url ? `   ${tAgent(locale, "userPrompt.news.urlLabel")}: ${headline.url}` : null,
+            sentimentLine,
           ];
           return parts.filter(Boolean).join("\n");
         })

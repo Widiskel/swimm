@@ -223,9 +223,7 @@ export function AnalysisSection({
 
   const [equity, setEquity] = useState<number>(1000);
   const [riskPct, setRiskPct] = useState<number>(1.0);
-  const [leverage, setLeverage] = useState<number>(
-    isLeveragedMarket ? 20 : 1
-  );
+  const [leverage, setLeverage] = useState<number>(isLeveragedMarket ? 20 : 1);
   const [leverageTouched, setLeverageTouched] = useState(false);
   const [manualBudget, setManualBudget] = useState<number>(0);
   const [manualBudgetTouched, setManualBudgetTouched] = useState(false);
@@ -346,6 +344,26 @@ export function AnalysisSection({
     [newsDateFormatter]
   );
 
+  const formatNewsSentiment = (
+    headline: NonNullable<AgentResponse["newsHeadlines"]>[number]
+  ) => {
+    const labelMap = newsCopy.sentimentValue as
+      | Partial<Record<"bullish" | "neutral" | "bearish", string>>
+      | undefined;
+    const fallbackLabel = newsCopy.sentimentUnknown ?? "-";
+    const labelKey = headline.sentimentLabel ?? "neutral";
+    const translatedLabel = labelMap?.[labelKey] ?? fallbackLabel;
+    const score =
+      typeof headline.sentimentScore === "number" &&
+      Number.isFinite(headline.sentimentScore)
+        ? Math.round(headline.sentimentScore)
+        : null;
+    if (score !== null) {
+      return `${translatedLabel} (${score})`;
+    }
+    return translatedLabel;
+  };
+
   const formatSigned = (value: number | null) => {
     if (value === null || Number.isNaN(value)) {
       return "-";
@@ -374,8 +392,7 @@ export function AnalysisSection({
     manualBudgetNormalized !== null && manualEntryPriceResolved !== null
       ? Number(
           (
-            manualBudgetNormalized *
-            (isLeveragedMarket ? clampedLeverage : 1)
+            manualBudgetNormalized * (isLeveragedMarket ? clampedLeverage : 1)
           ).toFixed(2)
         )
       : null;
@@ -447,9 +464,7 @@ export function AnalysisSection({
               }
             : null
         )
-        .filter(
-          (item): item is TargetRow => item !== null
-        ),
+        .filter((item): item is TargetRow => item !== null),
       effectiveStop !== null
         ? {
             key: "stop",
@@ -492,75 +507,67 @@ export function AnalysisSection({
   }
 
   useEffect(() => {
-    if (!response || !analysisCandles.length) {
-      if (chartRef.current) {
-        chartRef.current.remove();
-        chartRef.current = null;
-        seriesRef.current = null;
-        indicatorSeriesRef.current = {};
-        overlayPriceLinesRef.current = [];
+    if (!chartRef.current) {
+      if (!chartContainerRef.current) {
+        return;
       }
+
+      const chart = createChart(chartContainerRef.current, {
+        layout: {
+          background: { color: "#020617" },
+          textColor: "#cbd5f5",
+        },
+        grid: {
+          vertLines: { color: "#0f172a" },
+          horzLines: { color: "#0f172a" },
+        },
+        rightPriceScale: {
+          borderColor: "#1e293b",
+        },
+        timeScale: {
+          borderColor: "#1e293b",
+          secondsVisible: false,
+        },
+        autoSize: true,
+        handleScroll: true,
+        handleScale: true,
+      });
+
+      const candleSeries = chart.addCandlestickSeries({
+        upColor: "#22c55e",
+        borderUpColor: "#22c55e",
+        wickUpColor: "#22c55e",
+        downColor: "#ef4444",
+        borderDownColor: "#ef4444",
+        wickDownColor: "#ef4444",
+        priceLineVisible: false,
+        lastValueVisible: false,
+      });
+
+      chartRef.current = chart;
+      seriesRef.current = candleSeries;
+      indicatorSeriesRef.current = createIndicatorSeries(
+        chart,
+        indicatorVisibility,
+        INDICATOR_CONFIG
+      );
+    }
+
+    if (!response || !analysisCandles.length) {
+      chartRef.current?.timeScale().fitContent();
       setSnapshotReady(false);
       return;
     }
 
-    if (!chartContainerRef.current) {
+    const chart = chartRef.current;
+    const candleSeries = seriesRef.current;
+    const chartRoot = chartContainerRef.current;
+    if (!chart || !candleSeries || !chartRoot) {
       return;
     }
 
-    const previousRange: LogicalRange | null = chartRef.current
-      ? chartRef.current.timeScale().getVisibleLogicalRange()
-      : null;
-
-    if (chartRef.current) {
-      chartRef.current.remove();
-      chartRef.current = null;
-      seriesRef.current = null;
-      indicatorSeriesRef.current = {};
-      overlayPriceLinesRef.current = [];
-    }
-
-    const chartRoot = chartContainerRef.current;
-
-    const chart = createChart(chartRoot, {
-      layout: {
-        background: { color: "#020617" },
-        textColor: "#cbd5f5",
-      },
-      grid: {
-        vertLines: { color: "#0f172a" },
-        horzLines: { color: "#0f172a" },
-      },
-      rightPriceScale: {
-        borderColor: "#1e293b",
-      },
-      timeScale: {
-        borderColor: "#1e293b",
-        secondsVisible: false,
-      },
-      autoSize: true,
-      handleScroll: true,
-      handleScale: true,
-    });
-
-    const candleSeries = chart.addCandlestickSeries({
-      upColor: "#22c55e",
-      borderUpColor: "#22c55e",
-      wickUpColor: "#22c55e",
-      downColor: "#ef4444",
-      borderDownColor: "#ef4444",
-      wickDownColor: "#ef4444",
-      priceLineVisible: false,
-      lastValueVisible: false,
-    });
-
-    chartRef.current = chart;
-    seriesRef.current = candleSeries;
-    indicatorSeriesRef.current = createIndicatorSeries(
-      chart,
-      indicatorVisibility,
-      INDICATOR_CONFIG
-    );
+    const previousRange: LogicalRange | null =
+      chart.timeScale().getVisibleLogicalRange();
 
     const limitedCandles = analysisCandles.slice(-SNAPSHOT_LIMIT);
     candleSeries.setData(limitedCandles);
@@ -736,7 +743,7 @@ export function AnalysisSection({
       typeof ResizeObserver !== "undefined"
         ? new ResizeObserver(() => renderOverlay())
         : null;
-    if (chartRoot && resizeObserver) {
+    if (resizeObserver) {
       resizeObserver.observe(chartRoot);
     }
 
@@ -1089,7 +1096,12 @@ export function AnalysisSection({
                           {newsCopy.sourceLabel}: {headline.source || "-"}
                         </span>
                         <span>
-                          {newsCopy.publishedLabel}: {formatNewsDate(headline.publishedAt)}
+                          {newsCopy.publishedLabel}:{" "}
+                          {formatNewsDate(headline.publishedAt)}
+                        </span>
+                        <span>
+                          {newsCopy.sentimentLabel}:{" "}
+                          {formatNewsSentiment(headline)}
                         </span>
                       </div>
                     </div>
@@ -1097,12 +1109,14 @@ export function AnalysisSection({
                 ))}
               </ul>
             ) : (
-              <p className="mt-3 text-xs text-[var(--swimm-neutral-400)]">{newsCopy.empty}</p>
+              <p className="mt-3 text-xs text-[var(--swimm-neutral-400)]">
+                {newsCopy.empty}
+              </p>
             )}
           </div>
         )}
 
-        <div className="flex h-full flex-col rounded-3xl border border-[var(--swimm-neutral-300)] bg-white p-6">
+        <div className="flex h-full w-full flex-col rounded-3xl border border-[var(--swimm-neutral-300)] bg-white p-6 lg:col-span-2 lg:self-start">
           <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--swimm-neutral-300)]">
             {analysisCopy.tradePlan.title}
           </div>
@@ -1273,7 +1287,9 @@ export function AnalysisSection({
                 <div>
                   {sizingCopy.positionSizeLabel}:{" "}
                   {recommendedQuantity !== null
-                    ? `${formatQuantity(recommendedQuantity)} ${baseAssetSymbol}`
+                    ? `${formatQuantity(
+                        recommendedQuantity
+                      )} ${baseAssetSymbol}`
                     : "-"}
                 </div>
                 <div>
@@ -1384,8 +1400,7 @@ export function AnalysisSection({
                   </div>
                 )}
                 <div>
-                  {sizingCopy.riskAmountLabel}:{" "}
-                  {formatSigned(manualStopPnl)}
+                  {sizingCopy.riskAmountLabel}: {formatSigned(manualStopPnl)}
                 </div>
               </div>
             </div>
@@ -1399,10 +1414,16 @@ export function AnalysisSection({
               <table className="min-w-full divide-y divide-[var(--swimm-neutral-200)] text-xs">
                 <thead>
                   <tr className="text-[11px] uppercase tracking-[0.2em] text-[var(--swimm-neutral-400)]">
-                    <th className="py-2 text-left">{sizingCopy.targetColumn}</th>
+                    <th className="py-2 text-left">
+                      {sizingCopy.targetColumn}
+                    </th>
                     <th className="py-2 text-left">{sizingCopy.priceColumn}</th>
-                    <th className="py-2 text-left">{sizingCopy.recommendedColumn}</th>
-                    <th className="py-2 text-left">{sizingCopy.manualColumn}</th>
+                    <th className="py-2 text-left">
+                      {sizingCopy.recommendedColumn}
+                    </th>
+                    <th className="py-2 text-left">
+                      {sizingCopy.manualColumn}
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--swimm-neutral-200)]">
@@ -1410,7 +1431,9 @@ export function AnalysisSection({
                     pnlRows.map((row) => (
                       <tr
                         key={row.key}
-                        className={row.isStop ? "bg-[var(--swimm-neutral-50)]" : ""}
+                        className={
+                          row.isStop ? "bg-[var(--swimm-neutral-50)]" : ""
+                        }
                       >
                         <td className="py-2 font-semibold text-[var(--swimm-neutral-600)]">
                           {row.label}
@@ -1484,7 +1507,7 @@ export function AnalysisSection({
         </div>
 
         {showSavePanel ? (
-        <div className="rounded-3xl border border-[var(--swimm-neutral-300)] bg-white p-6 lg:col-span-2 lg:self-start">
+          <div className="rounded-3xl border border-[var(--swimm-neutral-300)] bg-white p-6 lg:col-span-2 lg:self-start">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--swimm-neutral-300)]">

@@ -469,6 +469,7 @@ export default function AnalysisPage() {
     selectedPair,
     timeframe,
     lastClosedTimeSec,
+    assetCategory,
   ]);
 
   // Auto-run analyze when a new candle closes for the selected timeframe (strict closed-candle)

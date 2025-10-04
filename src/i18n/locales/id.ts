@@ -249,6 +249,13 @@ const id = {
         sourceLabel: "Sumber",
         publishedLabel: "Terbit",
         urlLabel: "URL",
+        sentimentLabel: "Sentimen",
+        sentimentUnknown: "-",
+        sentimentValues: {
+          bullish: "Bullish",
+          neutral: "Netral",
+          bearish: "Bearish",
+        },
       },
       timeframeGuidance:
         "Panduan timeframe: gunakan {timeframe}. Jaga entry ±{entry}% dari harga pasar, tempatkan stop sekitar {stop}%, dan atur target bertahap sekitar {target}%.",
@@ -362,6 +369,13 @@ const id = {
       sourceLabel: "Sumber",
       publishedLabel: "Terbit",
       openLink: "Buka artikel",
+      sentimentLabel: "Sentimen",
+      sentimentUnknown: "-",
+      sentimentValue: {
+        bullish: "Bullish",
+        neutral: "Netral",
+        bearish: "Bearish",
+      },
     },
     tradePlan: {
       title: "Trade plan",
