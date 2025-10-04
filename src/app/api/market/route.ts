@@ -35,7 +35,6 @@ export async function GET(request: NextRequest) {
   const symbolParamRaw = searchParams.get("symbol")?.toUpperCase();
   const modeParam = searchParams.get("mode")?.toLowerCase() ?? DEFAULT_MARKET_MODE;
   const mode: MarketMode = isMarketMode(modeParam) ? modeParam : DEFAULT_MARKET_MODE;
-  const defaultSymbol = "BTCUSDT";
   const symbolParam = symbolParamRaw
     ? symbolParamRaw.replace(/[^A-Z0-9]/g, "")
     : provider === "bybit"
@@ -54,7 +53,6 @@ export async function GET(request: NextRequest) {
   const settings = session ? await getUserSettings(session.userId) : null;
 
   const binanceAuth = settings?.binanceApiKey ? { apiKey: settings.binanceApiKey } : undefined;
-  const bybitAuth = settings?.bybitApiKey ? { apiKey: settings.bybitApiKey } : undefined;
 
   if (provider === "binance") {
     const isSupported = await isPairTradable(symbolParam, binanceAuth, mode);
@@ -79,7 +77,9 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const limit = Number.isFinite(limitParam) ? Math.max(50, Math.min(limitParam, 5000)) : 500;
+  const requestedLimit = Number.isFinite(limitParam)
+    ? Math.max(50, Math.min(limitParam, 5000))
+    : 500;
 
   const parseTimestamp = (value: string | null) => {
     if (!value) {
@@ -110,14 +110,14 @@ export async function GET(request: NextRequest) {
 
   const intervalMs = intervalMsMap[intervalParam] ?? intervalMsMap["1h"];
 
-  const computedLimit = (() => {
+  const effectiveLimit = (() => {
     if (startTimeMs !== null) {
       const effectiveEnd = endTimeMs ?? Date.now();
       const diff = Math.max(effectiveEnd - startTimeMs, intervalMs);
       const estimate = Math.ceil(diff / intervalMs) + 5;
-      return Math.min(Math.max(estimate, limit), 5000);
+      return Math.min(Math.max(estimate, requestedLimit), 5000);
     }
-    return limit;
+    return requestedLimit;
   })();
 
   const buildGoldOrderBook = (lastPrice: number, levels = 50) => {
@@ -141,18 +141,18 @@ export async function GET(request: NextRequest) {
   const [candles, summary, rawOrderBook] = await Promise.all(
     provider === "bybit"
       ? [
-          fetchBybitCandles(symbolParam, intervalParam, { limit }),
+          fetchBybitCandles(symbolParam, intervalParam, { limit: effectiveLimit }),
           fetchBybitMarketSummary(symbolParam),
           fetchBybitOrderBook(symbolParam, 50),
         ]
       : provider === "twelvedata"
       ? [
-          fetchGoldCandles(symbolParam, intervalParam, limit),
+          fetchGoldCandles(symbolParam, intervalParam, effectiveLimit),
           fetchGoldMarketSummary(symbolParam, locale),
           Promise.resolve({ bids: [], asks: [] }),
         ]
       : [
-          fetchBinanceCandles(symbolParam, intervalParam, { limit }),
+          fetchBinanceCandles(symbolParam, intervalParam, { limit: effectiveLimit }),
           fetchBinanceMarketSummary(symbolParam),
           fetchBinanceOrderBook(symbolParam, 50),
         ]

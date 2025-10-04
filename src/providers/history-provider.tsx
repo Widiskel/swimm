@@ -141,7 +141,7 @@ export function HistoryProvider({ children }: { children: React.ReactNode }) {
         try {
           const payload = (await request.json()) as { error?: string };
           if (payload.error) message = payload.error;
-        } catch (_ignored) { /* ignore */ }
+        } catch { /* ignore */ }
         throw new Error(message);
       }
       const payload = (await request.json()) as { entry: HistoryEntry };
@@ -181,7 +181,7 @@ export function HistoryProvider({ children }: { children: React.ReactNode }) {
         try {
           const payload = (await request.json()) as { error?: string };
           if (payload.error) message = payload.error;
-        } catch (_ignored) { /* ignore */ }
+        } catch { /* ignore */ }
         throw new Error(message);
       }
       const payload = (await request.json()) as { entry: HistoryEntry };

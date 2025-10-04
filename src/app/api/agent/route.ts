@@ -106,6 +106,7 @@ type AgentPayload = {
 const FIREWORKS_API_URL = "https://api.fireworks.ai/inference/v1/chat/completions";
 const DEFAULT_FIREWORKS_MODEL =
   "accounts/sentientfoundation/models/dobby-unhinged-llama-3-3-70b-new";
+const TAVILY_ARTICLE_LIMIT = 5;
 
 const ALLOWED_TIMEFRAMES = ["1m", "5m", "15m", "1h", "4h", "1d"] as const;
 type Timeframe = (typeof ALLOWED_TIMEFRAMES)[number];
@@ -142,6 +143,23 @@ const clamp = (value: number, min: number, max: number) =>
 
 const excerpt = (value: string, length = 1400) =>
   value.length > length ? `${value.slice(0, length)}...` : value;
+
+const normalizeNewsUrl = (value: string) => {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (!trimmed || !/^https?:\/\//i.test(trimmed)) {
+    return null;
+  }
+  try {
+    const url = new URL(trimmed);
+    url.hash = "";
+    return url.toString();
+  } catch {
+    return null;
+  }
+};
 
 const formatPairLabel = (rawSymbol: string) => {
   if (!rawSymbol) {
@@ -1474,7 +1492,7 @@ export async function POST(request: Request) {
 
   try {
     body = await request.json();
-  } catch (_err) {
+  } catch {
     return NextResponse.json(
       { error: tAgent("en", "errors.invalidJson") },
       { status: 400 }
@@ -1551,14 +1569,56 @@ export async function POST(request: Request) {
     ? buildHistoryInsightsForPrompt(session.userId, symbol, timeframe, locale)
     : Promise.resolve(null);
 
-  const tavilySearchPromise: Promise<TavilySearchData | null> =
-    objective.length > 0
-      ? fetchTavilySearch(objective, { maxResults: 6 })
-      : Promise.resolve(null);
-  const tavilyExtractPromise: Promise<TavilyExtractedArticle[]> =
-    dataMode === "scrape" && urls.length > 0
-      ? fetchTavilyExtract(urls)
-      : Promise.resolve([] as TavilyExtractedArticle[]);
+  const explicitNewsUrls = dataMode === "scrape" ? urls : [];
+  const newsPromise = (async () => {
+    let search = objective.length > 0
+      ? await fetchTavilySearch(objective, { maxResults: 6 })
+      : null;
+
+    if (!search) {
+      search = await fetchTavilySearch(`${symbol} ${timeframe.toUpperCase()}`, { maxResults: 4 });
+    }
+
+    const seen = new Set<string>();
+    const collected: string[] = [];
+    const push = (value: string | null) => {
+      if (!value) {
+        return;
+      }
+      if (seen.has(value)) {
+        return;
+      }
+      seen.add(value);
+      if (collected.length < TAVILY_ARTICLE_LIMIT) {
+        collected.push(value);
+      }
+    };
+
+    for (const url of explicitNewsUrls) {
+      const normalized = normalizeNewsUrl(url);
+      if (normalized) {
+        push(normalized);
+      }
+    }
+
+    if (search?.results?.length) {
+      for (const item of search.results) {
+        const normalized = normalizeNewsUrl(item.url);
+        if (normalized) {
+          push(normalized);
+        }
+        if (collected.length >= TAVILY_ARTICLE_LIMIT) {
+          break;
+        }
+      }
+    }
+
+    const articles = collected.length
+      ? await fetchTavilyExtract(collected, { maxUrls: TAVILY_ARTICLE_LIMIT })
+      : [];
+
+    return { search, articles };
+  })();
 
   const apiKey = process.env.FIREWORKS_API_KEY;
   if (!apiKey) {
@@ -1603,9 +1663,9 @@ export async function POST(request: Request) {
       ),
     ]);
   }
-  const [tavilySearch, tavilyArticles, historyInsights] = await Promise.all([
-    tavilySearchPromise,
-    tavilyExtractPromise,
+
+  const [{ search: tavilySearch, articles: tavilyArticles }, historyInsights] = await Promise.all([
+    newsPromise,
     historyInsightsPromise,
   ]);
   const resolvedSymbol =
@@ -1733,10 +1793,6 @@ export async function POST(request: Request) {
     clearTimeout(timeout);
   }
 }
-
-
-
-
 
 
 

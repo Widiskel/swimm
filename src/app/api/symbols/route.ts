@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { fetchBinanceTradablePairs } from "@/features/market/exchanges/binance";
 import { fetchBybitTradablePairs } from "@/features/market/exchanges/bybit";
-import { DEFAULT_PROVIDER, isCexProvider } from "@/features/market/exchanges";
+import { isCexProvider } from "@/features/market/exchanges";
 import {
   DEFAULT_MARKET_MODE,
   isMarketMode,
@@ -47,4 +47,3 @@ export async function GET(request: NextRequest) {
     );
   }
 }
-

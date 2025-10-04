@@ -72,7 +72,7 @@ export default function ProfilePage() {
   } = usePrivy();
   const { messages } = useLanguage();
   const profileCopy = messages.profile;
-  const { settings, status, error, save } = useUserSettings();
+  const { settings, status, save } = useUserSettings();
 
   const linkedAccounts = useMemo(() => {
     const raw = (user as unknown as {

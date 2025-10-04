@@ -10,7 +10,6 @@ import { useLanguage } from "@/providers/language-provider";
 import {
   ASSET_CATEGORIES,
   CATEGORY_PROVIDER_MAP,
-  CEX_PROVIDERS,
   MARKET_MODES,
   PROVIDER_ICON_MAP,
   type AssetCategory,

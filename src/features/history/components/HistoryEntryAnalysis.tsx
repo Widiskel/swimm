@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import type { CandlestickData, SeriesMarker, Time } from "lightweight-charts";
+import type { CandlestickData } from "lightweight-charts";
 
 import {
   AnalysisSection,
@@ -21,7 +21,6 @@ import {
   type MarketMode,
 } from "@/features/market/constants";
 import type { IndicatorKey } from "@/features/market/types";
-import { mapTimeframeToSeconds } from "@/features/analysis/components/AnalysisSection";
 import type { HistoryEntry, HistorySnapshot, HistoryVerdict } from "@/providers/history-provider";
 import { useLanguage } from "@/providers/language-provider";
 import { HistoryLiveChart } from "./HistoryLiveChart";
@@ -134,14 +133,6 @@ export function HistoryEntryAnalysis({ entry, onUpdateEntry }: HistoryEntryAnaly
   const { messages, languageTag } = useLanguage();
   const indicatorVisibility = useMemo(() => buildInitialIndicatorVisibility(), []);
   const [analysisCandles, setAnalysisCandles] = useState<CandlestickData[]>([]);
-  const [analysisMarkers, setAnalysisMarkers] = useState<SeriesMarker<Time>[]>([]);
-  const [analysisCandleDetails, setAnalysisCandleDetails] = useState<{
-    time: number;
-    open: number;
-    high: number;
-    low: number;
-    close: number;
-  } | null>(null);
   const [chartStart, setChartStart] = useState("-");
   const [chartEnd, setChartEnd] = useState("-");
   const [isFetching, setIsFetching] = useState(false);
@@ -159,8 +150,7 @@ export function HistoryEntryAnalysis({ entry, onUpdateEntry }: HistoryEntryAnaly
   const sectionRef = useRef<HTMLElement | null>(null);
 
   const originalTimeframe = (entry.decision?.timeframe ?? entry.timeframe ?? "1h").toLowerCase();
-  const [viewTimeframe, setViewTimeframe] = useState<string>(originalTimeframe);
-  const timeframe = viewTimeframe;
+  const timeframe = originalTimeframe;
   const interval = mapTimeframeToInterval(timeframe);
   const symbol = entry.pair ?? entry.response.market?.pair ?? "BTCUSDT";
   const derivedMode: MarketMode = entry.mode ?? DEFAULT_MARKET_MODE;
@@ -189,13 +179,6 @@ export function HistoryEntryAnalysis({ entry, onUpdateEntry }: HistoryEntryAnaly
     const fromCreated = Date.parse(entry.createdAt);
     return Number.isFinite(fromCreated) ? fromCreated : null;
   }, [entry.snapshot?.capturedAt, entry.createdAt]);
-
-  const capturedAtSeconds = useMemo(() => {
-    if (capturedAtMs === null) {
-      return null;
-    }
-    return Math.floor(capturedAtMs / 1000);
-  }, [capturedAtMs]);
 
   useEffect(() => {
     let cancelled = false;
@@ -279,7 +262,7 @@ export function HistoryEntryAnalysis({ entry, onUpdateEntry }: HistoryEntryAnaly
               if (typeof parsed.error === "string" && parsed.error.trim().length) {
                 parsedMessage = parsed.error.trim();
               }
-            } catch (_ignored) {
+            } catch {
               // ignore json parse error, fallback to raw text
             }
           }
@@ -507,8 +490,6 @@ export function HistoryEntryAnalysis({ entry, onUpdateEntry }: HistoryEntryAnaly
         timeframe={timeframe}
         indicatorVisibility={indicatorVisibility}
         analysisCandles={analysisCandles}
-        analysisMarkers={analysisMarkers}
-        analysisCandleDetails={analysisCandleDetails}
         overlayLevels={overlayLevels}
         supportiveHighlights={supportiveHighlights}
         paddedTargets={paddedTargets}

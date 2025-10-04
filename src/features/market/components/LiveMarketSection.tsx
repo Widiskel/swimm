@@ -282,7 +282,16 @@ export const LiveMarketSection = forwardRef<
         }
       }
     },
-    [provider, selectedPair, timeframe, marketMode, __, locale, liveCopy.card.title]
+    [
+      provider,
+      selectedPair,
+      timeframe,
+      marketMode,
+      __,
+      locale,
+      liveCopy.card.title,
+      onLastClosedTimeChange,
+    ]
   );
 
   const startChartPolling = useCallback(

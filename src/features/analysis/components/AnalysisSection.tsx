@@ -1,10 +1,12 @@
 ﻿"use client";
 
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
+  type ChangeEvent,
   type MutableRefObject,
   type RefObject,
 } from "react";
@@ -480,7 +482,7 @@ export function AnalysisSection({
       return;
     }
 
-    const previousRange = chartRef.current
+    const previousRange: LogicalRange | null = chartRef.current
       ? chartRef.current.timeScale().getVisibleLogicalRange()
       : null;
 
@@ -764,6 +766,13 @@ export function AnalysisSection({
     formatPrice,
     analysisMarkers,
   ]);
+
+  const handleFeedbackChange = useCallback(
+    (event: ChangeEvent<HTMLTextAreaElement>) => {
+      _onFeedbackChange?.(event.target.value);
+    },
+    [_onFeedbackChange]
+  );
 
   if (!response) {
     return null;
@@ -1420,19 +1429,30 @@ export function AnalysisSection({
               ) : null}
             </div>
             <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <div
-                className={[
-                  "text-xs",
-                  showSaveError
-                    ? "text-[var(--swimm-down)]"
-                    : "text-[var(--swimm-neutral-400)]",
-                ].join(" ")}
-              >
-                {showSaveError
-                  ? saveError
+              <div className="flex flex-1 flex-col gap-2">
+                <label className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--swimm-neutral-300)]">
+                  {saveCopy.feedbackLabel}
+                </label>
+                <textarea
+                  value={saveFeedback}
+                  onChange={handleFeedbackChange}
+                  placeholder={saveCopy.feedbackPlaceholder}
+                  className="min-h-[96px] w-full rounded-2xl border border-[var(--swimm-neutral-300)] bg-white px-3 py-2 text-xs text-[var(--swimm-neutral-600)] focus:outline-none focus:ring-2 focus:ring-[var(--swimm-primary-400)]"
+                />
+                <div
+                  className={[
+                    "text-xs",
+                    showSaveError
+                      ? "text-[var(--swimm-down)]"
+                      : "text-[var(--swimm-neutral-400)]",
+                  ].join(" ")}
+                >
+                  {showSaveError
                     ? saveError
-                    : saveCopy.genericError
-                  : sessionHint}
+                      ? saveError
+                      : saveCopy.genericError
+                    : sessionHint}
+                </div>
               </div>
               <button
                 type="button"
