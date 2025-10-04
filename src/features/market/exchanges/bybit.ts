@@ -8,20 +8,14 @@ import { translate } from "@/i18n/translate";
 import type { Locale } from "@/i18n/messages";
 import type { MarketMode } from "@/features/market/constants";
 
-const parseBybitHosts = (value: string | undefined) =>
-  value
-    ?.split(",")
-    .map((item) => item.trim())
-    .filter(Boolean) ?? [];
+const BYBIT_PROXY_URL = process.env.BYBIT_PROXY_URL?.trim();
 
-const DEFAULT_BYBIT_HOSTS = ["https://api.bybit.com", "https://api.bybitglobal.com"];
+const DEFAULT_BYBIT_HOSTS = [
+  "https://api.bybit.com",
+  "https://api.bybitglobal.com",
+];
 
-const BYBIT_HOSTS = (() => {
-  const envHosts = parseBybitHosts(process.env.BYBIT_API_HOSTS);
-  return [...envHosts, ...DEFAULT_BYBIT_HOSTS].filter(
-    (host, index, self) => host && self.indexOf(host) === index
-  );
-})();
+const BYBIT_HOSTS = BYBIT_PROXY_URL ? [BYBIT_PROXY_URL] : DEFAULT_BYBIT_HOSTS;
 
 const BYBIT_REST_URL = BYBIT_HOSTS[0];
 const DEFAULT_SYMBOL = process.env.BYBIT_SYMBOL ?? "BTCUSDT";

@@ -2,7 +2,9 @@ import { translate } from "@/i18n/translate";
 import type { Locale } from "@/i18n/messages";
 import type { MarketMode } from "@/features/market/constants";
 
-const BINANCE_SPOT_HOSTS = [
+const BINANCE_PROXY_URL = process.env.BINANCE_PROXY_URL?.trim();
+
+const FALLBACK_SPOT_HOSTS = [
   "https://api.binance.com",
   "https://api-gcp.binance.com",
   "https://api1.binance.com",
@@ -12,7 +14,7 @@ const BINANCE_SPOT_HOSTS = [
   "https://data-api.binance.vision",
 ];
 
-const BINANCE_FUTURES_HOSTS = [
+const FALLBACK_FUTURES_HOSTS = [
   "https://fapi.binance.com",
   "https://futures-api.binance.com",
   "https://dapi.binance.com",
@@ -165,27 +167,13 @@ const buildPairLabel = (base: string, quote: string) => `${base} / ${quote}`;
 
 type BinanceHostMode = "spot" | "futures";
 
-const parseHostList = (value: string | undefined) =>
-  value
-    ?.split(",")
-    .map((item) => item.trim())
-    .filter(Boolean) ?? [];
-
 const getHostList = (mode: BinanceHostMode): string[] => {
-  const envRaw =
-    mode === "futures"
-      ? process.env.BINANCE_FUTURES_PROXY_URL ??
-        process.env.BINANCE_FUTURES_HOSTS
-      : process.env.BINANCE_SPOT_PROXY_URL ??
-        process.env.BINANCE_SPOT_HOSTS;
-  const envHosts = parseHostList(envRaw);
-  const defaults = (mode === "futures"
-    ? BINANCE_FUTURES_HOSTS
-    : BINANCE_SPOT_HOSTS
-  ).filter(Boolean);
-  return [...envHosts, ...defaults].filter((host, index, self) =>
-    host && self.indexOf(host) === index
-  );
+  if (BINANCE_PROXY_URL) {
+    return [BINANCE_PROXY_URL];
+  }
+  const defaults =
+    mode === "futures" ? FALLBACK_FUTURES_HOSTS : FALLBACK_SPOT_HOSTS;
+  return defaults;
 };
 
 const shouldRetryError = (error: unknown): boolean => {
@@ -207,10 +195,7 @@ const shouldRetryError = (error: unknown): boolean => {
 };
 
 const shouldRetryResponse = (response: Response) =>
-  response.status >= 500 ||
-  response.status === 451 ||
-  response.status === 403 ||
-  response.status === 429;
+  response.status >= 500 || response.status === 451 || response.status === 403;
 
 const requestBinance = async (
   path: string,
