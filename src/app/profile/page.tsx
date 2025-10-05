@@ -341,7 +341,7 @@ export default function ProfilePage() {
                         value={form.displayName || ""}
                         onChange={handleChange("displayName")}
                         placeholder={profileCopy.account.displayNamePlaceholder}
-                        className="mt-2 h-11 w-full rounded-2xl border border-[var(--swimm-neutral-300)] bg-white px-4 text-sm text-[var(--swimm-neutral-700)] outline-none transition focus:border-[var(--swimm-primary-600)] focus:ring-2 focus:ring-[var(--swimm-primary-500)]/30"
+                        className="mt-2 h-11 w-full rounded-2xl border border-[var(--swimm-neutral-300)] bg-white px-4 text-sm text-[var(--swimm-neutral-700)] outline-none transition focus:border-[var(--swimm-primary-700)] focus:ring-2 focus:ring-[var(--swimm-primary-500)]/30"
                         autoComplete="off"
                       />
                     </label>

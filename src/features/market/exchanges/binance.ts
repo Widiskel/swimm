@@ -116,10 +116,6 @@ type BinanceExchangeInfoSymbol = {
   permissions?: string[];
 };
 
-type BinanceExchangeInfoResponse = {
-  symbols: BinanceExchangeInfoSymbol[];
-};
-
 type BinanceFuturesExchangeInfoSymbol = BinanceExchangeInfoSymbol & {
   contractType?: string;
   marginAsset?: string;
@@ -320,40 +316,6 @@ const requestBinance = async (
     : new Error("Failed to fetch from Binance");
 };
 
-const shouldIncludeSpotSymbol = (item: BinanceExchangeInfoSymbol) => {
-  if (!item) {
-    return false;
-  }
-  if (item.status !== "TRADING") {
-    return false;
-  }
-  if (item.isSpotTradingAllowed === false) {
-    return false;
-  }
-  if (
-    Array.isArray(item.permissions) &&
-    item.permissions.length > 0 &&
-    !item.permissions.includes("SPOT")
-  ) {
-    return false;
-  }
-  const base = normalise(item.baseAsset);
-  const quote = normalise(item.quoteAsset);
-  if (!base || !quote) {
-    return false;
-  }
-  if (base.length < 2) {
-    return false;
-  }
-  if (!QUOTE_ASSET_ALLOW_LIST.has(quote)) {
-    return false;
-  }
-  if (EXCLUDED_BASE_SUFFIXES.some((suffix) => base.endsWith(suffix))) {
-    return false;
-  }
-  return true;
-};
-
 const shouldIncludeFuturesSymbol = (item: BinanceFuturesExchangeInfoSymbol) => {
   if (!item) {
     return false;
@@ -424,27 +386,33 @@ const ensureDefaultPair = (
 const fetchSpotSymbols = async (
   auth?: BinanceRequestAuth
 ): Promise<BinanceTradingPair[]> => {
-  const response = await requestBinance("/api/v3/exchangeInfo", {
+  const response = await requestBinance("/api/v3/ticker/price", {
     auth,
     mode: "spot",
   });
 
   if (!response.ok) {
-    throw new Error(`Binance exchange info responded with ${response.status}`);
+    throw new Error(`Binance ticker price responded with ${response.status}`);
   }
 
-  const payload = (await response.json()) as BinanceExchangeInfoResponse;
-  const pairs = payload.symbols.filter(shouldIncludeSpotSymbol).map((item) => {
-    const symbol = resolveSymbol(item.symbol);
-    const base = normalise(item.baseAsset);
-    const quote = normalise(item.quoteAsset);
-    return {
-      symbol,
-      baseAsset: base,
-      quoteAsset: quote,
-      label: buildPairLabel(base, quote),
-    };
-  });
+  const payload = (await response.json()) as Array<{ symbol: string }>;
+
+  const pairs = payload
+    .map((item) => derivePairFromSymbol(item.symbol))
+    .filter((pair) => {
+      const quote = normalise(pair.quoteAsset);
+      const base = normalise(pair.baseAsset);
+      if (!QUOTE_ASSET_ALLOW_LIST.has(quote)) {
+        return false;
+      }
+      if (base.length < 2) {
+        return false;
+      }
+      if (EXCLUDED_BASE_SUFFIXES.some((suffix) => base.endsWith(suffix))) {
+        return false;
+      }
+      return true;
+    });
 
   return dedupePairs(pairs).sort((a, b) => {
     if (a.baseAsset === b.baseAsset) {

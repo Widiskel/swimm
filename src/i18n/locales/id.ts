@@ -337,6 +337,12 @@ const id = {
       legendEntry: "Entry",
       legendTarget: "Target",
       legendStop: "Stop",
+      resultBadge: {
+        label: "Hasil",
+        entry: "Entry",
+        target: "TP {number}",
+        stop: "Stop loss",
+      },
       placeholder: "Chart snapshot akan muncul setelah analisa selesai.",
       ohlcCapturedAt: "Diambil pada",
       ohlcOpen: "Open",
@@ -724,6 +730,75 @@ const id = {
       decisionLabel: "Keputusan",
       verdictLabel: "Verdict",
     },
+    sharePanel: {
+      title: "Bagikan analisa ini",
+      description:
+        "Buat tautan privat agar rekan bisa meninjau rencana dalam mode hanya baca.",
+      generate: "Buat tautan berbagi",
+      generating: "Membuat tautan...",
+      linkLabel: "URL berbagi",
+      copy: "Salin tautan",
+      copied: "Tautan tersalin!",
+      copyError: "Tidak bisa menyalin otomatis. Salin manual saja.",
+      revoke: "Nonaktifkan tautan",
+      revoking: "Menonaktifkan...",
+      sharedAt: "Tautan dibuat {timestamp}",
+      activeHint:
+        "Siapa pun yang memiliki tautan ini dapat melihat analisa tanpa dapat mengubah atau memberi feedback.",
+      inactiveHint:
+        "Belum ada tautan aktif. Buat tautan ketika ingin memberi akses hanya baca.",
+      error: "Gagal memperbarui pengaturan berbagi. Coba lagi.",
+    },
+    shareView: {
+      badge: "Analisa dibagikan",
+      heading: "Tampilan hanya baca",
+      description:
+        "Halaman ini menampilkan analisa tersimpan. Semua aksi dinonaktifkan karena ini tautan berbagi.",
+      loading: "Memuat analisa berbagi...",
+      providerLabel: "Provider",
+      modeLabel: "Mode",
+      decisionLabel: "Keputusan",
+      verdictLabel: "Verdict",
+      sharedAt: "Tautan dibuat {timestamp}",
+      updatedAt: "Terakhir diperbarui {timestamp}",
+      liveChartTitle: "Market live",
+      snapshotChartTitle: "Snapshot tersimpan",
+      snapshotCapturedAt: "Diambil {timestamp}",
+      snapshotEmpty: "Data snapshot belum tersedia.",
+      snapshotBadges: {
+        entry: "Entry",
+        target: "Target",
+        stop: "Stop",
+        resultLabel: "Hasil",
+        resultEntry: "Entry",
+        resultTarget: "TP {number}",
+        resultStop: "Stop loss",
+      },
+      summaryTitle: "Ringkasan agent",
+      rationaleLabel: "Rasional",
+      noRationale: "Rasional tidak tersedia.",
+      forecastLabel: "Prakiraan",
+      noForecast: "Tidak ada prakiraan yang dibagikan.",
+      tradePlanTitle: "Rencana trading",
+      entriesLabel: "Entry",
+      noEntries: "Entry tidak tersedia.",
+      targetsLabel: "Target",
+      noTargets: "Target tidak tersedia.",
+      stopLabel: "Stop loss",
+      noStop: "Stop tidak disediakan.",
+      sizingLabel: "Catatan sizing",
+      noSizing: "Belum ada catatan sizing.",
+      highlightsTitle: "Highlight",
+      noHighlights: "Tidak ada highlight yang disimpan.",
+      nextStepsTitle: "Pengingat eksekusi",
+      noNextSteps: "Tidak ada pengingat yang disimpan.",
+      feedbackLabel: "Feedback pemilik",
+      noFeedback: "Belum ada feedback.",
+      notFoundTitle: "Analisa berbagi tidak tersedia",
+      notFoundDescription:
+        "Tautan mungkin sudah kedaluwarsa atau dinonaktifkan oleh pemilik.",
+      backCta: "Kembali ke SWIMM",
+    },
     executionSurvey: {
       title: "Apakah rencana ini dieksekusi?",
       description:
@@ -754,124 +829,164 @@ const id = {
   },
   landing: {
     introduction: {
-      badge: "Pusat Inteligensi SWIMM",
-      heading: "Inteligensi kripto multi-pair dengan panduan bahasa natural.",
+      badge: "Inteligensi SWIMM",
+      heading: "SWIMM pasar live dengan rencana trading AI untuk kripto dan emas.",
       description:
-        "SWIMM memanfaatkan Sentient Models (dobby-unhinged-llama) untuk menganalisa struktur, sentimen, dan likuiditas di seluruh pair yang tersedia.",
-      ctaPrimaryAuthenticated: "Mulai analitik",
-      ctaPrimaryGuest: "Masuk & mulai",
-      ctaSecondaryAuthenticated: "Lihat riwayat",
-      ctaSecondaryGuest: "Jelajahi fitur",
+        "SWIMM men-stream data Binance, Bybit, dan Twelve Data lalu mengubahnya menjadi entry, stop, dan catatan risiko siap pakai dalam hitungan detik.",
+      ctaPrimaryAuthenticated: "Buka analisa SWIMM",
+      ctaPrimaryGuest: "Masuk untuk analisa",
+      ctaSecondaryAuthenticated: "Lihat riwayat tersimpan",
+      ctaSecondaryGuest: "Lihat kapabilitas",
       privyWaiting:
-        "Menunggu koneksi Privy... tombol akan aktif setelah autentikasi siap.",
-    highlights: [
-      {
-        title: "Prakiraan Multi-Pair",
-        description:
-          "Proyeksi AI untuk BTC, ETH, SOL, dan aset yang bergantian.",
-      },
-      {
-        title: "Sentimen Terpadu",
-        description:
-          "Gabungkan headline hasil scraping, ringkasan, dan data kustom untuk keputusan berimbang.",
-      },
-      {
-        title: "Rencana Trading",
-        description:
-          "Entry, target, stop, dan panduan sizing yang selaras dengan timeframe Anda.",
-      },
-    ],
-    metrics: [
-      {
-        value: "2,3 dtk",
-        label: "Respons agent",
-        caption: "Rata-rata waktu jawaban di seluruh pair",
-      },
-      {
-        value: "40+",
-        label: "Sinyal siap pakai",
-        caption: "Playbook long/short harian untuk kripto & emas",
-      },
-      {
-        value: "3",
-        label: "Provider data",
-        caption: "Feed Binance, Bybit, dan Twelve Data dalam satu layar",
-      },
-    ],
-    },
-    why: {
-      heading: "Mengapa trader memilih SWIMM",
-      description:
-        "Setiap ringkasan menggabungkan sinyal teknikal, katalis, dan proyeksi AI untuk meminimalkan bias.",
-      cta: "Lihat analitik",
-      cards: [
+        "Menunggu koneksi Privy... tombol aktif segera setelah autentikasi siap.",
+      highlights: [
         {
-          title: "Fusi Sentimen",
+          title: "Feed pasar multi-bursa",
           description:
-            "Headline hasil scraping muncul sebagai highlight prioritas untuk mempercepat keyakinan.",
+            "Pantau order book spot dan futures lintas provider dengan timeframe dan depth tersinkron.",
         },
         {
-          title: "Teknikal Adaptif",
+          title: "Brief trading agent",
           description:
-            "Overlay dinamis, SMA, RSI, dan volatilitas otomatis menyesuaikan timeframe.",
+            "Hasilkan ringkasan SWIMM, rasional, dan rencana trading lengkap langsung dari chart live.",
         },
         {
-          title: "Disiplin Risiko",
+          title: "Kontrol indikator",
           description:
-            "Setiap rekomendasi menyertakan target realistis dan stop defensif.",
+            "Aktifkan atau nonaktifkan SMA, EMA, dan Bollinger sambil meninjau zona eksekusi.",
         },
         {
-          title: "Data Binance Langsung",
+          title: "Riwayat + feedback",
           description:
-            "Streaming candlestick untuk pair mayor dan memantau listing baru dengan mudah.",
+            "Simpan output agent, verdict, dan snapshot untuk evaluasi performa setelahnya.",
+        },
+      ],
+      metrics: [
+        {
+          value: "6",
+          label: "Timeframe",
+          caption: "Analisa dari 1 menit hingga struktur 1 hari.",
         },
         {
-          title: "Kontrol Timeframe",
-          description:
-            "Beralih dari scalp 5 menit ke swing harian tanpa kehilangan konteks.",
+          value: "3",
+          label: "Provider data",
+          caption: "Binance, Bybit, dan Twelve Data tanpa integrasi tambahan.",
         },
         {
-          title: "Riwayat Persisten",
-          description:
-            "Bandingkan sinyal terdahulu yang tersimpan lokal dan iterasikan strategi.",
+          value: "2",
+          label: "Mode pasar",
+          caption: "Beralih instan antara konteks spot dan futures.",
         },
       ],
     },
-  spotlight: {
-    badge: "Sorotan fitur",
-    title: "Analisa emas dalam sekali klik",
-    description:
-      "Analisa emas spot (XAUUSD) dengan agent SWIMM yang sama — stream candlestick lalu hasilkan entry, target, stop, dan narasi.",
-    cta: "Buka analisa Emas",
-    tags: ["Candlestick live", "Rencana AI", "Parameter risiko"],
-  },
-  providers: {
-    heading: "Cakupan pasar terpadu",
-    description:
-      "Harga institusional, kedalaman likuiditas, dan konteks makro digabung jadi satu permukaan analitik.",
-    items: [
-      "Data spot & futures Binance",
-      "Order flow derivatif Bybit",
-      "Feed emas & FX dari Twelve Data",
-    ],
-  },
-  preview: {
-    title: "Snapshot agent live",
-    subtitle: "Contoh keluaran SWIMM yang diperbarui setiap candle tertutup.",
-    rows: [
-      "BTCUSDT • 1H bias LONG",
-      "Kepercayaan 72%  |  Risiko per trade 1,2%",
-      "Entry 67.250  |  Stop 65.980  |  Target 67.880 / 68.540",
-      "Narasi: Higher low bertahan dengan bid spot yang menguat.",
-    ],
-    footer: "Otomatis terbarui dengan candle, order flow, dan berita terbaru.",
-  },
+    why: {
+      heading: "Dirancang mengikuti workflow SWIMM",
+      description:
+        "Satukan data bursa real-time dengan penalaran AI agar tim menilai setup lebih cepat.",
+      cta: "Jelajahi SWIMM",
+      cards: [
+        {
+          title: "Agent sekali klik",
+          description:
+            "Panggil agent SWIMM langsung dari panel pasar live dengan provider, pair, dan timeframe yang sedang aktif.",
+        },
+        {
+          title: "Rencana trading terstruktur",
+          description:
+            "Terima bias, entry, target, stop, jendela eksekusi, dan catatan sizing dalam layout konsisten.",
+        },
+        {
+          title: "Order book selalu terpantau",
+          description:
+            "Tinjau depth dan statistik ringkas di samping chart untuk mengonfirmasi likuiditas di level Anda.",
+        },
+        {
+          title: "Overlay indikator",
+          description:
+            "Aktifkan SMA, EMA, dan Bollinger tanpa meninggalkan terminal.",
+        },
+        {
+          title: "Riwayat tersinkron sesi",
+          description:
+            "Simpan sinyal beserta verdict dan ulas kembali di halaman history dengan perbandingan live.",
+        },
+        {
+          title: "Workspace dwibahasa",
+          description:
+            "Ubah bahasa Inggris-Bahasa Indonesia seketika agar tim tetap selaras.",
+        },
+      ],
+    },
+    spotlight: {
+      badge: "Sorotan workflow",
+      title: "Dari tape live ke playbook yang bisa diaudit",
+      description:
+        "Ikuti alur SWIMM: amati pasar, jalankan agent, lalu catat verdict untuk evaluasi.",
+      cta: "Jelajahi analisa SWIMM",
+      features: [
+        {
+          title: "Pengambilan data live",
+          description:
+            "Pilih provider, kategori aset, mode, dan timeframe sebelum menarik candle dan depth terbaru.",
+        },
+        {
+          title: "Pengambilan keputusan agent",
+          description:
+            "SWIMM merangkum konteks, bias, dan parameter trading siap eksekusi.",
+        },
+        {
+          title: "Review pascatransaksi",
+          description:
+            "Beri verdict, simpan feedback, dan bandingkan snapshot dengan kondisi pasar saat ini.",
+        },
+      ],
+    },
+    providers: {
+      heading: "Cakupan pasar terpadu",
+      description:
+        "Harga institusional, kedalaman likuiditas, dan konteks makro digabung jadi satu permukaan analitik.",
+      items: [
+        "Data spot & futures Binance",
+        "Order flow derivatif Bybit",
+        "Feed emas & FX dari Twelve Data",
+      ],
+    },
+    productShowcase: {
+      badge: "Tur SWIMM",
+      title: "Lihat bagaimana SWIMM menjaga konteks tetap utuh",
+      description:
+        "Setiap panel terhubung ke sesi Anda sehingga analisa, catatan eksekusi, dan riwayat tetap selaras.",
+      highlights: [
+        {
+          title: "Switcher provider & mode",
+          description:
+            "Loncat antara Binance, Bybit, atau Twelve Data dan pilih spot atau futures sebelum menarik data.",
+        },
+        {
+          title: "Order flow + indikator",
+          description:
+            "Stream candle, depth, dan overlay indikator tanpa keluar dari SWIMM.",
+        },
+        {
+          title: "Panel respons agent",
+          description:
+            "Tinjau ringkasan, rasional, entry, target, stop, dan jendela eksekusi segera setelah analisa selesai.",
+        },
+        {
+          title: "Lorong riwayat & feedback",
+          description:
+            "Simpan playbook, lampirkan verdict, dan panggil lagi snapshot saat meninjau trade.",
+        },
+      ],
+      cta: "Buka SWIMM",
+      imageAlt: "Pratinjau analisa SWIMM",
+    },
     gettingStarted: {
       heading: "Mulai bersama SWIMM",
       description:
         "SWIMM merampingkan workflow riset menjadi satu pusat komando sehingga Anda dapat mengeksekusi dengan mantap.",
-      ctaAuthenticated: "Buka analisa sekarang",
-      ctaGuest: "Lihat fitur",
+      ctaAuthenticated: "Buka analisa SWIMM",
+      ctaGuest: "Tur SWIMM",
       steps: [
         {
           id: "01",
@@ -888,7 +1003,8 @@ const id = {
         {
           id: "03",
           title: "Eksekusi percaya diri",
-          description: "Ikuti entry, target, dan parameter risiko berbasis AI.",
+          description:
+            "Jalankan agent SWIMM, tinjau rencana, dan simpan ke riwayat saat siap.",
         },
       ],
     },

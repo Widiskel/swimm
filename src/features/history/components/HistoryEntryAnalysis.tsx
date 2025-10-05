@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import type { CandlestickData } from "lightweight-charts";
+import type { HistorySnapshotResult } from "@/features/history/types";
 
 import {
   AnalysisSection,
@@ -21,7 +22,7 @@ import {
   type MarketMode,
 } from "@/features/market/constants";
 import type { IndicatorKey } from "@/features/market/types";
-import type { HistoryEntry, HistorySnapshot, HistoryVerdict } from "@/providers/history-provider";
+import type { HistoryEntry, HistoryVerdict } from "@/providers/history-provider";
 import { useLanguage } from "@/providers/language-provider";
 import { HistoryLiveChart } from "./HistoryLiveChart";
 
@@ -104,18 +105,283 @@ const sanitizeCandles = (candles: CandlestickData[]) => {
     .map(([, value]) => value);
 };
 
-const buildSnapshotCandles = (snapshot: HistorySnapshot | null | undefined) => {
-  if (!snapshot?.candles?.length) {
-    return [] as CandlestickData[];
+const resolveDirection = (entry: HistoryEntry | null | undefined) => {
+  const plan = entry?.response.tradePlan;
+  const bias = plan?.bias;
+  if (bias === "long" || bias === "short") {
+    return bias;
   }
-  const mapped = snapshot.candles.map<CandlestickData>((item) => ({
-    time: (item.openTime / 1000) as CandlestickData["time"],
-    open: Number(item.open.toFixed(2)),
-    high: Number(item.high.toFixed(2)),
-    low: Number(item.low.toFixed(2)),
-    close: Number(item.close.toFixed(2)),
-  }));
-  return sanitizeCandles(mapped);
+
+  const action = entry?.response.decision?.action ?? entry?.decision?.action;
+  if (action === "buy") {
+    return "long";
+  }
+  if (action === "sell") {
+    return "short";
+  }
+
+  if (!plan) {
+    return null;
+  }
+
+  const entryCandidates = Array.isArray(plan.entries)
+    ? plan.entries.filter((value) => typeof value === "number" && Number.isFinite(value))
+    : [];
+  if (
+    typeof plan.entry === "number" &&
+    Number.isFinite(plan.entry) &&
+    !entryCandidates.length
+  ) {
+    entryCandidates.push(plan.entry);
+  }
+  const entryPrice = entryCandidates.length
+    ? entryCandidates.reduce((sum, value) => sum + value, 0) / entryCandidates.length
+    : null;
+
+  const rawTargets = plan.takeProfits ?? [];
+  const numericTargets = rawTargets.filter(
+    (value): value is number => typeof value === "number" && Number.isFinite(value)
+  );
+
+  if (entryPrice !== null && numericTargets.length) {
+    const maxTarget = Math.max(...numericTargets);
+    const minTarget = Math.min(...numericTargets);
+    if (maxTarget > entryPrice) {
+      return "long";
+    }
+    if (minTarget < entryPrice) {
+      return "short";
+    }
+  }
+
+  if (entryPrice !== null && typeof plan.stopLoss === "number" && Number.isFinite(plan.stopLoss)) {
+    if (plan.stopLoss < entryPrice) {
+      return "long";
+    }
+    if (plan.stopLoss > entryPrice) {
+      return "short";
+    }
+  }
+
+  return null;
+};
+
+type SnapshotResult = HistorySnapshotResult | null;
+
+const collectEntryPrices = (plan: HistoryEntry["response"]["tradePlan"], fallbackEntry?: number | null) => {
+  const values: number[] = [];
+  if (plan) {
+    if (Array.isArray(plan.entries)) {
+      for (const value of plan.entries) {
+        if (typeof value === "number" && Number.isFinite(value)) {
+          values.push(value);
+        }
+      }
+    }
+    if (typeof plan.entry === "number" && Number.isFinite(plan.entry)) {
+      values.push(plan.entry);
+    }
+  }
+  if (typeof fallbackEntry === "number" && Number.isFinite(fallbackEntry)) {
+    values.push(fallbackEntry);
+  }
+  return values;
+};
+
+const computeEntryRange = (plan: HistoryEntry["response"]["tradePlan"], fallbackEntry?: number | null) => {
+  const entries = collectEntryPrices(plan, fallbackEntry);
+  if (!entries.length) {
+    return null as { min: number; max: number } | null;
+  }
+  return {
+    min: Math.min(...entries),
+    max: Math.max(...entries),
+  };
+};
+
+const collectTargetLevels = (plan: HistoryEntry["response"]["tradePlan"]) => {
+  if (!plan || !Array.isArray(plan.takeProfits)) {
+    return [] as number[];
+  }
+  return plan.takeProfits
+    .map((value) =>
+      typeof value === "number" && Number.isFinite(value) ? value : null
+    )
+    .filter((value): value is number => value !== null);
+};
+
+const computeStopLoss = (plan: HistoryEntry["response"]["tradePlan"]) => {
+  if (!plan || typeof plan.stopLoss !== "number" || !Number.isFinite(plan.stopLoss)) {
+    return null;
+  }
+  return plan.stopLoss;
+};
+
+const detectSnapshotResult = (
+  entry: HistoryEntry,
+  candles: CandlestickData[]
+): SnapshotResult => {
+  const plan = entry.response.tradePlan;
+  if (!plan || !candles.length) {
+    return null;
+  }
+  const direction = resolveDirection(entry);
+  if (!direction) {
+    return null;
+  }
+
+  const entryRange = computeEntryRange(plan);
+  const targetLevels = collectTargetLevels(plan);
+  const stopPrice = computeStopLoss(plan);
+
+  const eventIndex = candles.length > 1 ? candles.length - 2 : candles.length - 1;
+  const eventCandle = candles[eventIndex];
+  if (!eventCandle) {
+    return null;
+  }
+
+  if (
+    stopPrice !== null &&
+    (direction === "short"
+      ? eventCandle.low <= stopPrice || eventCandle.high >= stopPrice
+      : eventCandle.low <= stopPrice)
+  ) {
+    return { type: "stop" };
+  }
+
+  if (targetLevels.length) {
+    let bestTargetIndex: number | null = null;
+    let bestTargetValue: number | null = null;
+    targetLevels.forEach((value, index) => {
+      const hit =
+        direction === "short"
+          ? eventCandle.low <= value
+          : eventCandle.high >= value;
+      if (!hit) {
+        return;
+      }
+      if (bestTargetIndex === null || bestTargetValue === null) {
+        bestTargetIndex = index;
+        bestTargetValue = value;
+        return;
+      }
+      const isBetter = direction === "short" ? value < bestTargetValue : value > bestTargetValue;
+      if (isBetter) {
+        bestTargetIndex = index;
+        bestTargetValue = value;
+      }
+    });
+    if (bestTargetIndex !== null) {
+      return { type: "target", index: bestTargetIndex };
+    }
+  }
+
+  if (
+    entryRange &&
+    eventCandle.low <= entryRange.max &&
+    eventCandle.high >= entryRange.min
+  ) {
+    return { type: "entry" };
+  }
+
+  return null;
+};
+
+const buildSnapshotContext = (
+  entry: HistoryEntry | null | undefined
+): {
+  candles: CandlestickData[];
+  result: SnapshotResult;
+  extensionStartTime: number | null;
+} => {
+  const snapshot = entry?.snapshot;
+  if (!snapshot?.candles?.length) {
+    return { candles: [] as CandlestickData[], result: null, extensionStartTime: null };
+  }
+
+  const toCandlestick = (item: {
+    openTime?: number;
+    time?: number;
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+  }): CandlestickData | null => {
+    const rawTime =
+      typeof item.time === "number" && Number.isFinite(item.time)
+        ? item.time
+        : typeof item.openTime === "number" && Number.isFinite(item.openTime)
+        ? Math.floor(item.openTime / 1000)
+        : null;
+    if (rawTime === null) {
+      return null;
+    }
+    return {
+      time: rawTime as CandlestickData["time"],
+      open: Number(item.open.toFixed(2)),
+      high: Number(item.high.toFixed(2)),
+      low: Number(item.low.toFixed(2)),
+      close: Number(item.close.toFixed(2)),
+    } satisfies CandlestickData;
+  };
+
+  const mapped = snapshot.candles
+    .map((item) => toCandlestick(item))
+    .filter((item): item is CandlestickData => item !== null);
+
+  const sanitized = sanitizeCandles(mapped);
+  if (!sanitized.length) {
+    return { candles: [], result: null, extensionStartTime: null };
+  }
+
+  const normalizedResult: SnapshotResult = (() => {
+    const base = snapshot.result;
+    if (!base) {
+      return null;
+    }
+    if (base.type === "entry") {
+      return { type: "entry" };
+    }
+    if (base.type === "stop") {
+      return { type: "stop" };
+    }
+    if (base.type === "target") {
+      const index = typeof base.index === "number" && Number.isFinite(base.index)
+        ? Math.max(0, Math.floor(base.index))
+        : 0;
+      return { type: "target", index };
+    }
+    return null;
+  })();
+
+  const fallbackResult = entry ? detectSnapshotResult(entry, sanitized) : null;
+
+  const extensionStartTime =
+    typeof snapshot.extensionStartTime === "number" && Number.isFinite(snapshot.extensionStartTime)
+      ? snapshot.extensionStartTime
+      : null;
+
+  const decoratedCandles = sanitized.map((candle) => {
+    const numericTime = typeof candle.time === "number" ? candle.time : Number(candle.time);
+    if (extensionStartTime !== null && Number.isFinite(numericTime) && numericTime > extensionStartTime) {
+      return {
+        ...candle,
+        color: "#ffffff",
+        wickColor: "#ffffff",
+        borderColor: "#ffffff",
+      } satisfies CandlestickData;
+    }
+    return candle;
+  });
+
+  return {
+    candles: decoratedCandles,
+    result:
+      normalizedResult ??
+      fallbackResult ??
+      (decoratedCandles.length ? ({ type: "entry" } as SnapshotResult) : null),
+    extensionStartTime,
+  };
 };
 
 type HistoryEntryAnalysisProps = {
@@ -156,7 +422,9 @@ export function HistoryEntryAnalysis({ entry, onUpdateEntry }: HistoryEntryAnaly
   const derivedMode: MarketMode = entry.mode ?? DEFAULT_MARKET_MODE;
   const derivedCategory: AssetCategory =
     entry.provider === "twelvedata" ? "gold" : "crypto";
-  const snapshotCandles = useMemo(() => buildSnapshotCandles(entry.snapshot), [entry.snapshot]);
+  const snapshotContext = useMemo(() => buildSnapshotContext(entry), [entry]);
+  const snapshotCandles = snapshotContext.candles;
+  const snapshotResult = snapshotContext.result;
 
   useEffect(() => {
     setVerdictValue(entry.verdict);
@@ -513,6 +781,7 @@ export function HistoryEntryAnalysis({ entry, onUpdateEntry }: HistoryEntryAnaly
         marketMode={derivedMode}
         assetCategory={derivedCategory}
         sectionRef={sectionRef}
+        snapshotResult={snapshotResult}
       />
 
       {marketError ? (
@@ -611,7 +880,7 @@ export function HistoryEntryAnalysis({ entry, onUpdateEntry }: HistoryEntryAnaly
                             value={option.key}
                             checked={isActive}
                             onChange={() => setVerdictValue(option.key)}
-                            className="h-4 w-4 accent-[var(--swimm-primary-600)]"
+                            className="h-4 w-4 accent-[var(--swimm-primary-700)]"
                           />
                         {option.label}
                       </span>

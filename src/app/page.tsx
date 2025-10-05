@@ -28,7 +28,7 @@ export default function HomePage() {
   const gettingStartedSteps = gettingStarted.steps;
   const metrics = introduction.metrics ?? [];
   const providers = landing.providers;
-  const preview = landing.preview;
+  const productShowcase = landing.productShowcase;
 
   const primaryCtaLabel = isAuthenticated
     ? introduction.ctaPrimaryAuthenticated
@@ -61,7 +61,7 @@ export default function HomePage() {
       >
         {/* Hero */}
         <MotionSection
-          className="grid gap-12 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] lg:items-center"
+          className="flex flex-col gap-12"
           initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.05, duration: 0.6, ease: "easeOut" }}
@@ -92,7 +92,7 @@ export default function HomePage() {
               <div className="flex flex-wrap items-center gap-3">
                 <Link
                   href={primaryHref}
-                  className="inline-flex items-center justify-center rounded-full border border-[var(--swimm-primary-500)] bg-[var(--swimm-primary-500)] px-7 py-3 text-sm font-semibold text-[var(--swimm-navy-900)] shadow-[var(--swimm-glow)] transition-transform duration-200 hover:-translate-y-0.5 hover:bg-[var(--swimm-primary-600)] hover:text-white"
+                  className="inline-flex items-center justify-center rounded-full border border-[var(--swimm-primary-500)] bg-[var(--swimm-primary-500)] px-7 py-3 text-sm font-semibold text-[var(--swimm-navy-900)] shadow-[var(--swimm-glow)] transition-transform duration-200 hover:-translate-y-0.5 hover:bg-[var(--swimm-primary-700)] hover:text-white"
                 >
                   {primaryCtaLabel}
                 </Link>
@@ -108,18 +108,18 @@ export default function HomePage() {
                   {introduction.privyWaiting}
                 </p>
               ) : null}
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {heroHighlights.map((highlight) => (
                   <div
                     key={highlight.title}
-                    className="flex items-start gap-3 rounded-2xl border border-[var(--swimm-neutral-200)] bg-white px-4 py-3 text-xs text-[var(--swimm-neutral-500)] shadow-sm"
+                    className="flex items-start gap-4 rounded-3xl border border-[var(--swimm-neutral-200)] bg-white px-5 py-4 text-sm text-[var(--swimm-neutral-500)] shadow-sm"
                   >
                     <span className="text-lg">{highlight.icon}</span>
                     <div>
-                      <p className="font-semibold text-[var(--swimm-navy-900)]">
+                      <p className="text-base font-semibold text-[var(--swimm-navy-900)]">
                         {highlight.title}
                       </p>
-                      <p className="mt-1 leading-relaxed">{highlight.description}</p>
+                      <p className="mt-2 leading-relaxed">{highlight.description}</p>
                     </div>
                   </div>
                 ))}
@@ -147,34 +147,83 @@ export default function HomePage() {
               </div>
             ) : null}
           </div>
+        </MotionSection>
 
-          <div className="relative">
-            <div className="absolute inset-0 rounded-[36px] bg-[conic-gradient(at_top,_rgba(59,130,246,0.35)_0%,_rgba(2,6,23,0)_55%,_rgba(34,197,94,0.35)_100%)] blur-2xl" />
-            <div className="relative rounded-[32px] border border-white/25 bg-white/80 p-8 text-sm text-[var(--swimm-neutral-600)] shadow-2xl backdrop-blur">
-              <div className="flex items-center justify-between gap-3">
-                <span className="rounded-full border border-[var(--swimm-neutral-200)] bg-white px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.3em] text-[var(--swimm-neutral-400)]">
-                  {preview.title}
-                </span>
-                <span className="text-[11px] text-[var(--swimm-neutral-400)]">
-                  {preview.subtitle}
-                </span>
+        {/* Product Showcase */}
+        {productShowcase ? (
+          <MotionSection
+            id="product"
+            className="grid gap-10 rounded-4xl border border-white/20 bg-white/95 p-10 shadow-xl backdrop-blur lg:grid-cols-[1fr_1fr] lg:items-center"
+            initial={{ opacity: 0, y: 24 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, amount: 0.25 }}
+            transition={{ duration: 0.6, ease: "easeOut" }}
+          >
+            <div className="space-y-6">
+              <span className="inline-flex w-fit items-center gap-2 rounded-full border border-[var(--swimm-primary-500)]/40 bg-[var(--swimm-primary-400)]/15 px-4 py-1 text-[11px] font-semibold uppercase tracking-[0.35em] text-[var(--swimm-primary-700)]">
+                {productShowcase.badge}
+              </span>
+              <div className="space-y-3">
+                <h2 className="text-2xl font-semibold text-[var(--swimm-navy-900)]">
+                  {productShowcase.title}
+                </h2>
+                <p className="text-sm text-[var(--swimm-neutral-500)]">
+                  {productShowcase.description}
+                </p>
               </div>
-              <div className="mt-6 space-y-3">
-                {preview.rows.map((row, index) => (
+              <div className="grid gap-4 sm:grid-cols-2">
+                {productShowcase.highlights?.map((item) => (
                   <div
-                    key={row + String(index)}
-                    className="rounded-2xl border border-[var(--swimm-neutral-200)] bg-white px-4 py-3 font-medium text-[var(--swimm-navy-900)] shadow-sm"
+                    key={item.title}
+                    className="flex items-start gap-3 rounded-3xl border border-[var(--swimm-neutral-200)] bg-white px-5 py-4 text-sm text-[var(--swimm-neutral-600)] shadow-sm"
                   >
-                    {row}
+                    <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--swimm-primary-500)]/10 text-[var(--swimm-primary-700)]">
+                      <svg
+                        aria-hidden="true"
+                        className="h-4 w-4"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        viewBox="0 0 24 24"
+                      >
+                        <path d="M5 12l4 4 10-10" />
+                      </svg>
+                    </span>
+                    <div>
+                      <p className="font-semibold text-[var(--swimm-navy-900)]">
+                        {item.title}
+                      </p>
+                      <p className="mt-2 text-xs leading-relaxed text-[var(--swimm-neutral-500)]">
+                        {item.description}
+                      </p>
+                    </div>
                   </div>
                 ))}
               </div>
-              <div className="mt-6 rounded-2xl border border-[var(--swimm-neutral-200)] bg-[var(--swimm-neutral-50)] px-4 py-3 text-xs text-[var(--swimm-neutral-500)]">
-                {preview.footer}
+              <Link
+                href={primaryHref}
+                className="inline-flex w-fit items-center justify-center rounded-full border border-[var(--swimm-primary-500)] bg-[var(--swimm-primary-500)] px-6 py-2.5 text-sm font-semibold text-[var(--swimm-navy-900)] shadow-[var(--swimm-glow)] transition hover:-translate-y-0.5 hover:bg-[var(--swimm-primary-700)] hover:text-white"
+              >
+                {productShowcase.cta}
+              </Link>
+            </div>
+            <div className="relative overflow-hidden rounded-[32px] border border-white/30 bg-gradient-to-br from-white/40 via-white/10 to-white/40 p-4 shadow-2xl">
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(59,130,246,0.18)_0%,_rgba(2,6,23,0)_65%)]" />
+              <div className="relative overflow-hidden rounded-[24px] border border-white/30 bg-[var(--swimm-neutral-900)]/80">
+                <Image
+                  src="/img/product.png"
+                  alt={productShowcase.imageAlt ?? "SWIMM product preview"}
+                  width={1920}
+                  height={1080}
+                  className="h-auto w-full object-cover"
+                  priority
+                />
               </div>
             </div>
-          </div>
-        </MotionSection>
+          </MotionSection>
+        ) : null}
 
         {/* Providers */}
         {providers ? (
@@ -243,7 +292,7 @@ export default function HomePage() {
           <div className="mt-10">
             <Link
               href="/analysis"
-              className="inline-flex items-center justify-center rounded-full border border-[var(--swimm-primary-500)] bg-[var(--swimm-primary-500)] px-6 py-2.5 text-sm font-semibold text-[var(--swimm-navy-900)] shadow-[var(--swimm-glow)] transition-transform duration-200 hover:-translate-y-0.5 hover:bg-[var(--swimm-primary-600)] hover:text-white"
+              className="inline-flex items-center justify-center rounded-full border border-[var(--swimm-primary-500)] bg-[var(--swimm-primary-500)] px-6 py-2.5 text-sm font-semibold text-[var(--swimm-navy-900)] shadow-[var(--swimm-glow)] transition-transform duration-200 hover:-translate-y-0.5 hover:bg-[var(--swimm-primary-700)] hover:text-white"
             >
               {why.cta}
             </Link>
@@ -260,7 +309,7 @@ export default function HomePage() {
           transition={{ duration: 0.6, ease: "easeOut" }}
         >
           <div className="space-y-6">
-            <span className="inline-flex w-fit items-center gap-2 rounded-full border border-[var(--swimm-gold-500,#facc15)]/40 bg-[var(--swimm-gold-500,#facc15)]/15 px-4 py-1 text-[11px] font-semibold uppercase tracking-[0.35em] text-[var(--swimm-gold-700,#ca8a04)]">
+            <span className="inline-flex w-fit items-center gap-2 rounded-full border border-[var(--swimm-primary-500)]/40 bg-[var(--swimm-primary-500)]/15 px-4 py-1 text-[11px] font-semibold uppercase tracking-[0.35em] text-[var(--swimm-primary-700)]">
               {spotlight.badge}
             </span>
             <div className="space-y-3">
@@ -272,34 +321,33 @@ export default function HomePage() {
               </p>
             </div>
             <Link
-              href="/gold"
-              className="inline-flex w-fit items-center justify-center rounded-full border border-[var(--swimm-primary-500)] bg-[var(--swimm-primary-500)] px-6 py-2.5 text-sm font-semibold text-[var(--swimm-navy-900)] shadow-[var(--swimm-glow)] transition hover:-translate-y-0.5 hover:bg-[var(--swimm-primary-600)] hover:text-white"
+              href="/analysis"
+              className="inline-flex w-fit items-center justify-center rounded-full border border-[var(--swimm-primary-500)] bg-[var(--swimm-primary-500)] px-6 py-2.5 text-sm font-semibold text-[var(--swimm-navy-900)] shadow-[var(--swimm-glow)] transition hover:-translate-y-0.5 hover:bg-[var(--swimm-primary-700)] hover:text-white"
             >
               {spotlight.cta}
             </Link>
           </div>
-          <div className="relative overflow-hidden rounded-[32px] border border-white/25 bg-gradient-to-br from-[var(--swimm-bg)] via-white/60 to-white/80 p-6 text-xs text-[var(--swimm-neutral-500)] shadow-inner">
-            <div className="absolute inset-0 bg-gradient-to-br from-transparent via-transparent to-[var(--swimm-primary-500)]/10" />
-            <div className="relative space-y-4">
-              <div className="flex items-center justify-between rounded-2xl border border-[var(--swimm-neutral-200)] bg-white px-5 py-3">
-                <span className="font-semibold text-[var(--swimm-navy-900)]">XAUUSD</span>
-                <span className="rounded-full bg-[var(--swimm-primary-500)]/10 px-3 py-1 text-[10px] font-semibold text-[var(--swimm-primary-600)]">
-                  Live feed
-                </span>
-              </div>
-              <div className="rounded-2xl border border-[var(--swimm-neutral-200)] bg-white px-5 py-4 leading-relaxed">
-                {spotlight.description}
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {spotlight.tags.map((tag) => (
-                  <span
-                    key={tag}
-                    className="rounded-full border border-[var(--swimm-neutral-200)] bg-white px-3 py-1 text-[10px] font-semibold text-[var(--swimm-neutral-500)]"
-                  >
-                    #{tag}
+          <div className="relative overflow-hidden rounded-[32px] border border-white/25 bg-gradient-to-br from-[var(--swimm-bg)] via-white/60 to-white/80 p-6 shadow-inner">
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(59,130,246,0.2)_0%,_rgba(2,6,23,0)_70%)]" />
+            <div className="relative grid gap-4">
+              {spotlight.features?.map((feature, index) => (
+                <div
+                  key={feature.title}
+                  className="group flex gap-4 rounded-3xl border border-[var(--swimm-neutral-200)] bg-white/90 px-5 py-4 text-sm text-[var(--swimm-neutral-600)] shadow-sm transition-all duration-200 hover:-translate-y-1 hover:border-[var(--swimm-primary-500)]/40 hover:shadow-lg"
+                >
+                  <span className="flex h-10 w-10 items-center justify-center rounded-2xl border border-[var(--swimm-primary-500)]/30 bg-[var(--swimm-primary-500)]/10 text-xs font-semibold text-[var(--swimm-primary-700)]">
+                    {String(index + 1).padStart(2, "0")}
                   </span>
-                ))}
-              </div>
+                  <div>
+                    <p className="text-sm font-semibold text-[var(--swimm-navy-900)]">
+                      {feature.title}
+                    </p>
+                    <p className="mt-2 text-xs leading-relaxed text-[var(--swimm-neutral-500)]">
+                      {feature.description}
+                    </p>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </MotionSection>

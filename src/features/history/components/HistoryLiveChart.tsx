@@ -60,6 +60,7 @@ export type HistoryLiveChartProps = {
   timeframe: string;
   snapshotCapturedAt?: string | null;
   snapshotCandles?: CandlestickData[];
+  variant?: "default" | "chartOnly";
 };
 
 export function HistoryLiveChart({
@@ -69,10 +70,12 @@ export function HistoryLiveChart({
   timeframe,
   snapshotCapturedAt,
   snapshotCandles,
+  variant = "default",
 }: HistoryLiveChartProps) {
   const { languageTag, messages, __, locale } = useLanguage();
   const historyCopy = messages.history.liveComparison;
   const liveCopy = messages.live;
+  const chartOnly = variant === "chartOnly";
 
   const providerLabel = useMemo(
     () => __("pairSelection.providerOptions." + provider),
@@ -94,17 +97,24 @@ export function HistoryLiveChart({
   const rangeHandlerRef = useRef<((range: LogicalRange | null) => void) | null>(null);
 
   const [candles, setCandles] = useState<CandlestickData[]>([]);
-  const [indicatorVisibility, setIndicatorVisibility] =
-    useState<Record<IndicatorKey, boolean>>(() => {
-      const initial: Record<IndicatorKey, boolean> = {} as Record<
-        IndicatorKey,
-        boolean
-      >;
-      for (const indicator of INDICATOR_CONFIG) {
-        initial[indicator.key] = indicator.defaultVisible;
-      }
-      return initial;
-    });
+  const initialIndicatorVisibility = useMemo(() => {
+    const initial: Record<IndicatorKey, boolean> = {} as Record<
+      IndicatorKey,
+      boolean
+    >;
+    for (const indicator of INDICATOR_CONFIG) {
+      initial[indicator.key] = chartOnly ? false : indicator.defaultVisible;
+    }
+    return initial;
+  }, [chartOnly]);
+
+  const [indicatorVisibility, setIndicatorVisibility] = useState<
+    Record<IndicatorKey, boolean>
+  >(initialIndicatorVisibility);
+
+  useEffect(() => {
+    setIndicatorVisibility(initialIndicatorVisibility);
+  }, [initialIndicatorVisibility]);
   const [hoverData, setHoverData] = useState<HoverData | null>(null);
   const [chartMeta, setChartMeta] = useState<{
     orderBook: { bids: OrderBookEntry[]; asks: OrderBookEntry[] };
@@ -381,11 +391,13 @@ export function HistoryLiveChart({
         wickDownColor: "#ef4444",
       });
 
-      indicatorSeriesRef.current = createIndicatorSeries(
-        chart,
-        indicatorVisibility,
-        INDICATOR_CONFIG
-      );
+      if (!chartOnly) {
+        indicatorSeriesRef.current = createIndicatorSeries(
+          chart,
+          indicatorVisibility,
+          INDICATOR_CONFIG
+        );
+      }
 
       chartApiRef.current = chart;
       candleSeriesRef.current = candleSeries;
@@ -459,13 +471,15 @@ export function HistoryLiveChart({
 
     suppressRangeEventRef.current = false;
 
-    const indicatorData = buildIndicatorData(candles, INDICATOR_CONFIG);
-    updateIndicatorSeries(
-      indicatorSeriesRef.current,
-      indicatorData,
-      indicatorVisibility,
-      INDICATOR_CONFIG
-    );
+    if (!chartOnly) {
+      const indicatorData = buildIndicatorData(candles, INDICATOR_CONFIG);
+      updateIndicatorSeries(
+        indicatorSeriesRef.current,
+        indicatorData,
+        indicatorVisibility,
+        INDICATOR_CONFIG
+      );
+    }
 
     const latest = candles[candles.length - 1];
     if (latest && !hoverDataRef.current) {
@@ -495,7 +509,7 @@ export function HistoryLiveChart({
     return () => {
       window.removeEventListener("resize", handleResize);
     };
-  }, [candles, hoverDateFormatter, indicatorVisibility, setHoverState]);
+  }, [candles, chartOnly, hoverDateFormatter, indicatorVisibility, setHoverState]);
 
   const handleTimeframeChange = (next: (typeof TIMEFRAME_OPTIONS)[number]) => {
     setActiveTimeframe(next);
@@ -504,6 +518,9 @@ export function HistoryLiveChart({
   };
 
   const toggleIndicator = (key: IndicatorKey) => {
+    if (chartOnly) {
+      return;
+    }
     setIndicatorVisibility((prev) => ({
       ...prev,
       [key]: !prev[key],
@@ -514,6 +531,142 @@ export function HistoryLiveChart({
   const baseAssetSymbol = summaryStats
     ? summaryStats.symbol.replace(/USDT$/i, "")
     : formattedPair.split("/")[0] ?? "";
+  if (chartOnly) {
+    const lastPriceLabelChartOnly = summaryStats
+      ? simpleNumberFormatter.format(summaryStats.lastPrice)
+      : hoverData?.close
+      ? priceFormatter.format(hoverData.close)
+      : "-";
+
+    return (
+      <section className="space-y-4">
+        <div className="rounded-3xl border border-[var(--swimm-neutral-300)] bg-white p-6 shadow-sm shadow-[var(--swimm-neutral-300)]/40">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div className="space-y-2">
+              <div className="text-xs font-semibold uppercase tracking-wide text-[var(--swimm-neutral-500)]">
+                {liveCopy.card.title}
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <h3 className="text-2xl font-semibold text-[var(--swimm-navy-900)]">
+                  {formattedPair}
+                </h3>
+                <span className="rounded-full border border-[var(--swimm-primary-700)]/40 bg-[var(--swimm-primary-500)]/15 px-3 py-1 text-xs font-semibold uppercase text-[var(--swimm-primary-700)]">
+                  {activeTimeframe.toUpperCase()}
+                </span>
+                <span className="flex items-center gap-2 rounded-full border border-[var(--swimm-neutral-300)] bg-white px-3 py-1">
+                  <Image
+                    src={PROVIDER_ICON_MAP[provider]}
+                    alt={providerLabel}
+                    width={18}
+                    height={18}
+                    className="h-4 w-4"
+                  />
+                  <span className="text-xs text-[var(--swimm-neutral-500)]">
+                    {providerLabel}
+                  </span>
+                </span>
+              </div>
+              <div className="flex items-center gap-3 text-sm text-[var(--swimm-neutral-500)]">
+                <span className="text-lg font-semibold text-[var(--swimm-navy-900)]">
+                  {lastPriceLabelChartOnly}
+                </span>
+                {isChartLoading && (
+                  <span className="inline-flex items-center gap-2 rounded-full border border-[var(--swimm-neutral-300)] bg-white px-3 py-1 text-xs font-medium text-[var(--swimm-neutral-400)]">
+                    <span className="inline-block h-3 w-3 animate-spin rounded-full border border-[var(--swimm-neutral-300)] border-t-[var(--swimm-primary-500)]" />
+                    {liveCopy.card.loading}
+                  </span>
+                )}
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {TIMEFRAME_OPTIONS.map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={() => handleTimeframeChange(option)}
+                  className={`rounded-full border px-4 py-2 text-xs font-semibold transition ${
+                    activeTimeframe === option
+                      ? "border-[var(--swimm-primary-700)] bg-[var(--swimm-primary-500)]/20 text-[var(--swimm-primary-700)]"
+                      : "border-[var(--swimm-neutral-300)] bg-white text-[var(--swimm-neutral-500)] hover:border-[var(--swimm-primary-500)] hover:text-[var(--swimm-primary-700)]"
+                  }`}
+                >
+                  {option.toUpperCase()}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-4 relative min-h-[20rem] md:min-h-[24rem]">
+            <div
+              className={`absolute inset-0 overflow-hidden rounded-3xl border border-[var(--swimm-neutral-300)] bg-white transition-all duration-500 ${
+                isChartVisible
+                  ? "opacity-100 translate-y-0"
+                  : "pointer-events-none opacity-0 -translate-y-4"
+              }`}
+            >
+              <div ref={chartContainerRef} className="h-full w-full" />
+              {isChartLoading && (
+                <div className="absolute inset-0 flex items-center justify-center rounded-3xl bg-[var(--swimm-neutral-100)]/80 text-sm text-[var(--swimm-neutral-500)]">
+                  {liveCopy.card.loading}
+                </div>
+              )}
+            </div>
+            {!isChartVisible && !isChartLoading && (
+              <div className="absolute inset-0 flex items-center justify-center rounded-3xl border border-dashed border-[var(--swimm-neutral-300)] bg-white text-sm text-[var(--swimm-neutral-500)]">
+                {liveCopy.card.emptyState}
+              </div>
+            )}
+          </div>
+
+          <div className="mt-4 grid gap-2 rounded-xl border border-[var(--swimm-neutral-300)] bg-[var(--swimm-neutral-100)] px-4 py-3 text-xs text-[var(--swimm-neutral-500)] sm:grid-cols-2">
+            {hoverData ? (
+              <>
+                <div className="font-semibold text-[var(--swimm-navy-900)]">
+                  {hoverData.timeLabel}
+                </div>
+                <div className="text-right">
+                  {liveCopy.card.hoverClose}: {priceFormatter.format(hoverData.close)}
+                </div>
+                <div>
+                  {liveCopy.card.hoverOpen}: {priceFormatter.format(hoverData.open)}
+                </div>
+                <div className="text-right">
+                  {liveCopy.card.hoverHigh}: {priceFormatter.format(hoverData.high)}
+                </div>
+                <div>
+                  {liveCopy.card.hoverLow}: {priceFormatter.format(hoverData.low)}
+                </div>
+                <div className="text-right text-[var(--swimm-neutral-300)]">
+                  {liveCopy.card.indicatorHint}
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="font-semibold text-[var(--swimm-neutral-500)]">
+                  {liveCopy.card.hoverPrompt}
+                </div>
+                <div className="text-right text-[var(--swimm-neutral-300)]">
+                  {liveCopy.card.hoverClose}: -
+                </div>
+                <div>{liveCopy.card.hoverOpen}: -</div>
+                <div className="text-right">{liveCopy.card.hoverHigh}: -</div>
+                <div>{liveCopy.card.hoverLow}: -</div>
+                <div className="text-right text-[var(--swimm-neutral-300)]">
+                  {liveCopy.card.indicatorHint}
+                </div>
+              </>
+            )}
+          </div>
+
+          {chartError && (
+            <div className="mt-4 rounded-2xl border border-[var(--swimm-down)]/30 bg-[var(--swimm-down)]/10 px-4 py-3 text-sm text-[var(--swimm-down)]">
+              {chartError}
+            </div>
+          )}
+        </div>
+      </section>
+    );
+  }
 
   const priceChangePct = summaryStats?.priceChangePercent ?? null;
   const changeBadgeClass =
@@ -637,41 +790,43 @@ export function HistoryLiveChart({
                 </button>
               ))}
             </div>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <div className="rounded-xl border border-[var(--swimm-neutral-300)] bg-white px-4 py-3 text-xs text-[var(--swimm-neutral-500)]">
-                <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--swimm-neutral-500)]">
-                  {liveCopy.card.indicatorsTitle}
-                </div>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {INDICATOR_CONFIG.map((indicator) => {
-                    const active = indicatorVisibility[indicator.key];
-                    const baseColor = indicator.colors[0];
-                    const activeStyle = active
-                      ? {
-                          borderColor: baseColor,
-                          backgroundColor: withAlpha(baseColor, 0.18),
-                          color: baseColor,
-                        }
-                      : undefined;
-                    return (
-                      <button
-                        key={indicator.key}
-                        type="button"
-                        onClick={() => toggleIndicator(indicator.key)}
-                        className={`rounded-full border px-3 py-1 text-[11px] font-semibold transition ${
-                          active
-                            ? "bg-transparent"
-                            : "border-[var(--swimm-neutral-300)] bg-white text-[var(--swimm-neutral-500)] hover:border-[var(--swimm-primary-500)] hover:text-[var(--swimm-primary-700)]"
-                        }`}
-                        style={activeStyle}
-                      >
-                        {indicator.label}
-                      </button>
-                    );
-                  })}
+            {chartOnly ? null : (
+              <div className="mt-4 flex flex-wrap gap-2">
+                <div className="rounded-xl border border-[var(--swimm-neutral-300)] bg-white px-4 py-3 text-xs text-[var(--swimm-neutral-500)]">
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--swimm-neutral-500)]">
+                    {liveCopy.card.indicatorsTitle}
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {INDICATOR_CONFIG.map((indicator) => {
+                      const active = indicatorVisibility[indicator.key];
+                      const baseColor = indicator.colors[0];
+                      const activeStyle = active
+                        ? {
+                            borderColor: baseColor,
+                            backgroundColor: withAlpha(baseColor, 0.18),
+                            color: baseColor,
+                          }
+                        : undefined;
+                      return (
+                        <button
+                          key={indicator.key}
+                          type="button"
+                          onClick={() => toggleIndicator(indicator.key)}
+                          className={`rounded-full border px-3 py-1 text-[11px] font-semibold transition ${
+                            active
+                              ? "bg-transparent"
+                              : "border-[var(--swimm-neutral-300)] bg-white text-[var(--swimm-neutral-500)] hover:border-[var(--swimm-primary-500)] hover:text-[var(--swimm-primary-700)]"
+                          }`}
+                          style={activeStyle}
+                        >
+                          {indicator.label}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
             <div className="mt-4 grid gap-2 rounded-xl border border-[var(--swimm-neutral-300)] bg-[var(--swimm-neutral-100)] px-4 py-3 text-xs text-[var(--swimm-neutral-500)] sm:grid-cols-2">
               {hoverData ? (
                 <>

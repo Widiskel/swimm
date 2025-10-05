@@ -405,20 +405,34 @@ export default function AnalysisPage() {
         }),
       });
 
+      const responseText = await res.text();
+      const parseJson = <T,>(input: string): T | null => {
+        if (!input || !input.trim().length) {
+          return null;
+        }
+        try {
+          return JSON.parse(input) as T;
+        } catch (error) {
+          console.warn("Agent response JSON parse failed", error);
+          return null;
+        }
+      };
+
       if (!res.ok) {
         let message = analysisCopy.agentFailure;
-        try {
-          const errorPayload = (await res.json()) as { error?: unknown };
-          if (errorPayload && typeof errorPayload.error === "string") {
-            message = errorPayload.error;
-          }
-        } catch (parseError) {
-          console.warn("Gagal membaca pesan error agent", parseError);
+        const errorPayload = parseJson<{ error?: unknown }>(responseText);
+        if (errorPayload && typeof errorPayload.error === "string") {
+          message = errorPayload.error;
+        } else if (responseText.trim().length) {
+          message = responseText.trim();
         }
         throw new Error(message);
       }
 
-      const payload: AgentResponse = await res.json();
+      const payload = parseJson<AgentResponse>(responseText);
+      if (!payload) {
+        throw new Error(analysisCopy.agentGenericError);
+      }
       setResponse(payload);
       setAnalysisCandles(latestCandles.slice(-180));
       setSaveFeedback("");

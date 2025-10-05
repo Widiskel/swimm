@@ -13,7 +13,7 @@ import type { HistoryVerdict } from "@/features/history/types";
 import { getMongoDb } from "@/lib/mongodb";
 import { getSessionFromCookie, toSessionResponse } from "@/lib/session";
 
-const decodeFallbackId = (value: string) => {
+export const decodeFallbackId = (value: string) => {
   const lastDash = value.lastIndexOf("-");
   if (lastDash <= 0 || lastDash === value.length - 1) {
     return null;
@@ -32,7 +32,7 @@ const decodeFallbackId = (value: string) => {
   };
 };
 
-const buildFallbackFilter = (
+export const buildFallbackFilter = (
   sessionId: string,
   createdAt: Date,
   userId: string
@@ -67,7 +67,7 @@ const sanitizeCreatedAt = (value: unknown) => {
   return new Date(parsed);
 };
 
-const buildCandidateFilters = (
+export const buildCandidateFilters = (
   id: string,
   userId: string,
   hintSessionId?: string,
@@ -93,7 +93,7 @@ const buildCandidateFilters = (
   return filters;
 };
 
-const findMatchingDocument = async (
+export const findMatchingDocument = async (
   collection: Collection<HistoryDocument>,
   filters: Filter<HistoryDocument>[]
 ) => {

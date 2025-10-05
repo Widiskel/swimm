@@ -53,7 +53,7 @@ const en = {
       'Pick a pair, then click "Show chart" to stream candlesticks. Timeframe can be adjusted inside the chart card.',
     selectLabel: "Trading pair",
     modeLabel: "Market focus",
-    modeHint: "Pick between crypto assets or precious metals",
+    modeHint: "Pick between crypto assets or gold",
     providerLabel: "Data provider",
     providerHint: "Choose the source exchange or feed",
     modeOptions: {
@@ -336,6 +336,12 @@ const en = {
       legendEntry: "Entry",
       legendTarget: "Target",
       legendStop: "Stop",
+      resultBadge: {
+        label: "Result",
+        entry: "Entry",
+        target: "TP {number}",
+        stop: "Stop loss",
+      },
       placeholder: "Snapshot chart will appear after the analysis is complete.",
       ohlcCapturedAt: "Captured at",
       ohlcOpen: "Open",
@@ -539,7 +545,7 @@ const en = {
     binance: {
       title: "Binance credentials",
       description:
-        "Use trade-enabled keys if you want SWIMM to sync positions or prepare executions. For market-only access, your workspace project key already covers price data.",
+        "Use trade-enabled keys if you want SWIMM to sync positions or prepare executions. For market-only access, your SWIMM project key already covers price data.",
       apiKey: "API key",
       apiSecret: "API secret",
     },
@@ -740,6 +746,75 @@ const en = {
       decisionLabel: "Decision",
       verdictLabel: "Verdict",
     },
+    sharePanel: {
+      title: "Share this analysis",
+      description:
+        "Generate a private link so teammates can review the plan in read-only mode.",
+      generate: "Create share link",
+      generating: "Creating link...",
+      linkLabel: "Share URL",
+      copy: "Copy link",
+      copied: "Link copied!",
+      copyError: "Unable to copy link automatically. Copy it manually.",
+      revoke: "Disable link",
+      revoking: "Disabling...",
+      sharedAt: "Link created {timestamp}",
+      activeHint:
+        "Anyone with this link can view the analysis without editing or leaving feedback.",
+      inactiveHint:
+        "No link is active. Generate one whenever you need to grant read-only access.",
+      error: "Unable to update sharing settings. Try again.",
+    },
+    shareView: {
+      badge: "Shared analysis",
+      heading: "Read-only view",
+      description:
+        "This page mirrors the saved analysis. Actions are disabled because you’re viewing a shared link.",
+      loading: "Loading shared analysis...",
+      providerLabel: "Provider",
+      modeLabel: "Mode",
+      decisionLabel: "Decision",
+      verdictLabel: "Verdict",
+      sharedAt: "Link created {timestamp}",
+      updatedAt: "Last updated {timestamp}",
+      liveChartTitle: "Live market",
+      snapshotChartTitle: "Captured snapshot",
+      snapshotCapturedAt: "Captured {timestamp}",
+      snapshotEmpty: "Snapshot data unavailable.",
+      snapshotBadges: {
+        entry: "Entry",
+        target: "Target",
+        stop: "Stop",
+        resultLabel: "Result",
+        resultEntry: "Entry",
+        resultTarget: "TP {number}",
+        resultStop: "Stop loss",
+      },
+      summaryTitle: "Agent summary",
+      rationaleLabel: "Rationale",
+      noRationale: "No rationale provided.",
+      forecastLabel: "Forecast",
+      noForecast: "No forecast shared.",
+      tradePlanTitle: "Trade plan",
+      entriesLabel: "Entries",
+      noEntries: "Entries unavailable.",
+      targetsLabel: "Targets",
+      noTargets: "Targets unavailable.",
+      stopLabel: "Stop loss",
+      noStop: "Stop not provided.",
+      sizingLabel: "Sizing notes",
+      noSizing: "No sizing notes recorded.",
+      highlightsTitle: "Highlights",
+      noHighlights: "No highlights captured.",
+      nextStepsTitle: "Execution reminders",
+      noNextSteps: "No reminders recorded.",
+      feedbackLabel: "Owner feedback",
+      noFeedback: "No feedback added.",
+      notFoundTitle: "Shared analysis unavailable",
+      notFoundDescription:
+        "The link may have expired or been revoked by the owner.",
+      backCta: "Return to SWIMM",
+    },
     executionSurvey: {
       title: "Did you execute this plan?",
       description:
@@ -770,96 +845,117 @@ const en = {
   },
   landing: {
     introduction: {
-      badge: "SWIMM Intelligence Hub",
-      heading: "Multi-pair crypto intelligence with natural-language guidance.",
+      badge: "SWIMM intelligence",
+      heading: "Live market SWIMM with AI trade plans for crypto and gold.",
       description:
-        "SWIMM harnesses Sentient Models (dobby-unhinged-llama) to analyse structure, sentiment, and liquidity across supported pairs.",
-      ctaPrimaryAuthenticated: "Launch analytics",
-      ctaPrimaryGuest: "Sign in & start",
-      ctaSecondaryAuthenticated: "Review history",
-      ctaSecondaryGuest: "Explore features",
+        "Stream Binance, Bybit, and Twelve Data feeds inside SWIMM, then turn that context into executable entries, stops, and risk notes in seconds.",
+      ctaPrimaryAuthenticated: "Open SWIMM analysis",
+      ctaPrimaryGuest: "Sign in to analyse",
+      ctaSecondaryAuthenticated: "View saved history",
+      ctaSecondaryGuest: "Browse capabilities",
       privyWaiting:
-        "Waiting for Privy connection... buttons activate once authentication is ready.",
+        "Waiting for Privy connection... actions unlock as soon as authentication is ready.",
       highlights: [
         {
-          title: "Multi-Pair Forecasting",
+          title: "Multi-exchange market feed",
           description:
-            "AI projections across BTC, ETH, SOL, and rotating assets.",
+            "Monitor spot and futures order books across providers with synced timeframes and depth.",
         },
         {
-          title: "Unified Sentiment",
+          title: "Agent trade brief",
           description:
-            "Blend scraped headlines, briefs, and custom data for balanced decisions.",
+            "Generate SWIMM summaries, rationales, and full trade plans straight from the live chart.",
         },
         {
-          title: "Trade Plans",
+          title: "Indicator control",
           description:
-            "Entries, targets, stops, and sizing guidance aligned to your timeframe.",
+            "Toggle SMA, EMA, and Bollinger overlays while you inspect execution zones.",
+        },
+        {
+          title: "History + feedback",
+          description:
+            "Capture agent output, verdicts, and snapshots to review performance after the fact.",
         },
       ],
       metrics: [
         {
-          value: "2.3s",
-          label: "Agent turnaround",
-          caption: "Average response time across supported pairs",
-        },
-        {
-          value: "40+",
-          label: "Actionable signals",
-          caption: "Daily long/short playbooks across crypto & metals",
+          value: "6",
+          label: "Timeframes",
+          caption: "Analyse everything from 1 minute scalps to daily structure.",
         },
         {
           value: "3",
           label: "Data providers",
-          caption: "Binance, Bybit, and Twelve Data feeds in one view",
+          caption: "Binance, Bybit, and Twelve Data without extra integrations.",
+        },
+        {
+          value: "2",
+          label: "Market modes",
+          caption: "Flip between spot and futures context instantly.",
         },
       ],
     },
     why: {
-      heading: "Why traders choose SWIMM",
+      heading: "Designed around the SWIMM workflow",
       description:
-        "Each briefing blends technical signals, catalysts, and AI projections to minimise bias.",
-      cta: "View analytics",
+        "Bridge real-time exchange data with AI reasoning so your team can grade setups faster.",
+      cta: "Explore SWIMM",
       cards: [
         {
-          title: "Sentiment Fusion",
+          title: "One-click agent runs",
           description:
-            "Scraped headlines surface into prioritised highlights for faster conviction.",
+            "Trigger the SWIMM agent from the live market panel with your current provider, pair, and timeframe.",
         },
         {
-          title: "Adaptive Technicals",
+          title: "Structured trade plans",
           description:
-            "Dynamic overlays, SMA, RSI, and volatility auto-adjust to timeframe.",
+            "Receive bias, entries, targets, stops, execution window, and sizing notes in one consistent layout.",
         },
         {
-          title: "Risk Discipline",
+          title: "Order book awareness",
           description:
-            "Every call ships with realistic targets and protective stops.",
+            "Review depth and summary stats alongside the chart to confirm liquidity around your levels.",
         },
         {
-          title: "Live Binance Feed",
+          title: "Indicator overlays",
           description:
-            "Stream candlesticks for majors and track new listings effortlessly.",
+            "Toggle SMA, EMA, and Bollinger studies without leaving the terminal.",
         },
         {
-          title: "Timeframe Control",
+          title: "Session-synced history",
           description:
-            "Flip from 5-minute scalps to daily swings without losing context.",
+            "Save calls with verdicts and revisit them in the history hub with live comparisons.",
         },
         {
-          title: "Persistent History",
+          title: "Bilingual experience",
           description:
-            "Compare past calls stored locally and iterate your playbook.",
+            "Switch between English and Bahasa Indonesia instantly for team alignment.",
         },
       ],
     },
     spotlight: {
-      badge: "Feature spotlight",
-      title: "Gold analysis in one click",
+      badge: "Workflow spotlight",
+      title: "From live tape to accountable playbooks",
       description:
-        "Analyze spot gold (XAUUSD) with the same SWIMM agent — stream candles, then generate entries, targets, stops, and narrative.",
-      cta: "Open Gold analysis",
-      tags: ["Live candles", "LLM trade plans", "Risk parameters"],
+        "Follow the SWIMM flow: watch the market, run the agent, then log verdicts for later review.",
+      cta: "Explore SWIMM analysis",
+      features: [
+        {
+          title: "Live intake",
+          description:
+            "Pick provider, asset category, mode, and timeframe before streaming fresh candles and depth.",
+        },
+        {
+          title: "Agent decisioning",
+          description:
+            "SWIMM summarises context, bias, and trade parameters ready for execution.",
+        },
+        {
+          title: "Post-trade review",
+          description:
+            "Mark verdicts, capture feedback, and compare saved snapshots to the market today.",
+        },
+      ],
     },
     providers: {
       heading: "Integrated market coverage",
@@ -868,26 +964,45 @@ const en = {
       items: [
         "Binance spot & futures data",
         "Bybit derivatives order flow",
-        "Twelve Data metals & FX feed",
+        "Twelve Data gold & FX feed",
       ],
     },
-    preview: {
-      title: "Live agent snapshot",
-      subtitle: "Illustrative SWIMM output refreshed every closed candle.",
-      rows: [
-        "BTCUSDT • 1H bias LONG",
-        "Confidence 72%  |  Risk per trade 1.2%",
-        "Entry 67,250  |  Stop 65,980  |  Targets 67,880 / 68,540",
-        "Narrative: Higher lows supported by increasing spot bid volume.",
+    productShowcase: {
+      badge: "SWIMM tour",
+      title: "See how SWIMM keeps context together",
+      description:
+        "Every panel is tied to your session so analysis, execution notes, and history stay aligned.",
+      highlights: [
+        {
+          title: "Provider & mode switcher",
+          description:
+            "Jump between Binance, Bybit, or Twelve Data and flip spot or futures before pulling data.",
+        },
+        {
+          title: "Order flow + indicators",
+          description:
+            "Stream candles, depth, and indicator overlays without leaving SWIMM.",
+        },
+        {
+          title: "Agent response panel",
+          description:
+            "Review summaries, rationale, entries, targets, stops, and execution windows as soon as analysis completes.",
+        },
+        {
+          title: "History & feedback lane",
+          description:
+            "Save the playbook, attach verdicts, and recall snapshots whenever you revisit a trade.",
+        },
       ],
-      footer: "Auto-updates with real-time candles, order flow, and breaking news.",
+      cta: "Launch SWIMM",
+      imageAlt: "SWIMM analysis preview",
     },
     gettingStarted: {
       heading: "Getting started with SWIMM",
       description:
         "SWIMM condenses research workflows into one command centre so you can execute decisively.",
-      ctaAuthenticated: "Open analysis now",
-      ctaGuest: "Preview features",
+      ctaAuthenticated: "Open SWIMM analysis",
+      ctaGuest: "Tour SWIMM",
       steps: [
         {
           id: "01",
@@ -905,7 +1020,7 @@ const en = {
           id: "03",
           title: "Execute with confidence",
           description:
-            "Follow AI-backed entries, targets, and risk parameters.",
+            "Run the SWIMM agent, review the plan, and save it to history when you're ready.",
         },
       ],
     },

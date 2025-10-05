@@ -153,6 +153,10 @@ type AnalysisSectionProps = {
   } | null;
   marketMode?: MarketMode;
   assetCategory?: AssetCategory;
+  snapshotResult?: {
+    type: "entry" | "target" | "stop";
+    index?: number;
+  } | null;
 };
 
 const MotionSection = motion.section;
@@ -187,6 +191,7 @@ export function AnalysisSection({
   analysisCandleDetails = null,
   marketMode,
   assetCategory,
+  snapshotResult,
 }: AnalysisSectionProps) {
   const { messages, __, languageTag } = useLanguage();
   const analysisCopy = messages.analysis;
@@ -211,6 +216,37 @@ export function AnalysisSection({
   const nextStepLines = response?.nextSteps ?? [];
   const newsHeadlines = response?.newsHeadlines ?? [];
   const newsRateLimited = Boolean(response?.newsRateLimited);
+  const snapshotResultCopy = analysisCopy.snapshot.resultBadge;
+
+  const snapshotResultLabel = useMemo(() => {
+    if (!snapshotResult) {
+      return null;
+    }
+    if (snapshotResult.type === "entry") {
+      return snapshotResultCopy.entry;
+    }
+    if (snapshotResult.type === "stop") {
+      return snapshotResultCopy.stop;
+    }
+    if (snapshotResult.type === "target") {
+      const index = (snapshotResult.index ?? 0) + 1;
+      return snapshotResultCopy.target.replace("{number}", String(index));
+    }
+    return null;
+  }, [snapshotResult, snapshotResultCopy]);
+
+  const snapshotResultClass = useMemo(() => {
+    if (!snapshotResult) {
+      return "rounded-full border px-2 py-1 text-[var(--swimm-neutral-300)]";
+    }
+    if (snapshotResult.type === "stop") {
+      return "rounded-full border border-[var(--swimm-down)]/30 px-2 py-1 text-[var(--swimm-down)]";
+    }
+    if (snapshotResult.type === "target") {
+      return "rounded-full border border-[var(--swimm-up)]/30 px-2 py-1 text-[var(--swimm-up)]";
+    }
+    return "rounded-full border border-[var(--swimm-primary-500)]/40 px-2 py-1 text-[var(--swimm-primary-700)]";
+  }, [snapshotResult]);
 
   const sizingNotesText = tradeSizingNotes?.trim().length
     ? tradeSizingNotes
@@ -949,6 +985,11 @@ export function AnalysisSection({
             <span className="rounded-full border border-[var(--swimm-down)]/30 px-2 py-1 text-[var(--swimm-down)]">
               {analysisCopy.snapshot.legendStop}
             </span>
+            {snapshotResultLabel ? (
+              <span className={snapshotResultClass}>
+                {analysisCopy.snapshot.resultBadge.label}: {snapshotResultLabel}
+              </span>
+            ) : null}
           </div>
         </div>
       </div>
@@ -1063,60 +1104,7 @@ export function AnalysisSection({
           </div>
         </div>
 
-        {(newsHeadlines.length > 0 || newsRateLimited) && (
-          <div className="rounded-3xl border border-[var(--swimm-neutral-300)] bg-white p-6">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--swimm-neutral-300)]">
-                {newsCopy.title}
-              </div>
-              {newsRateLimited ? (
-                <span className="rounded-full border border-[var(--swimm-warning,#f59e0b)]/40 bg-[var(--swimm-warning,#f59e0b)]/10 px-3 py-1 text-[10px] font-semibold text-[var(--swimm-warning,#b45309)]">
-                  {newsCopy.rateLimit}
-                </span>
-              ) : null}
-            </div>
-            {newsHeadlines.length ? (
-              <ul className="mt-4 space-y-3 text-xs text-[var(--swimm-neutral-500)]">
-                {newsHeadlines.map((headline, index) => (
-                  <li
-                    key={(headline.url || headline.title) + String(index)}
-                    className="rounded-2xl border border-[var(--swimm-neutral-200)] bg-[var(--swimm-neutral-50)] px-4 py-3"
-                  >
-                    <div className="flex flex-col gap-2">
-                      <a
-                        href={headline.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="font-semibold text-[var(--swimm-primary-700)] transition hover:underline"
-                      >
-                        {headline.title}
-                      </a>
-                      <div className="flex flex-wrap gap-4 text-[11px] text-[var(--swimm-neutral-400)]">
-                        <span>
-                          {newsCopy.sourceLabel}: {headline.source || "-"}
-                        </span>
-                        <span>
-                          {newsCopy.publishedLabel}:{" "}
-                          {formatNewsDate(headline.publishedAt)}
-                        </span>
-                        <span>
-                          {newsCopy.sentimentLabel}:{" "}
-                          {formatNewsSentiment(headline)}
-                        </span>
-                      </div>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="mt-3 text-xs text-[var(--swimm-neutral-400)]">
-                {newsCopy.empty}
-              </p>
-            )}
-          </div>
-        )}
-
-        <div className="flex h-full w-full flex-col rounded-3xl border border-[var(--swimm-neutral-300)] bg-white p-6 lg:col-span-2 lg:self-start">
+        <div className="flex h-full w-full flex-col rounded-3xl border border-[var(--swimm-neutral-300)] bg-white p-6 lg:self-start">
           <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--swimm-neutral-300)]">
             {analysisCopy.tradePlan.title}
           </div>
@@ -1202,6 +1190,59 @@ export function AnalysisSection({
             </div>
           </div>
         </div>
+
+        {(newsHeadlines.length > 0 || newsRateLimited) && (
+          <div className="rounded-3xl border border-[var(--swimm-neutral-300)] bg-white p-6 lg:col-span-2">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--swimm-neutral-300)]">
+                {newsCopy.title}
+              </div>
+              {newsRateLimited ? (
+                <span className="rounded-full border border-[var(--swimm-warning,#f59e0b)]/40 bg-[var(--swimm-warning,#f59e0b)]/10 px-3 py-1 text-[10px] font-semibold text-[var(--swimm-warning,#b45309)]">
+                  {newsCopy.rateLimit}
+                </span>
+              ) : null}
+            </div>
+            {newsHeadlines.length ? (
+              <ul className="mt-4 space-y-3 text-xs text-[var(--swimm-neutral-500)]">
+                {newsHeadlines.map((headline, index) => (
+                  <li
+                    key={(headline.url || headline.title) + String(index)}
+                    className="rounded-2xl border border-[var(--swimm-neutral-200)] bg-[var(--swimm-neutral-50)] px-4 py-3"
+                  >
+                    <div className="flex flex-col gap-2">
+                      <a
+                        href={headline.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="font-semibold text-[var(--swimm-primary-700)] transition hover:underline"
+                      >
+                        {headline.title}
+                      </a>
+                      <div className="flex flex-wrap gap-4 text-[11px] text-[var(--swimm-neutral-400)]">
+                        <span>
+                          {newsCopy.sourceLabel}: {headline.source || "-"}
+                        </span>
+                        <span>
+                          {newsCopy.publishedLabel}:{" "}
+                          {formatNewsDate(headline.publishedAt)}
+                        </span>
+                        <span>
+                          {newsCopy.sentimentLabel}:{" "}
+                          {formatNewsSentiment(headline)}
+                        </span>
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-3 text-xs text-[var(--swimm-neutral-400)]">
+                {newsCopy.empty}
+              </p>
+            )}
+          </div>
+        )}
 
         <div className="rounded-3xl border border-[var(--swimm-neutral-300)] bg-white p-6 lg:col-span-2 lg:self-start">
           <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--swimm-neutral-300)]">

@@ -21,6 +21,35 @@ export type HistorySnapshot = {
     volume?: number;
     closeTime?: number;
   }>;
+  result?: {
+    type: "entry" | "target" | "stop";
+    index?: number;
+  } | null;
+  extensionStartTime?: number | null;
+  entryCandles?: Array<{
+    openTime?: number;
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+    time?: number;
+  }>;
+  targetCandles?: Array<{
+    openTime?: number;
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+    time?: number;
+  }>;
+  stopCandles?: Array<{
+    openTime?: number;
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+    time?: number;
+  }>;
 } | null;
 
 export type HistoryEntry = {
@@ -39,6 +68,8 @@ export type HistoryEntry = {
   feedback: string | null;
   executed?: boolean | null;
   snapshot?: HistorySnapshot;
+  shareId: string | null;
+  shareCreatedAt: string | null;
 };
 
 type SaveHistoryPayload = {
@@ -78,6 +109,8 @@ type HistoryContextValue = {
   refresh: () => Promise<void>;
   saveEntry: (payload: SaveHistoryPayload) => Promise<HistoryEntry>;
   updateEntry: (id: string, payload: UpdateHistoryPayload) => Promise<HistoryEntry>;
+  shareEntry: (id: string) => Promise<HistoryEntry>;
+  revokeShare: (id: string) => Promise<HistoryEntry>;
   clearEntries: () => Promise<void>;
 };
 
@@ -193,6 +226,62 @@ export function HistoryProvider({ children }: { children: React.ReactNode }) {
     [status]
   );
 
+  const shareEntry = useCallback(
+    async (id: string) => {
+      if (status !== "authenticated") {
+        throw new Error("Session required.");
+      }
+      const request = await fetch(`/api/history/${id}/share`, {
+        method: "POST",
+        credentials: "include",
+        cache: "no-store",
+      });
+      if (!request.ok) {
+        let message = `Failed to share history entry (${request.status})`;
+        try {
+          const payload = (await request.json()) as { error?: string };
+          if (payload.error) message = payload.error;
+        } catch {
+          /* ignore */
+        }
+        throw new Error(message);
+      }
+      const payload = (await request.json()) as { entry: HistoryEntry };
+      const updated = payload.entry;
+      setEntries((prev) => prev.map((entry) => (entry.id === updated.id ? updated : entry)));
+      return updated;
+    },
+    [status]
+  );
+
+  const revokeShare = useCallback(
+    async (id: string) => {
+      if (status !== "authenticated") {
+        throw new Error("Session required.");
+      }
+      const request = await fetch(`/api/history/${id}/share`, {
+        method: "DELETE",
+        credentials: "include",
+        cache: "no-store",
+      });
+      if (!request.ok) {
+        let message = `Failed to update share state (${request.status})`;
+        try {
+          const payload = (await request.json()) as { error?: string };
+          if (payload.error) message = payload.error;
+        } catch {
+          /* ignore */
+        }
+        throw new Error(message);
+      }
+      const payload = (await request.json()) as { entry: HistoryEntry };
+      const updated = payload.entry;
+      setEntries((prev) => prev.map((entry) => (entry.id === updated.id ? updated : entry)));
+      return updated;
+    },
+    [status]
+  );
+
   const clearEntries = useCallback(async () => {
     if (status !== "authenticated") {
       setEntries([]);
@@ -215,8 +304,18 @@ export function HistoryProvider({ children }: { children: React.ReactNode }) {
   }, [status]);
 
   const value = useMemo<HistoryContextValue>(
-    () => ({ entries, isLoading, error, refresh, saveEntry, updateEntry, clearEntries }),
-    [entries, isLoading, error, refresh, saveEntry, updateEntry, clearEntries]
+    () => ({
+      entries,
+      isLoading,
+      error,
+      refresh,
+      saveEntry,
+      updateEntry,
+      shareEntry,
+      revokeShare,
+      clearEntries,
+    }),
+    [entries, isLoading, error, refresh, saveEntry, updateEntry, shareEntry, revokeShare, clearEntries]
   );
 
   return <HistoryContext.Provider value={value}>{children}</HistoryContext.Provider>;
