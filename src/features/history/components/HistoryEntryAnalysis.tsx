@@ -22,12 +22,18 @@ import {
   type MarketMode,
 } from "@/features/market/constants";
 import type { IndicatorKey } from "@/features/market/types";
-import type { HistoryEntry, HistoryVerdict } from "@/providers/history-provider";
+import type {
+  HistoryEntry,
+  HistoryVerdict,
+} from "@/providers/history-provider";
 import { useLanguage } from "@/providers/language-provider";
 import { HistoryLiveChart } from "./HistoryLiveChart";
 
 const buildInitialIndicatorVisibility = () => {
-  const initial: Record<IndicatorKey, boolean> = {} as Record<IndicatorKey, boolean>;
+  const initial: Record<IndicatorKey, boolean> = {} as Record<
+    IndicatorKey,
+    boolean
+  >;
   for (const item of INDICATOR_CONFIG) {
     initial[item.key] = item.defaultVisible;
   }
@@ -125,7 +131,9 @@ const resolveDirection = (entry: HistoryEntry | null | undefined) => {
   }
 
   const entryCandidates = Array.isArray(plan.entries)
-    ? plan.entries.filter((value) => typeof value === "number" && Number.isFinite(value))
+    ? plan.entries.filter(
+        (value) => typeof value === "number" && Number.isFinite(value)
+      )
     : [];
   if (
     typeof plan.entry === "number" &&
@@ -135,12 +143,14 @@ const resolveDirection = (entry: HistoryEntry | null | undefined) => {
     entryCandidates.push(plan.entry);
   }
   const entryPrice = entryCandidates.length
-    ? entryCandidates.reduce((sum, value) => sum + value, 0) / entryCandidates.length
+    ? entryCandidates.reduce((sum, value) => sum + value, 0) /
+      entryCandidates.length
     : null;
 
   const rawTargets = plan.takeProfits ?? [];
   const numericTargets = rawTargets.filter(
-    (value): value is number => typeof value === "number" && Number.isFinite(value)
+    (value): value is number =>
+      typeof value === "number" && Number.isFinite(value)
   );
 
   if (entryPrice !== null && numericTargets.length) {
@@ -154,7 +164,11 @@ const resolveDirection = (entry: HistoryEntry | null | undefined) => {
     }
   }
 
-  if (entryPrice !== null && typeof plan.stopLoss === "number" && Number.isFinite(plan.stopLoss)) {
+  if (
+    entryPrice !== null &&
+    typeof plan.stopLoss === "number" &&
+    Number.isFinite(plan.stopLoss)
+  ) {
     if (plan.stopLoss < entryPrice) {
       return "long";
     }
@@ -168,7 +182,10 @@ const resolveDirection = (entry: HistoryEntry | null | undefined) => {
 
 type SnapshotResult = HistorySnapshotResult | null;
 
-const collectEntryPrices = (plan: HistoryEntry["response"]["tradePlan"], fallbackEntry?: number | null) => {
+const collectEntryPrices = (
+  plan: HistoryEntry["response"]["tradePlan"],
+  fallbackEntry?: number | null
+) => {
   const values: number[] = [];
   if (plan) {
     if (Array.isArray(plan.entries)) {
@@ -188,7 +205,10 @@ const collectEntryPrices = (plan: HistoryEntry["response"]["tradePlan"], fallbac
   return values;
 };
 
-const computeEntryRange = (plan: HistoryEntry["response"]["tradePlan"], fallbackEntry?: number | null) => {
+const computeEntryRange = (
+  plan: HistoryEntry["response"]["tradePlan"],
+  fallbackEntry?: number | null
+) => {
   const entries = collectEntryPrices(plan, fallbackEntry);
   if (!entries.length) {
     return null as { min: number; max: number } | null;
@@ -211,7 +231,11 @@ const collectTargetLevels = (plan: HistoryEntry["response"]["tradePlan"]) => {
 };
 
 const computeStopLoss = (plan: HistoryEntry["response"]["tradePlan"]) => {
-  if (!plan || typeof plan.stopLoss !== "number" || !Number.isFinite(plan.stopLoss)) {
+  if (
+    !plan ||
+    typeof plan.stopLoss !== "number" ||
+    !Number.isFinite(plan.stopLoss)
+  ) {
     return null;
   }
   return plan.stopLoss;
@@ -234,7 +258,8 @@ const detectSnapshotResult = (
   const targetLevels = collectTargetLevels(plan);
   const stopPrice = computeStopLoss(plan);
 
-  const eventIndex = candles.length > 1 ? candles.length - 2 : candles.length - 1;
+  const eventIndex =
+    candles.length > 1 ? candles.length - 2 : candles.length - 1;
   const eventCandle = candles[eventIndex];
   if (!eventCandle) {
     return null;
@@ -265,7 +290,10 @@ const detectSnapshotResult = (
         bestTargetValue = value;
         return;
       }
-      const isBetter = direction === "short" ? value < bestTargetValue : value > bestTargetValue;
+      const isBetter =
+        direction === "short"
+          ? value < bestTargetValue
+          : value > bestTargetValue;
       if (isBetter) {
         bestTargetIndex = index;
         bestTargetValue = value;
@@ -296,7 +324,11 @@ const buildSnapshotContext = (
 } => {
   const snapshot = entry?.snapshot;
   if (!snapshot?.candles?.length) {
-    return { candles: [] as CandlestickData[], result: null, extensionStartTime: null };
+    return {
+      candles: [] as CandlestickData[],
+      result: null,
+      extensionStartTime: null,
+    };
   }
 
   const toCandlestick = (item: {
@@ -346,9 +378,10 @@ const buildSnapshotContext = (
       return { type: "stop" };
     }
     if (base.type === "target") {
-      const index = typeof base.index === "number" && Number.isFinite(base.index)
-        ? Math.max(0, Math.floor(base.index))
-        : 0;
+      const index =
+        typeof base.index === "number" && Number.isFinite(base.index)
+          ? Math.max(0, Math.floor(base.index))
+          : 0;
       return { type: "target", index };
     }
     return null;
@@ -357,18 +390,31 @@ const buildSnapshotContext = (
   const fallbackResult = entry ? detectSnapshotResult(entry, sanitized) : null;
 
   const extensionStartTime =
-    typeof snapshot.extensionStartTime === "number" && Number.isFinite(snapshot.extensionStartTime)
+    typeof snapshot.extensionStartTime === "number" &&
+    Number.isFinite(snapshot.extensionStartTime)
       ? snapshot.extensionStartTime
       : null;
 
   const decoratedCandles = sanitized.map((candle) => {
-    const numericTime = typeof candle.time === "number" ? candle.time : Number(candle.time);
-    if (extensionStartTime !== null && Number.isFinite(numericTime) && numericTime > extensionStartTime) {
+    const numericTime =
+      typeof candle.time === "number" ? candle.time : Number(candle.time);
+    if (
+      extensionStartTime !== null &&
+      Number.isFinite(numericTime) &&
+      numericTime > extensionStartTime
+    ) {
+      const isBearish = candle.close < candle.open;
+      const bodyColor = isBearish
+        ? "rgba(248,113,113,0.4)"
+        : "rgba(74,222,128,0.4)";
+      const wickColor = isBearish
+        ? "rgba(248,113,113,0.7)"
+        : "rgba(74,222,128,0.7)";
       return {
         ...candle,
-        color: "#ffffff",
-        wickColor: "#ffffff",
-        borderColor: "#ffffff",
+        color: bodyColor,
+        wickColor,
+        borderColor: bodyColor,
       } satisfies CandlestickData;
     }
     return candle;
@@ -395,18 +441,28 @@ type HistoryEntryAnalysisProps = {
   }) => Promise<HistoryEntry>;
 };
 
-export function HistoryEntryAnalysis({ entry, onUpdateEntry }: HistoryEntryAnalysisProps) {
+export function HistoryEntryAnalysis({
+  entry,
+  onUpdateEntry,
+}: HistoryEntryAnalysisProps) {
   const { messages, languageTag } = useLanguage();
-  const indicatorVisibility = useMemo(() => buildInitialIndicatorVisibility(), []);
+  const indicatorVisibility = useMemo(
+    () => buildInitialIndicatorVisibility(),
+    []
+  );
   const [analysisCandles, setAnalysisCandles] = useState<CandlestickData[]>([]);
   const [chartStart, setChartStart] = useState("-");
   const [chartEnd, setChartEnd] = useState("-");
   const [isFetching, setIsFetching] = useState(false);
   const [marketError, setMarketError] = useState<string | null>(null);
-  const [verdictValue, setVerdictValue] = useState<HistoryVerdict>(entry.verdict);
+  const [verdictValue, setVerdictValue] = useState<HistoryVerdict>(
+    entry.verdict
+  );
   const [feedbackValue, setFeedbackValue] = useState(entry.feedback ?? "");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitStatus, setSubmitStatus] = useState<"idle" | "success" | "error">("idle");
+  const [submitStatus, setSubmitStatus] = useState<
+    "idle" | "success" | "error"
+  >("idle");
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isUpdatingExecution, setIsUpdatingExecution] = useState(false);
   const [executionMessage, setExecutionMessage] = useState<string | null>(null);
@@ -415,7 +471,11 @@ export function HistoryEntryAnalysis({ entry, onUpdateEntry }: HistoryEntryAnaly
 
   const sectionRef = useRef<HTMLElement | null>(null);
 
-  const originalTimeframe = (entry.decision?.timeframe ?? entry.timeframe ?? "1h").toLowerCase();
+  const originalTimeframe = (
+    entry.decision?.timeframe ??
+    entry.timeframe ??
+    "1h"
+  ).toLowerCase();
   const timeframe = originalTimeframe;
   const interval = mapTimeframeToInterval(timeframe);
   const symbol = entry.pair ?? entry.response.market?.pair ?? "BTCUSDT";
@@ -452,18 +512,25 @@ export function HistoryEntryAnalysis({ entry, onUpdateEntry }: HistoryEntryAnaly
     let cancelled = false;
 
     const resample = (source: CandlestickData[], from: string, to: string) => {
-      const unit = (s: string) => ({ "1m":1, "5m":5, "15m":15, "1h":60, "4h":240, "1d":1440 }[s] ?? 60);
-      const fm = unit(from); const tm = unit(to);
+      const unit = (s: string) =>
+        ({ "1m": 1, "5m": 5, "15m": 15, "1h": 60, "4h": 240, "1d": 1440 }[s] ??
+        60);
+      const fm = unit(from);
+      const tm = unit(to);
       if (fm === tm) return source;
       if (tm % fm !== 0 || tm < fm) return source;
       const factor = tm / fm;
       const out: CandlestickData[] = [];
-      const arr = [...source].sort((a,b) => (a.time as number) - (b.time as number));
-      for (let i=0;i<arr.length;i+=factor){
-        const chunk = arr.slice(i, i+factor); if (chunk.length === 0) continue;
-        const open = chunk[0].open; const close = chunk[chunk.length-1].close;
-        const high = Math.max(...chunk.map(c=>c.high));
-        const low = Math.min(...chunk.map(c=>c.low));
+      const arr = [...source].sort(
+        (a, b) => (a.time as number) - (b.time as number)
+      );
+      for (let i = 0; i < arr.length; i += factor) {
+        const chunk = arr.slice(i, i + factor);
+        if (chunk.length === 0) continue;
+        const open = chunk[0].open;
+        const close = chunk[chunk.length - 1].close;
+        const high = Math.max(...chunk.map((c) => c.high));
+        const low = Math.min(...chunk.map((c) => c.low));
         out.push({ time: chunk[0].time, open, high, low, close });
       }
       return out;
@@ -473,7 +540,8 @@ export function HistoryEntryAnalysis({ entry, onUpdateEntry }: HistoryEntryAnaly
       setIsFetching(true);
       try {
         if (entry.snapshot && snapshotCandles.length) {
-          const base = entry.snapshot.timeframe?.toLowerCase?.() || originalTimeframe;
+          const base =
+            entry.snapshot.timeframe?.toLowerCase?.() || originalTimeframe;
           const reshaped = resample(snapshotCandles, base, timeframe);
           const normalized = sanitizeCandles(reshaped).slice(-220);
           if (!cancelled) {
@@ -490,8 +558,12 @@ export function HistoryEntryAnalysis({ entry, onUpdateEntry }: HistoryEntryAnaly
         }
         const providerParam =
           (entry.provider as string) === "gold" ? "twelvedata" : entry.provider;
-        const categoryParam = providerParam === "twelvedata" ? "gold" : "crypto";
-        const effectiveMode = providerParam === "twelvedata" ? "spot" : entry.mode ?? DEFAULT_MARKET_MODE;
+        const categoryParam =
+          providerParam === "twelvedata" ? "gold" : "crypto";
+        const effectiveMode =
+          providerParam === "twelvedata"
+            ? "spot"
+            : entry.mode ?? DEFAULT_MARKET_MODE;
 
         const params = new URLSearchParams();
         params.set("symbol", symbol);
@@ -501,7 +573,10 @@ export function HistoryEntryAnalysis({ entry, onUpdateEntry }: HistoryEntryAnaly
         params.set("mode", effectiveMode);
 
         const fallbackCaptured = capturedAtMs ?? Date.now();
-        const startRange = Math.max(fallbackCaptured - 7 * 24 * 60 * 60 * 1000, 0);
+        const startRange = Math.max(
+          fallbackCaptured - 7 * 24 * 60 * 60 * 1000,
+          0
+        );
         const endRange = capturedAtMs ?? Date.now();
         const intervalMsMap: Record<string, number> = {
           "1m": 60_000,
@@ -527,15 +602,22 @@ export function HistoryEntryAnalysis({ entry, onUpdateEntry }: HistoryEntryAnaly
           if (parsedMessage) {
             try {
               const parsed = JSON.parse(parsedMessage) as { error?: string };
-              if (typeof parsed.error === "string" && parsed.error.trim().length) {
+              if (
+                typeof parsed.error === "string" &&
+                parsed.error.trim().length
+              ) {
                 parsedMessage = parsed.error.trim();
               }
             } catch {
               // ignore json parse error, fallback to raw text
             }
           }
-          const finalMessage = parsedMessage || `Market request failed with ${response.status}`;
-          if (!cancelled && finalMessage.toLowerCase().includes("pair is not supported")) {
+          const finalMessage =
+            parsedMessage || `Market request failed with ${response.status}`;
+          if (
+            !cancelled &&
+            finalMessage.toLowerCase().includes("pair is not supported")
+          ) {
             setAnalysisCandles([]);
             setChartStart("-");
             setChartEnd("-");
@@ -556,13 +638,15 @@ export function HistoryEntryAnalysis({ entry, onUpdateEntry }: HistoryEntryAnaly
             volume: number;
           }[];
         };
-        const candles: CandlestickData[] = (payload.candles ?? []).map((item) => ({
-          time: (item.openTime / 1000) as CandlestickData["time"],
-          open: Number(item.open.toFixed(2)),
-          high: Number(item.high.toFixed(2)),
-          low: Number(item.low.toFixed(2)),
-          close: Number(item.close.toFixed(2)),
-        }));
+        const candles: CandlestickData[] = (payload.candles ?? []).map(
+          (item) => ({
+            time: (item.openTime / 1000) as CandlestickData["time"],
+            open: Number(item.open.toFixed(2)),
+            high: Number(item.high.toFixed(2)),
+            low: Number(item.low.toFixed(2)),
+            close: Number(item.close.toFixed(2)),
+          })
+        );
         const sanitizedCandles = sanitizeCandles(candles);
 
         if (!cancelled) {
@@ -599,7 +683,9 @@ export function HistoryEntryAnalysis({ entry, onUpdateEntry }: HistoryEntryAnaly
     };
 
     void load();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [
     entry,
     symbol,
@@ -624,8 +710,14 @@ export function HistoryEntryAnalysis({ entry, onUpdateEntry }: HistoryEntryAnaly
   const saveCopy = messages.analysis.savePanel;
   const feedbackCopy = messages.history.feedbackPanel;
   const executionCopy = messages.history.executionSurvey;
-  const decisionAction = (entry.decision?.action ?? entry.response.decision?.action ?? "").toLowerCase();
-  const canUpdateVerdict = (decisionAction === "buy" || decisionAction === "sell") && entry.executed === true;
+  const decisionAction = (
+    entry.decision?.action ??
+    entry.response.decision?.action ??
+    ""
+  ).toLowerCase();
+  const canUpdateVerdict =
+    (decisionAction === "buy" || decisionAction === "sell") &&
+    entry.executed === true;
   const verdictOptions = [
     {
       key: "accurate" as HistoryVerdict,
@@ -640,7 +732,8 @@ export function HistoryEntryAnalysis({ entry, onUpdateEntry }: HistoryEntryAnaly
   ];
   const trimmedFeedback = feedbackValue.trim();
   const initialFeedback = (entry.feedback ?? "").trim();
-  const isDirty = verdictValue !== entry.verdict || trimmedFeedback !== initialFeedback;
+  const isDirty =
+    verdictValue !== entry.verdict || trimmedFeedback !== initialFeedback;
   const disableSubmit = !canUpdateVerdict || isSubmitting || !isDirty;
 
   const executionRecorded = typeof executedState === "boolean";
@@ -662,7 +755,9 @@ export function HistoryEntryAnalysis({ entry, onUpdateEntry }: HistoryEntryAnaly
         sessionId: entry.sessionId,
         createdAt: entry.createdAt,
       });
-      setExecutionMessage(executed ? executionCopy.recordedYes : executionCopy.recordedNo);
+      setExecutionMessage(
+        executed ? executionCopy.recordedYes : executionCopy.recordedNo
+      );
       setVerdictValue(updated.verdict);
       setFeedbackValue(updated.feedback ?? "");
     } catch (error) {
@@ -694,7 +789,9 @@ export function HistoryEntryAnalysis({ entry, onUpdateEntry }: HistoryEntryAnaly
       setSubmitStatus("success");
     } catch (error) {
       setSubmitStatus("error");
-      setSubmitError(error instanceof Error ? error.message : feedbackCopy.genericError);
+      setSubmitError(
+        error instanceof Error ? error.message : feedbackCopy.genericError
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -707,7 +804,10 @@ export function HistoryEntryAnalysis({ entry, onUpdateEntry }: HistoryEntryAnaly
     }
   }, [isDirty, submitStatus]);
 
-  const formatPrice = useMemo(() => formatPriceLabel(priceFormatter), [priceFormatter]);
+  const formatPrice = useMemo(
+    () => formatPriceLabel(priceFormatter),
+    [priceFormatter]
+  );
   const tradeEntries = useMemo(() => {
     const plan = entry.response.tradePlan;
     if (Array.isArray(plan.entries) && plan.entries.length) {
@@ -718,7 +818,10 @@ export function HistoryEntryAnalysis({ entry, onUpdateEntry }: HistoryEntryAnaly
     }
     return [] as number[];
   }, [entry]);
-  const entryZoneValues = useMemo(() => buildEntryZones(tradeEntries), [tradeEntries]);
+  const entryZoneValues = useMemo(
+    () => buildEntryZones(tradeEntries),
+    [tradeEntries]
+  );
   const paddedTargets = useMemo(
     () => buildTargets(entry.response.tradePlan.takeProfits ?? []),
     [entry]
@@ -732,13 +835,17 @@ export function HistoryEntryAnalysis({ entry, onUpdateEntry }: HistoryEntryAnaly
       ),
     [entryZoneValues, paddedTargets, entry]
   );
-  const supportiveHighlights = useMemo(() => buildSupportiveHighlights(entry.response), [entry]);
+  const supportiveHighlights = useMemo(
+    () => buildSupportiveHighlights(entry.response),
+    [entry]
+  );
   const tradingNarrative = useMemo(() => {
     const planRationale = entry.response.tradePlan.rationale ?? "-";
     return buildTradingNarrative(planRationale, entry.response);
   }, [entry]);
   const formattedPair = useMemo(
-    () => buildFormattedPair(entry.response.market?.pair ?? entry.pair, entry.pair),
+    () =>
+      buildFormattedPair(entry.response.market?.pair ?? entry.pair, entry.pair),
     [entry]
   );
 
@@ -824,7 +931,9 @@ export function HistoryEntryAnalysis({ entry, onUpdateEntry }: HistoryEntryAnaly
           </button>
         </div>
         {executionError ? (
-          <p className="mt-3 text-xs text-[var(--swimm-down)]">{executionError}</p>
+          <p className="mt-3 text-xs text-[var(--swimm-down)]">
+            {executionError}
+          </p>
         ) : null}
       </section>
 
@@ -847,7 +956,9 @@ export function HistoryEntryAnalysis({ entry, onUpdateEntry }: HistoryEntryAnaly
               <h4 className="text-lg font-semibold text-[var(--swimm-navy-900)]">
                 {feedbackCopy.title}
               </h4>
-              <p className="text-sm text-[var(--swimm-neutral-500)]">{feedbackCopy.description}</p>
+              <p className="text-sm text-[var(--swimm-neutral-500)]">
+                {feedbackCopy.description}
+              </p>
             </div>
           </div>
 
@@ -882,57 +993,62 @@ export function HistoryEntryAnalysis({ entry, onUpdateEntry }: HistoryEntryAnaly
                             onChange={() => setVerdictValue(option.key)}
                             className="h-4 w-4 accent-[var(--swimm-primary-700)]"
                           />
-                        {option.label}
-                      </span>
-                      <span className="text-xs text-[var(--swimm-neutral-500)]">
-                        {option.description}
-                      </span>
-                    </label>
-                  );
-                })}
-              </div>
-              <p className="text-xs text-[var(--swimm-neutral-400)]">{feedbackCopy.pendingHint}</p>
-            </fieldset>
+                          {option.label}
+                        </span>
+                        <span className="text-xs text-[var(--swimm-neutral-500)]">
+                          {option.description}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+                <p className="text-xs text-[var(--swimm-neutral-400)]">
+                  {feedbackCopy.pendingHint}
+                </p>
+              </fieldset>
 
-            <div>
-              <label className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--swimm-neutral-400)]">
-                {feedbackCopy.feedbackLabel}
-              </label>
-              <textarea
-                value={feedbackValue}
-                onChange={(event) => setFeedbackValue(event.target.value)}
-                placeholder={feedbackCopy.feedbackPlaceholder}
-                className="mt-2 w-full rounded-2xl border border-[var(--swimm-neutral-300)] bg-white px-4 py-3 text-sm text-[var(--swimm-neutral-600)] outline-none transition focus:border-[var(--swimm-primary-500)] focus:ring-2 focus:ring-[var(--swimm-primary-500)]/30"
-                rows={3}
-              />
-              <p className="mt-2 text-xs text-[var(--swimm-neutral-400)]">{saveCopy.feedbackHint}</p>
-            </div>
-
-            {submitStatus === "success" ? (
-              <div className="rounded-2xl border border-[var(--swimm-up)] bg-[var(--swimm-up)]/10 px-4 py-3 text-sm text-[var(--swimm-up)]">
-                {feedbackCopy.success}
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--swimm-neutral-400)]">
+                  {feedbackCopy.feedbackLabel}
+                </label>
+                <textarea
+                  value={feedbackValue}
+                  onChange={(event) => setFeedbackValue(event.target.value)}
+                  placeholder={feedbackCopy.feedbackPlaceholder}
+                  className="mt-2 w-full rounded-2xl border border-[var(--swimm-neutral-300)] bg-white px-4 py-3 text-sm text-[var(--swimm-neutral-600)] outline-none transition focus:border-[var(--swimm-primary-500)] focus:ring-2 focus:ring-[var(--swimm-primary-500)]/30"
+                  rows={3}
+                />
+                <p className="mt-2 text-xs text-[var(--swimm-neutral-400)]">
+                  {saveCopy.feedbackHint}
+                </p>
               </div>
-            ) : null}
-            {submitStatus === "error" ? (
-              <div className="rounded-2xl border border-[var(--swimm-down)] bg-[var(--swimm-down)]/10 px-4 py-3 text-sm text-[var(--swimm-down)]">
-                {submitError ?? feedbackCopy.genericError}
-              </div>
-            ) : null}
 
-            <div className="flex items-center justify-end">
-              <button
-                type="submit"
-                disabled={disableSubmit}
-                className="inline-flex items-center justify-center rounded-full border border-[var(--swimm-primary-700)] bg-[var(--swimm-primary-500)]/15 px-5 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-[var(--swimm-primary-700)] transition hover:-translate-y-0.5 hover:bg-[var(--swimm-primary-500)]/25 disabled:cursor-not-allowed disabled:border-[var(--swimm-neutral-300)] disabled:bg-[var(--swimm-neutral-200)]/60 disabled:text-[var(--swimm-neutral-400)]"
-              >
-                {isSubmitting ? feedbackCopy.updatingButton : feedbackCopy.submitButton}
-              </button>
-            </div>
-          </form>
-        )}
-      </section>
+              {submitStatus === "success" ? (
+                <div className="rounded-2xl border border-[var(--swimm-up)] bg-[var(--swimm-up)]/10 px-4 py-3 text-sm text-[var(--swimm-up)]">
+                  {feedbackCopy.success}
+                </div>
+              ) : null}
+              {submitStatus === "error" ? (
+                <div className="rounded-2xl border border-[var(--swimm-down)] bg-[var(--swimm-down)]/10 px-4 py-3 text-sm text-[var(--swimm-down)]">
+                  {submitError ?? feedbackCopy.genericError}
+                </div>
+              ) : null}
+
+              <div className="flex items-center justify-end">
+                <button
+                  type="submit"
+                  disabled={disableSubmit}
+                  className="inline-flex items-center justify-center rounded-full border border-[var(--swimm-primary-700)] bg-[var(--swimm-primary-500)]/15 px-5 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-[var(--swimm-primary-700)] transition hover:-translate-y-0.5 hover:bg-[var(--swimm-primary-500)]/25 disabled:cursor-not-allowed disabled:border-[var(--swimm-neutral-300)] disabled:bg-[var(--swimm-neutral-200)]/60 disabled:text-[var(--swimm-neutral-400)]"
+                >
+                  {isSubmitting
+                    ? feedbackCopy.updatingButton
+                    : feedbackCopy.submitButton}
+                </button>
+              </div>
+            </form>
+          )}
+        </section>
       ) : null}
-
     </>
   );
 }

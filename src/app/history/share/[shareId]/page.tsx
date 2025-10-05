@@ -126,9 +126,14 @@ export default function SharedHistoryPage({
           close: Number(item.close),
         };
         if (extensionStartTime !== null && time > extensionStartTime) {
-          candle.color = "#ffffff";
-          candle.wickColor = "#ffffff";
-          candle.borderColor = "#ffffff";
+          const isBearish = candle.close < candle.open;
+          candle.color = isBearish
+            ? "rgba(248,113,113,0.2)"
+            : "rgba(74,222,128,0.2)";
+          candle.wickColor = isBearish
+            ? "rgba(248,113,113,0.4)"
+            : "rgba(74,222,128,0.4)";
+          candle.borderColor = candle.color;
         }
         return candle;
       })
