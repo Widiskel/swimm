@@ -16,29 +16,16 @@ import {
   buildFormattedPair,
 } from "@/features/analysis/components/AnalysisSection";
 import {
-  INDICATOR_CONFIG,
   DEFAULT_MARKET_MODE,
   type AssetCategory,
   type MarketMode,
 } from "@/features/market/constants";
-import type { IndicatorKey } from "@/features/market/types";
 import type {
   HistoryEntry,
   HistoryVerdict,
 } from "@/providers/history-provider";
 import { useLanguage } from "@/providers/language-provider";
 import { HistoryLiveChart } from "./HistoryLiveChart";
-
-const buildInitialIndicatorVisibility = () => {
-  const initial: Record<IndicatorKey, boolean> = {} as Record<
-    IndicatorKey,
-    boolean
-  >;
-  for (const item of INDICATOR_CONFIG) {
-    initial[item.key] = item.defaultVisible;
-  }
-  return initial;
-};
 
 const mapTimeframeToInterval = (value: string): string => {
   const normalized = value.trim().toLowerCase();
@@ -405,11 +392,11 @@ const buildSnapshotContext = (
     ) {
       const isBearish = candle.close < candle.open;
       const bodyColor = isBearish
+        ? "rgba(248,113,113,0.2)"
+        : "rgba(74,222,128,0.2)";
+      const wickColor = isBearish
         ? "rgba(248,113,113,0.4)"
         : "rgba(74,222,128,0.4)";
-      const wickColor = isBearish
-        ? "rgba(248,113,113,0.7)"
-        : "rgba(74,222,128,0.7)";
       return {
         ...candle,
         color: bodyColor,
@@ -446,10 +433,6 @@ export function HistoryEntryAnalysis({
   onUpdateEntry,
 }: HistoryEntryAnalysisProps) {
   const { messages, languageTag } = useLanguage();
-  const indicatorVisibility = useMemo(
-    () => buildInitialIndicatorVisibility(),
-    []
-  );
   const [analysisCandles, setAnalysisCandles] = useState<CandlestickData[]>([]);
   const [chartStart, setChartStart] = useState("-");
   const [chartEnd, setChartEnd] = useState("-");
@@ -863,7 +846,6 @@ export function HistoryEntryAnalysis({
       <AnalysisSection
         response={entry.response}
         timeframe={timeframe}
-        indicatorVisibility={indicatorVisibility}
         analysisCandles={analysisCandles}
         overlayLevels={overlayLevels}
         supportiveHighlights={supportiveHighlights}

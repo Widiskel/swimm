@@ -25,23 +25,13 @@ import {
 
 import type { AgentResponse } from "../types";
 import { useLanguage } from "@/providers/language-provider";
-import {
-  buildIndicatorData,
-  createIndicatorSeries,
-  updateIndicatorSeries,
-} from "@/features/market/utils/indicators";
 import { updateOverlayPriceLines } from "@/features/market/utils/overlays";
 import {
-  INDICATOR_CONFIG,
   TARGET_LABELS,
   type AssetCategory,
   type MarketMode,
 } from "@/features/market/constants";
-import type {
-  IndicatorKey,
-  IndicatorSeriesMap,
-  OverlayLevel,
-} from "@/features/market/types";
+import type { IndicatorKey, OverlayLevel } from "@/features/market/types";
 import { formatPairLabel } from "@/features/market/utils/format";
 
 const SNAPSHOT_LIMIT = 220;
@@ -117,7 +107,7 @@ const formatExecutionWindowLabel = (raw: string): string => {
 type AnalysisSectionProps = {
   response: AgentResponse | null;
   timeframe: string;
-  indicatorVisibility: Record<IndicatorKey, boolean>;
+  indicatorVisibility?: Record<IndicatorKey, boolean>;
   analysisCandles: CandlestickData[];
   overlayLevels: OverlayLevel[];
   supportiveHighlights: string[];
@@ -164,7 +154,7 @@ const MotionSection = motion.section;
 export function AnalysisSection({
   response,
   timeframe,
-  indicatorVisibility,
+  indicatorVisibility: _indicatorVisibility,
   analysisCandles,
   overlayLevels,
   supportiveHighlights,
@@ -193,6 +183,7 @@ export function AnalysisSection({
   assetCategory,
   snapshotResult,
 }: AnalysisSectionProps) {
+  void _indicatorVisibility;
   const { messages, __, languageTag } = useLanguage();
   const analysisCopy = messages.analysis;
   const fallbackCopy = messages.analysisFallback;
@@ -527,7 +518,6 @@ export function AnalysisSection({
   const chartContainerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
-  const indicatorSeriesRef = useRef<IndicatorSeriesMap>({});
   const overlayPriceLinesRef = useRef<IPriceLine[]>([]);
   const [snapshotReady, setSnapshotReady] = useState(false);
   const overlayCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -582,11 +572,6 @@ export function AnalysisSection({
 
       chartRef.current = chart;
       seriesRef.current = candleSeries;
-      indicatorSeriesRef.current = createIndicatorSeries(
-        chart,
-        indicatorVisibility,
-        INDICATOR_CONFIG
-      );
     }
 
     if (!response || !analysisCandles.length) {
@@ -761,13 +746,7 @@ export function AnalysisSection({
       ctx.restore();
     };
 
-    const indicatorData = buildIndicatorData(limitedCandles, INDICATOR_CONFIG);
-    updateIndicatorSeries(
-      indicatorSeriesRef.current,
-      indicatorData,
-      indicatorVisibility,
-      INDICATOR_CONFIG
-    );
+    // Indicators are disabled for snapshot rendering.
 
     updateOverlayPriceLines(candleSeries, overlayLevels, overlayPriceLinesRef);
 
@@ -817,7 +796,6 @@ export function AnalysisSection({
       }
       chartRef.current = null;
       seriesRef.current = null;
-      indicatorSeriesRef.current = {};
       overlayPriceLinesRef.current = [];
       if (chartRoot && resizeObserver) {
         resizeObserver.disconnect();
@@ -825,7 +803,6 @@ export function AnalysisSection({
     };
   }, [
     analysisCandles,
-    indicatorVisibility,
     overlayLevels,
     response,
     entryZoneValues,
