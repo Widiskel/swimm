@@ -2,12 +2,10 @@
 
 import Link from "next/link";
 import { use, useCallback, useEffect, useMemo, useState } from "react";
-import type { CandlestickData } from "lightweight-charts";
 
 import { SiteHeader } from "@/components/SiteHeader";
 import type { AgentResponse } from "@/features/analysis/types";
 import { HistoryEntryAnalysis } from "@/features/history/components/HistoryEntryAnalysis";
-import { HistorySnapshotChart } from "@/features/history/components/HistorySnapshotChart";
 import {
   DEFAULT_MARKET_MODE,
   isMarketMode,
@@ -38,12 +36,12 @@ type SharedHistoryEntry = {
     timeframe: string;
     capturedAt: string;
     candles: Array<{
-      time?: number;
-      openTime?: number;
+      openTime: number;
       open: number;
       high: number;
       low: number;
       close: number;
+      time?: number;
     }>;
     result?: {
       type: "entry" | "target" | "stop";
@@ -80,8 +78,11 @@ type SharedHistoryEntry = {
   shareCreatedAt: string | null;
 };
 
-const formatTemplate = (template: string, value: string) =>
-  template.includes("{timestamp}") ? template.replace("{timestamp}", value) : `${template} ${value}`;
+const badgeClasses: Record<string, string> = {
+  buy: "bg-[var(--swimm-up)]/10 text-[var(--swimm-up)] ring-1 ring-[var(--swimm-up)]/30",
+  sell: "bg-[var(--swimm-down)]/10 text-[var(--swimm-down)] ring-1 ring-[var(--swimm-down)]/30",
+  hold: "bg-[var(--swimm-neutral-100)] text-[var(--swimm-neutral-500)] ring-1 ring-[var(--swimm-neutral-200)]",
+};
 
 export default function SharedHistoryPage({
   params,
@@ -90,8 +91,11 @@ export default function SharedHistoryPage({
 }) {
   const { shareId } = use(params);
   const { messages, languageTag } = useLanguage();
-  const shareCopy = messages.history.shareView;
-  const verdictCopy = messages.history.entryCard.verdict;
+  const historyCopy = messages.history;
+  const detailCopy = historyCopy.detail;
+  const summaryCopy = historyCopy.summaryRow;
+  const shareCopy = historyCopy.shareView;
+  const verdictCopy = historyCopy.entryCard.verdict;
 
   const [entry, setEntry] = useState<SharedHistoryEntry | null>(null);
   const [status, setStatus] = useState<"loading" | "error" | "ready">("loading");
@@ -124,51 +128,11 @@ export default function SharedHistoryPage({
 
     const snapshot = entry.snapshot
       ? {
-          timeframe: entry.snapshot.timeframe,
-          capturedAt: entry.snapshot.capturedAt,
-          candles: (entry.snapshot.candles ?? []).reduce<Array<{
-            openTime: number;
-            open: number;
-            high: number;
-            low: number;
-            close: number;
-            time?: number;
-          }>>((acc, item) => {
-            const rawTime =
-              typeof item.time === "number" && Number.isFinite(item.time)
-                ? item.time
-                : typeof item.openTime === "number" &&
-                  Number.isFinite(item.openTime)
-                ? Math.floor(item.openTime / 1000)
-                : null;
-
-            if (rawTime === null) {
-              return acc;
-            }
-
-            const openTime =
-              typeof item.openTime === "number" && Number.isFinite(item.openTime)
-                ? item.openTime
-                : rawTime * 1000;
-
-            acc.push({
-              openTime,
-              open: item.open,
-              high: item.high,
-              low: item.low,
-              close: item.close,
-              time: rawTime,
-            });
-            return acc;
-          }, []),
-          result: entry.snapshot.result ?? null,
+          ...entry.snapshot,
           extensionStartTime:
             typeof entry.snapshot.extensionStartTime === "number"
               ? entry.snapshot.extensionStartTime
               : null,
-          entryCandles: entry.snapshot.entryCandles,
-          targetCandles: entry.snapshot.targetCandles,
-          stopCandles: entry.snapshot.stopCandles,
         }
       : undefined;
 
@@ -192,57 +156,6 @@ export default function SharedHistoryPage({
       shareCreatedAt: entry.shareCreatedAt,
     };
   }, [entry, resolvedProvider, resolvedMode]);
-
-  const liveDefaultTimeframe = useMemo(
-    () =>
-      (entry?.decision?.timeframe ?? entry?.timeframe ?? "1h")
-        .toLowerCase?.()
-        .trim() || "1h",
-    [entry?.decision?.timeframe, entry?.timeframe]
-  );
-
-  const snapshotBaseTimeframe = useMemo(
-    () =>
-      entry?.snapshot?.timeframe?.toLowerCase?.() ?? liveDefaultTimeframe,
-    [entry?.snapshot?.timeframe, liveDefaultTimeframe]
-  );
-
-  const snapshotCandles = useMemo<CandlestickData[]>(() => {
-    if (!entry?.snapshot?.candles?.length) {
-      return [];
-    }
-    const extensionStartTime =
-      typeof entry.snapshot.extensionStartTime === "number" &&
-      Number.isFinite(entry.snapshot.extensionStartTime)
-        ? entry.snapshot.extensionStartTime
-        : null;
-    return entry.snapshot.candles
-      .map((item) => {
-        const time = Number(item.time ?? 0);
-        if (!Number.isFinite(time)) {
-          return null;
-        }
-        const candle: CandlestickData = {
-          time: time as CandlestickData["time"],
-          open: Number(item.open),
-          high: Number(item.high),
-          low: Number(item.low),
-          close: Number(item.close),
-        };
-        if (extensionStartTime !== null && time > extensionStartTime) {
-          const isBearish = candle.close < candle.open;
-          candle.color = isBearish
-            ? "rgba(248,113,113,0.2)"
-            : "rgba(74,222,128,0.2)";
-          candle.wickColor = isBearish
-            ? "rgba(248,113,113,0.4)"
-            : "rgba(74,222,128,0.4)";
-          candle.borderColor = candle.color;
-        }
-        return candle;
-      })
-      .filter((value): value is CandlestickData => value !== null);
-  }, [entry?.snapshot?.candles, entry?.snapshot?.extensionStartTime]);
 
   const handleNoopUpdate = useCallback(async () => {
     if (!historyEntry) {
@@ -276,7 +189,9 @@ export default function SharedHistoryPage({
         }
       } catch (fetchError) {
         if (!cancelled) {
-          setError(fetchError instanceof Error ? fetchError.message : shareCopy.notFoundDescription);
+          setError(
+            fetchError instanceof Error ? fetchError.message : shareCopy.notFoundDescription
+          );
           setStatus("error");
         }
       }
@@ -288,7 +203,7 @@ export default function SharedHistoryPage({
     };
   }, [shareId, shareCopy.notFoundDescription]);
 
-  const dateFormatter = useMemo(
+  const metaFormatter = useMemo(
     () =>
       new Intl.DateTimeFormat(languageTag, {
         dateStyle: "medium",
@@ -298,55 +213,32 @@ export default function SharedHistoryPage({
   );
 
   const decisionLabel = useMemo(() => {
-    if (!entry?.decision?.action) {
-      return messages.history.summaryRow.noDecision;
+    const value =
+      historyEntry?.decision?.action ?? historyEntry?.response.decision?.action ?? "";
+    if (!value) {
+      return summaryCopy.noDecision;
     }
-    return entry.decision.action.toUpperCase();
-  }, [entry?.decision?.action, messages.history.summaryRow.noDecision]);
+    return value.toUpperCase();
+  }, [historyEntry?.decision?.action, historyEntry?.response.decision?.action, summaryCopy.noDecision]);
 
   const verdictLabel = useMemo(() => {
-    if (!entry?.verdict) {
-      return messages.history.summaryRow.noVerdict;
+    const key = historyEntry?.verdict ?? "unknown";
+    return verdictCopy[key as keyof typeof verdictCopy] ?? summaryCopy.noVerdict;
+  }, [historyEntry?.verdict, summaryCopy.noVerdict, verdictCopy]);
+
+  const createdLabel = useMemo(() => {
+    if (!historyEntry) {
+      return "";
     }
-    return verdictCopy[entry.verdict as keyof typeof verdictCopy] ?? entry.verdict;
-  }, [entry?.verdict, verdictCopy, messages.history.summaryRow.noVerdict]);
+    return metaFormatter.format(new Date(historyEntry.createdAt));
+  }, [historyEntry, metaFormatter]);
 
-  const executionStatusLabel = useMemo(() => {
-    if (entry?.executed === true) {
-      return shareCopy.executionExecuted;
+  const updatedLabel = useMemo(() => {
+    if (!historyEntry) {
+      return "";
     }
-    if (entry?.executed === false) {
-      return shareCopy.executionReference;
-    }
-    return shareCopy.executionPending;
-  }, [
-    entry?.executed,
-    shareCopy.executionExecuted,
-    shareCopy.executionReference,
-    shareCopy.executionPending,
-  ]);
-
-  const sharedAt = entry?.shareCreatedAt
-    ? dateFormatter.format(new Date(entry.shareCreatedAt))
-    : null;
-  const updatedAt = entry?.updatedAt ? dateFormatter.format(new Date(entry.updatedAt)) : null;
-
-  const plan = entry?.response.tradePlan;
-
-  const entryLevels = useMemo(() => {
-    if (!plan) return [] as number[];
-    if (Array.isArray(plan.entries) && plan.entries.length) {
-      return plan.entries;
-    }
-    return typeof plan.entry === "number" ? [plan.entry] : ([] as number[]);
-  }, [plan]);
-
-  const targetLevels = useMemo(() => plan?.takeProfits ?? [], [plan]);
-
-  const stopLevel = useMemo(
-    () => (typeof plan?.stopLoss === "number" ? plan.stopLoss : null),
-    [plan]
-  );
+    return metaFormatter.format(new Date(historyEntry.updatedAt));
+  }, [historyEntry, metaFormatter]);
 
   const renderContent = () => {
     if (status === "loading") {
@@ -357,7 +249,7 @@ export default function SharedHistoryPage({
       );
     }
 
-    if (status === "error" || !entry) {
+    if (status === "error" || !entry || !historyEntry) {
       return (
         <div className="space-y-4 rounded-3xl bg-white/90 p-10 text-center shadow-sm ring-1 ring-[var(--swimm-neutral-200)]">
           <h2 className="text-2xl font-semibold text-[var(--swimm-navy-900)]">
@@ -376,90 +268,53 @@ export default function SharedHistoryPage({
       );
     }
 
+    const decisionKey = (
+      historyEntry.decision?.action ?? historyEntry.response.decision?.action ?? ""
+    ).toLowerCase();
+    const badgeClass = badgeClasses[decisionKey] ?? badgeClasses.hold;
+    const formattedPair = `${historyEntry.pair} ${String.fromCharCode(8226)} ${historyEntry.timeframe.toUpperCase()}`;
+
     return (
       <div className="space-y-6">
         <section className="rounded-3xl bg-white/90 p-6 shadow-sm ring-1 ring-[var(--swimm-neutral-200)]">
-          <div className="flex flex-col gap-3">
-            <span className="inline-flex w-fit items-center gap-2 rounded-full border border-[var(--swimm-primary-500)]/30 bg-[var(--swimm-primary-500)]/15 px-4 py-1 text-[11px] font-semibold uppercase tracking-[0.35em] text-[var(--swimm-primary-700)]">
-              {shareCopy.badge}
-            </span>
+          <div className="flex flex-col gap-4">
             <div>
               <h1 className="text-2xl font-semibold text-[var(--swimm-navy-900)]">
-                {entry.pair} • {entry.timeframe.toUpperCase()}
+                {formattedPair}
               </h1>
-              <p className="mt-2 text-sm text-[var(--swimm-neutral-500)]">{shareCopy.description}</p>
+              <p className="mt-1 text-sm text-[var(--swimm-neutral-500)]">
+                {historyCopy.entryCard.provider}: {historyEntry.provider.toUpperCase()} / {" "}
+                {historyEntry.mode.toUpperCase()}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              <span
+                className={`inline-flex items-center justify-center rounded-full px-4 py-1 text-[11px] font-semibold uppercase tracking-[0.25em] ${badgeClass}`}
+              >
+                {detailCopy.decisionLabel}: {decisionLabel}
+              </span>
+              <span className="inline-flex items-center justify-center rounded-full bg-[var(--swimm-neutral-100)] px-4 py-1 text-[11px] font-semibold uppercase tracking-[0.25em] text-[var(--swimm-neutral-600)] ring-1 ring-[var(--swimm-neutral-200)]">
+                {detailCopy.verdictLabel}: {verdictLabel}
+              </span>
             </div>
             <div className="grid gap-2 text-xs text-[var(--swimm-neutral-500)] sm:grid-cols-2">
               <div>
-                <span className="font-semibold text-[var(--swimm-neutral-700)]">{shareCopy.providerLabel}:</span> {entry.provider.toUpperCase()}
+                <span className="font-semibold text-[var(--swimm-neutral-700)]">
+                  {detailCopy.metaCreated}:
+                </span>{" "}
+                {createdLabel}
               </div>
               <div>
-                <span className="font-semibold text-[var(--swimm-neutral-700)]">{shareCopy.modeLabel}:</span> {entry.mode.toUpperCase()}
+                <span className="font-semibold text-[var(--swimm-neutral-700)]">
+                  {detailCopy.metaUpdated}:
+                </span>{" "}
+                {updatedLabel}
               </div>
-              <div>
-                <span className="font-semibold text-[var(--swimm-neutral-700)]">{shareCopy.decisionLabel}:</span> {decisionLabel}
-              </div>
-              <div>
-                <span className="font-semibold text-[var(--swimm-neutral-700)]">{shareCopy.verdictLabel}:</span> {verdictLabel}
-              </div>
-              <div>
-                <span className="font-semibold text-[var(--swimm-neutral-700)]">{shareCopy.executionLabel}:</span> {executionStatusLabel}
-              </div>
-              {sharedAt ? (
-                <div>
-                  <span className="font-semibold text-[var(--swimm-neutral-700)]">
-                    {formatTemplate(shareCopy.sharedAt, sharedAt)}
-                  </span>
-                </div>
-              ) : null}
-              {updatedAt ? (
-                <div>
-                  <span className="font-semibold text-[var(--swimm-neutral-700)]">
-                    {formatTemplate(shareCopy.updatedAt, updatedAt)}
-                  </span>
-                </div>
-              ) : null}
             </div>
           </div>
         </section>
 
-        {historyEntry ? (
-          <HistoryEntryAnalysis
-            entry={historyEntry}
-            onUpdateEntry={handleNoopUpdate}
-            readOnly
-          />
-        ) : null}
-
-        {snapshotCandles.length ? (
-          <div className="space-y-3">
-            <h2 className="text-lg font-semibold text-[var(--swimm-navy-900)]">
-              {shareCopy.snapshotChartTitle}
-            </h2>
-            <HistorySnapshotChart
-              title={shareCopy.snapshotChartTitle}
-              candles={snapshotCandles}
-              baseTimeframe={snapshotBaseTimeframe}
-              capturedLabel={
-                entry.snapshot?.capturedAt
-                  ? dateFormatter.format(new Date(entry.snapshot.capturedAt))
-                  : null
-              }
-              defaultTimeframe={liveDefaultTimeframe}
-              entryLevels={entryLevels}
-              targetLevels={targetLevels}
-              stopLevel={stopLevel}
-              result={entry.snapshot?.result ?? null}
-            />
-          </div>
-        ) : null}
-
-        <section className="rounded-3xl bg-white/90 p-6 shadow-sm ring-1 ring-[var(--swimm-neutral-200)]">
-          <h2 className="text-lg font-semibold text-[var(--swimm-navy-900)]">{shareCopy.feedbackLabel}</h2>
-          <p className="mt-2 text-sm text-[var(--swimm-neutral-500)]">
-            {entry.feedback?.trim().length ? entry.feedback : shareCopy.noFeedback}
-          </p>
-        </section>
+        <HistoryEntryAnalysis entry={historyEntry} onUpdateEntry={handleNoopUpdate} readOnly />
       </div>
     );
   };
