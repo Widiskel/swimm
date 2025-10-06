@@ -1,12 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { use, useEffect, useMemo, useState } from "react";
+import { use, useCallback, useEffect, useMemo, useState } from "react";
 import type { CandlestickData } from "lightweight-charts";
 
 import { SiteHeader } from "@/components/SiteHeader";
 import type { AgentResponse } from "@/features/analysis/types";
-import { HistoryLiveChart } from "@/features/history/components/HistoryLiveChart";
+import { HistoryEntryAnalysis } from "@/features/history/components/HistoryEntryAnalysis";
 import { HistorySnapshotChart } from "@/features/history/components/HistorySnapshotChart";
 import {
   DEFAULT_MARKET_MODE,
@@ -19,8 +19,10 @@ import {
   type CexProvider,
 } from "@/features/market/exchanges";
 import { useLanguage } from "@/providers/language-provider";
+import type { HistoryEntry, HistoryVerdict } from "@/providers/history-provider";
 
 type SharedHistoryEntry = {
+  id: string | null;
   shareId: string | null;
   pair: string;
   timeframe: string;
@@ -36,7 +38,8 @@ type SharedHistoryEntry = {
     timeframe: string;
     capturedAt: string;
     candles: Array<{
-      time: number;
+      time?: number;
+      openTime?: number;
       open: number;
       high: number;
       low: number;
@@ -47,6 +50,30 @@ type SharedHistoryEntry = {
       index?: number;
     } | null;
     extensionStartTime?: number | null;
+    entryCandles?: Array<{
+      openTime?: number;
+      time?: number;
+      open: number;
+      high: number;
+      low: number;
+      close: number;
+    }>;
+    targetCandles?: Array<{
+      openTime?: number;
+      time?: number;
+      open: number;
+      high: number;
+      low: number;
+      close: number;
+    }>;
+    stopCandles?: Array<{
+      openTime?: number;
+      time?: number;
+      open: number;
+      high: number;
+      low: number;
+      close: number;
+    }>;
   } | null;
   createdAt: string;
   updatedAt: string;
@@ -84,10 +111,87 @@ export default function SharedHistoryPage({
     return entry.mode;
   }, [entry?.mode]);
 
-  const chartSymbol = useMemo(
-    () => entry?.response.market?.pair ?? entry?.pair ?? "BTCUSDT",
-    [entry?.response.market?.pair, entry?.pair]
-  );
+  const historyEntry = useMemo<HistoryEntry | null>(() => {
+    if (!entry) {
+      return null;
+    }
+
+    const rawVerdict = entry.verdict?.toLowerCase() ?? "";
+    const normalizedVerdict: HistoryVerdict =
+      rawVerdict === "accurate" || rawVerdict === "inaccurate"
+        ? (rawVerdict as HistoryVerdict)
+        : "unknown";
+
+    const snapshot = entry.snapshot
+      ? {
+          timeframe: entry.snapshot.timeframe,
+          capturedAt: entry.snapshot.capturedAt,
+          candles: (entry.snapshot.candles ?? []).reduce<Array<{
+            openTime: number;
+            open: number;
+            high: number;
+            low: number;
+            close: number;
+            time?: number;
+          }>>((acc, item) => {
+            const rawTime =
+              typeof item.time === "number" && Number.isFinite(item.time)
+                ? item.time
+                : typeof item.openTime === "number" &&
+                  Number.isFinite(item.openTime)
+                ? Math.floor(item.openTime / 1000)
+                : null;
+
+            if (rawTime === null) {
+              return acc;
+            }
+
+            const openTime =
+              typeof item.openTime === "number" && Number.isFinite(item.openTime)
+                ? item.openTime
+                : rawTime * 1000;
+
+            acc.push({
+              openTime,
+              open: item.open,
+              high: item.high,
+              low: item.low,
+              close: item.close,
+              time: rawTime,
+            });
+            return acc;
+          }, []),
+          result: entry.snapshot.result ?? null,
+          extensionStartTime:
+            typeof entry.snapshot.extensionStartTime === "number"
+              ? entry.snapshot.extensionStartTime
+              : null,
+          entryCandles: entry.snapshot.entryCandles,
+          targetCandles: entry.snapshot.targetCandles,
+          stopCandles: entry.snapshot.stopCandles,
+        }
+      : undefined;
+
+    return {
+      id: entry.id ?? entry.shareId ?? "shared-entry",
+      sessionId: "",
+      createdAt: entry.createdAt,
+      updatedAt: entry.updatedAt,
+      pair: entry.pair,
+      timeframe: entry.timeframe,
+      provider: resolvedProvider,
+      mode: resolvedMode,
+      decision: entry.decision,
+      summary: entry.summary,
+      response: entry.response,
+      verdict: normalizedVerdict,
+      feedback: entry.feedback ?? null,
+      executed: entry.executed,
+      snapshot,
+      shareId: entry.shareId,
+      shareCreatedAt: entry.shareCreatedAt,
+    };
+  }, [entry, resolvedProvider, resolvedMode]);
 
   const liveDefaultTimeframe = useMemo(
     () =>
@@ -139,6 +243,13 @@ export default function SharedHistoryPage({
       })
       .filter((value): value is CandlestickData => value !== null);
   }, [entry?.snapshot?.candles, entry?.snapshot?.extensionStartTime]);
+
+  const handleNoopUpdate = useCallback(async () => {
+    if (!historyEntry) {
+      throw new Error("Shared analysis not ready.");
+    }
+    return historyEntry;
+  }, [historyEntry]);
 
   useEffect(() => {
     let cancelled = false;
@@ -200,6 +311,21 @@ export default function SharedHistoryPage({
     return verdictCopy[entry.verdict as keyof typeof verdictCopy] ?? entry.verdict;
   }, [entry?.verdict, verdictCopy, messages.history.summaryRow.noVerdict]);
 
+  const executionStatusLabel = useMemo(() => {
+    if (entry?.executed === true) {
+      return shareCopy.executionExecuted;
+    }
+    if (entry?.executed === false) {
+      return shareCopy.executionReference;
+    }
+    return shareCopy.executionPending;
+  }, [
+    entry?.executed,
+    shareCopy.executionExecuted,
+    shareCopy.executionReference,
+    shareCopy.executionPending,
+  ]);
+
   const sharedAt = entry?.shareCreatedAt
     ? dateFormatter.format(new Date(entry.shareCreatedAt))
     : null;
@@ -221,50 +347,6 @@ export default function SharedHistoryPage({
     () => (typeof plan?.stopLoss === "number" ? plan.stopLoss : null),
     [plan]
   );
-
-  const entriesList = useMemo(() => {
-    if (!plan) return [] as number[];
-    if (Array.isArray(plan.entries) && plan.entries.length) {
-      return plan.entries;
-    }
-    return typeof plan.entry === "number" ? [plan.entry] : ([] as number[]);
-  }, [plan]);
-
-  const targetsList = useMemo(() => plan?.takeProfits ?? [], [plan?.takeProfits]);
-
-  const highlights = entry?.response.highlights ?? [];
-  const nextSteps = entry?.response.nextSteps ?? [];
-
-  const renderPlanList = (values: number[], emptyLabel: string) => {
-    if (!values.length) {
-      return <p className="text-sm text-[var(--swimm-neutral-500)]">{emptyLabel}</p>;
-    }
-    return (
-      <ul className="mt-2 space-y-1">
-        {values.map((value, index) => (
-          <li
-            key={`${value}-${index}`}
-            className="rounded-xl border border-[var(--swimm-neutral-200)] bg-[var(--swimm-neutral-50)] px-3 py-2 font-mono text-sm text-[var(--swimm-navy-900)]"
-          >
-            {value}
-          </li>
-        ))}
-      </ul>
-    );
-  };
-
-  const renderList = (items: string[], emptyLabel: string) => {
-    if (!items.length) {
-      return <p className="text-sm text-[var(--swimm-neutral-500)]">{emptyLabel}</p>;
-    }
-    return (
-      <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-[var(--swimm-neutral-600)]">
-        {items.map((item) => (
-          <li key={item}>{item}</li>
-        ))}
-      </ul>
-    );
-  };
 
   const renderContent = () => {
     if (status === "loading") {
@@ -320,6 +402,9 @@ export default function SharedHistoryPage({
               <div>
                 <span className="font-semibold text-[var(--swimm-neutral-700)]">{shareCopy.verdictLabel}:</span> {verdictLabel}
               </div>
+              <div>
+                <span className="font-semibold text-[var(--swimm-neutral-700)]">{shareCopy.executionLabel}:</span> {executionStatusLabel}
+              </div>
               {sharedAt ? (
                 <div>
                   <span className="font-semibold text-[var(--swimm-neutral-700)]">
@@ -338,20 +423,13 @@ export default function SharedHistoryPage({
           </div>
         </section>
 
-        <div className="space-y-3">
-          <h2 className="text-lg font-semibold text-[var(--swimm-navy-900)]">
-            {shareCopy.liveChartTitle}
-          </h2>
-          <HistoryLiveChart
-            symbol={chartSymbol}
-            provider={resolvedProvider}
-            mode={resolvedMode}
-            timeframe={liveDefaultTimeframe}
-            snapshotCapturedAt={entry.snapshot?.capturedAt ?? entry.createdAt}
-            snapshotCandles={snapshotCandles}
-            variant="chartOnly"
+        {historyEntry ? (
+          <HistoryEntryAnalysis
+            entry={historyEntry}
+            onUpdateEntry={handleNoopUpdate}
+            readOnly
           />
-        </div>
+        ) : null}
 
         {snapshotCandles.length ? (
           <div className="space-y-3">
@@ -377,60 +455,6 @@ export default function SharedHistoryPage({
         ) : null}
 
         <section className="rounded-3xl bg-white/90 p-6 shadow-sm ring-1 ring-[var(--swimm-neutral-200)]">
-          <h2 className="text-lg font-semibold text-[var(--swimm-navy-900)]">{shareCopy.summaryTitle}</h2>
-          <p className="mt-2 text-sm text-[var(--swimm-neutral-600)]">
-            {entry.summary || entry.response.summary}
-          </p>
-          <div className="mt-4 space-y-3">
-            <div>
-              <h3 className="text-sm font-semibold text-[var(--swimm-navy-900)]">{shareCopy.rationaleLabel}</h3>
-              <p className="mt-1 text-sm text-[var(--swimm-neutral-500)]">
-                {entry.response.decision?.rationale || plan?.rationale || shareCopy.noRationale}
-              </p>
-            </div>
-            <div>
-              <h3 className="text-sm font-semibold text-[var(--swimm-navy-900)]">{shareCopy.forecastLabel}</h3>
-              <p className="mt-1 text-sm text-[var(--swimm-neutral-500)]">
-                {entry.response.market?.chart?.forecast || shareCopy.noForecast}
-              </p>
-            </div>
-          </div>
-        </section>
-
-        <section className="rounded-3xl bg-white/90 p-6 shadow-sm ring-1 ring-[var(--swimm-neutral-200)]">
-          <h2 className="text-lg font-semibold text-[var(--swimm-navy-900)]">{shareCopy.tradePlanTitle}</h2>
-          <div className="mt-3 grid gap-4 md:grid-cols-2">
-            <div>
-              <h3 className="text-sm font-semibold text-[var(--swimm-neutral-700)]">{shareCopy.entriesLabel}</h3>
-              {renderPlanList(entriesList, shareCopy.noEntries)}
-            </div>
-            <div>
-              <h3 className="text-sm font-semibold text-[var(--swimm-neutral-700)]">{shareCopy.targetsLabel}</h3>
-              {renderPlanList(targetsList, shareCopy.noTargets)}
-            </div>
-            <div>
-              <h3 className="text-sm font-semibold text-[var(--swimm-neutral-700)]">{shareCopy.stopLabel}</h3>
-              <p className="mt-2 font-mono text-sm text-[var(--swimm-navy-900)]">
-                {typeof plan?.stopLoss === "number" ? plan.stopLoss : shareCopy.noStop}
-              </p>
-            </div>
-            <div>
-              <h3 className="text-sm font-semibold text-[var(--swimm-neutral-700)]">{shareCopy.sizingLabel}</h3>
-              <p className="mt-2 text-sm text-[var(--swimm-neutral-500)]">
-                {plan?.sizingNotes?.trim().length ? plan.sizingNotes : shareCopy.noSizing}
-              </p>
-            </div>
-          </div>
-        </section>
-
-        <section className="rounded-3xl bg-white/90 p-6 shadow-sm ring-1 ring-[var(--swimm-neutral-200)]">
-          <h2 className="text-lg font-semibold text-[var(--swimm-navy-900)]">{shareCopy.highlightsTitle}</h2>
-          {renderList(highlights, shareCopy.noHighlights)}
-          <h3 className="mt-4 text-sm font-semibold text-[var(--swimm-neutral-700)]">{shareCopy.nextStepsTitle}</h3>
-          {renderList(nextSteps, shareCopy.noNextSteps)}
-        </section>
-
-        <section className="rounded-3xl bg-white/90 p-6 shadow-sm ring-1 ring-[var(--swimm-neutral-200)]">
           <h2 className="text-lg font-semibold text-[var(--swimm-navy-900)]">{shareCopy.feedbackLabel}</h2>
           <p className="mt-2 text-sm text-[var(--swimm-neutral-500)]">
             {entry.feedback?.trim().length ? entry.feedback : shareCopy.noFeedback}
@@ -447,3 +471,4 @@ export default function SharedHistoryPage({
     </div>
   );
 }
+

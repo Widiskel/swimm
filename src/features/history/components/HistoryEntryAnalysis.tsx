@@ -426,13 +426,16 @@ type HistoryEntryAnalysisProps = {
     sessionId?: string;
     createdAt?: string;
   }) => Promise<HistoryEntry>;
+  readOnly?: boolean;
 };
 
 export function HistoryEntryAnalysis({
   entry,
   onUpdateEntry,
+  readOnly = false,
 }: HistoryEntryAnalysisProps) {
   const { messages, languageTag } = useLanguage();
+  const readOnlyMode = readOnly === true;
   const [analysisCandles, setAnalysisCandles] = useState<CandlestickData[]>([]);
   const [chartStart, setChartStart] = useState("-");
   const [chartEnd, setChartEnd] = useState("-");
@@ -699,6 +702,7 @@ export function HistoryEntryAnalysis({
     ""
   ).toLowerCase();
   const canUpdateVerdict =
+    !readOnlyMode &&
     (decisionAction === "buy" || decisionAction === "sell") &&
     entry.executed === true;
   const verdictOptions = [
@@ -720,11 +724,11 @@ export function HistoryEntryAnalysis({
   const disableSubmit = !canUpdateVerdict || isSubmitting || !isDirty;
 
   const executionRecorded = typeof executedState === "boolean";
-  const showFeedbackCard = executedState === true;
-  const showVerdictControls = executedState === true;
+  const showFeedbackCard = !readOnlyMode && executedState === true;
+  const showVerdictControls = !readOnlyMode && executedState === true;
 
   const handleExecutionUpdate = async (executed: boolean) => {
-    if (isUpdatingExecution) {
+    if (readOnlyMode || isUpdatingExecution) {
       return;
     }
     const previousState = executedState;
@@ -879,56 +883,60 @@ export function HistoryEntryAnalysis({
         </p>
       ) : null}
 
-      <section className="mt-6 rounded-3xl border border-[var(--swimm-neutral-300)] bg-white p-6 shadow-sm shadow-[var(--swimm-neutral-300)]/40">
-        <h4 className="text-lg font-semibold text-[var(--swimm-navy-900)]">
-          {executionCopy.title}
-        </h4>
-        <p className="mt-2 text-sm text-[var(--swimm-neutral-500)]">
-          {executionCopy.description}
-        </p>
-        <div className="mt-5 flex flex-col gap-3 sm:flex-row">
-          <button
-            type="button"
-            onClick={() => handleExecutionUpdate(true)}
-            disabled={isUpdatingExecution}
-            className={`inline-flex items-center justify-center rounded-full border px-5 py-2 text-xs font-semibold uppercase tracking-[0.3em] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:border-[var(--swimm-neutral-300)] disabled:bg-[var(--swimm-neutral-200)]/60 disabled:text-[var(--swimm-neutral-400)] ${
-              executedState === true
-                ? "border-[var(--swimm-primary-700)] bg-[var(--swimm-primary-500)]/15 text-[var(--swimm-primary-700)]"
-                : "border-[var(--swimm-neutral-300)] bg-white text-[var(--swimm-neutral-500)] hover:border-[var(--swimm-primary-500)] hover:text-[var(--swimm-primary-700)]"
-            }`}
-          >
-            {executionCopy.executedYes}
-          </button>
-          <button
-            type="button"
-            onClick={() => handleExecutionUpdate(false)}
-            disabled={isUpdatingExecution}
-            className={`inline-flex items-center justify-center rounded-full border px-5 py-2 text-xs font-semibold uppercase tracking-[0.3em] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:border-[var(--swimm-neutral-300)] disabled:bg-[var(--swimm-neutral-200)]/60 disabled:text-[var(--swimm-neutral-400)] ${
-              executedState === false
-                ? "border-[var(--swimm-primary-700)] bg-[var(--swimm-primary-500)]/15 text-[var(--swimm-primary-700)]"
-                : "border-[var(--swimm-neutral-300)] bg-white text-[var(--swimm-neutral-500)] hover:border-[var(--swimm-primary-500)] hover:text-[var(--swimm-primary-700)]"
-            }`}
-          >
-            {executionCopy.executedNo}
-          </button>
-        </div>
-        {executionError ? (
-          <p className="mt-3 text-xs text-[var(--swimm-down)]">
-            {executionError}
-          </p>
-        ) : null}
-      </section>
+      {!readOnlyMode ? (
+        <>
+          <section className="mt-6 rounded-3xl border border-[var(--swimm-neutral-300)] bg-white p-6 shadow-sm shadow-[var(--swimm-neutral-300)]/40">
+            <h4 className="text-lg font-semibold text-[var(--swimm-navy-900)]">
+              {executionCopy.title}
+            </h4>
+            <p className="mt-2 text-sm text-[var(--swimm-neutral-500)]">
+              {executionCopy.description}
+            </p>
+            <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+              <button
+                type="button"
+                onClick={() => handleExecutionUpdate(true)}
+                disabled={isUpdatingExecution}
+                className={`inline-flex items-center justify-center rounded-full border px-5 py-2 text-xs font-semibold uppercase tracking-[0.3em] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:border-[var(--swimm-neutral-300)] disabled:bg-[var(--swimm-neutral-200)]/60 disabled:text-[var(--swimm-neutral-400)] ${
+                  executedState === true
+                    ? "border-[var(--swimm-primary-700)] bg-[var(--swimm-primary-500)]/15 text-[var(--swimm-primary-700)]"
+                    : "border-[var(--swimm-neutral-300)] bg-white text-[var(--swimm-neutral-500)] hover:border-[var(--swimm-primary-500)] hover:text-[var(--swimm-primary-700)]"
+                }`}
+              >
+                {executionCopy.executedYes}
+              </button>
+              <button
+                type="button"
+                onClick={() => handleExecutionUpdate(false)}
+                disabled={isUpdatingExecution}
+                className={`inline-flex items-center justify-center rounded-full border px-5 py-2 text-xs font-semibold uppercase tracking-[0.3em] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:border-[var(--swimm-neutral-300)] disabled:bg-[var(--swimm-neutral-200)]/60 disabled:text-[var(--swimm-neutral-400)] ${
+                  executedState === false
+                    ? "border-[var(--swimm-primary-700)] bg-[var(--swimm-primary-500)]/15 text-[var(--swimm-primary-700)]"
+                    : "border-[var(--swimm-neutral-300)] bg-white text-[var(--swimm-neutral-500)] hover:border-[var(--swimm-primary-500)] hover:text-[var(--swimm-primary-700)]"
+                }`}
+              >
+                {executionCopy.executedNo}
+              </button>
+            </div>
+            {executionError ? (
+              <p className="mt-3 text-xs text-[var(--swimm-down)]">
+                {executionError}
+              </p>
+            ) : null}
+          </section>
 
-      {executionRecorded && executionMessage ? (
-        <p
-          className={`mt-4 rounded-2xl px-4 py-3 text-xs ${
-            executedState === true
-              ? "border border-[var(--swimm-primary-500)]/40 bg-[var(--swimm-primary-500)]/10 text-[var(--swimm-primary-700)]"
-              : "border border-[var(--swimm-neutral-300)] bg-[var(--swimm-neutral-100)] text-[var(--swimm-neutral-500)]"
-          }`}
-        >
-          {executionMessage}
-        </p>
+          {executionRecorded && executionMessage ? (
+            <p
+              className={`mt-4 rounded-2xl px-4 py-3 text-xs ${
+                executedState === true
+                  ? "border border-[var(--swimm-primary-500)]/40 bg-[var(--swimm-primary-500)]/10 text-[var(--swimm-primary-700)]"
+                  : "border border-[var(--swimm-neutral-300)] bg-[var(--swimm-neutral-100)] text-[var(--swimm-neutral-500)]"
+              }`}
+            >
+              {executionMessage}
+            </p>
+          ) : null}
+        </>
       ) : null}
 
       {showFeedbackCard ? (
@@ -1034,3 +1042,4 @@ export function HistoryEntryAnalysis({
     </>
   );
 }
+
