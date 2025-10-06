@@ -137,15 +137,18 @@ export function HistoryEntryDetail({ entryId }: { entryId: string }) {
     </div>
   );
 
+  const shouldShowInitialLoading =
+    !entry && (isLoading || isBootstrapping || !hasRequestedRef.current);
+
   const mainContent = (() => {
+    if (shouldShowInitialLoading) {
+      return (
+        <div className="rounded-3xl bg-white/90 p-10 text-center text-sm text-[var(--swimm-neutral-500)] shadow-sm ring-1 ring-[var(--swimm-neutral-200)]">
+          {detailCopy.loading}
+        </div>
+      );
+    }
     if (!entry) {
-      if (isLoading || isBootstrapping) {
-        return (
-          <div className="rounded-3xl bg-white/90 p-10 text-center text-sm text-[var(--swimm-neutral-500)] shadow-sm ring-1 ring-[var(--swimm-neutral-200)]">
-            {detailCopy.loading}
-          </div>
-        );
-      }
       return renderNotFound();
     }
 
