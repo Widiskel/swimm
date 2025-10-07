@@ -821,6 +821,15 @@ const id = {
       error: "Chart live tidak dapat dimuat.",
       timeframeLabel: "Timeframe",
       indicatorsLabel: "Indikator",
+      progress: {
+        tpHit: "TP {number} tercapai",
+        stopHit: "Stop loss kena",
+        summary: "{hit}/{total} target tercapai",
+        targetLabel: "TP {number}",
+        statusLive: "Kena di live",
+        statusSnapshot: "Kena di snapshot",
+        statusPending: "Menunggu",
+      },
     },
   },
   language: {

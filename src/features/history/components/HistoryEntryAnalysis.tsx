@@ -471,6 +471,7 @@ export function HistoryEntryAnalysis({
   const snapshotContext = useMemo(() => buildSnapshotContext(entry), [entry]);
   const snapshotCandles = snapshotContext.candles;
   const snapshotResult = snapshotContext.result;
+  const tradeDirection = useMemo(() => resolveDirection(entry), [entry]);
 
   useEffect(() => {
     setVerdictValue(entry.verdict);
@@ -845,6 +846,8 @@ export function HistoryEntryAnalysis({
         timeframe={entry.decision?.timeframe ?? entry.timeframe ?? timeframe}
         snapshotCapturedAt={entry.snapshot?.capturedAt ?? entry.createdAt}
         snapshotCandles={snapshotCandles}
+        tradePlan={entry.response.tradePlan}
+        direction={tradeDirection}
       />
 
       <AnalysisSection

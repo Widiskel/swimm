@@ -837,6 +837,15 @@ const en = {
       error: "Unable to load live chart.",
       timeframeLabel: "Timeframe",
       indicatorsLabel: "Indicators",
+      progress: {
+        tpHit: "TP {number} hit",
+        stopHit: "Stop loss hit",
+        summary: "{hit}/{total} targets hit",
+        targetLabel: "TP {number}",
+        statusLive: "Live hit",
+        statusSnapshot: "Snapshot hit",
+        statusPending: "Pending",
+      },
     },
   },
   language: {

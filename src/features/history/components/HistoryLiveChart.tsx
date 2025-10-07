@@ -11,6 +11,7 @@ import {
   type MouseEventParams,
 } from "lightweight-charts";
 
+import type { AgentResponse } from "@/features/analysis/types";
 import type { CexProvider } from "@/features/market/exchanges";
 import type {
   HoverData,
@@ -53,6 +54,75 @@ const mapTimeframeToInterval = (value: string): string => {
   return "1h";
 };
 
+const FALLBACK_PROGRESS_COPY = {
+  tpHit: "TP {number} hit",
+  stopHit: "Stop loss hit",
+  summary: "{hit}/{total} targets hit",
+  targetLabel: "TP {number}",
+  statusLive: "Live hit",
+  statusSnapshot: "Snapshot hit",
+  statusPending: "Pending",
+};
+
+const computePlanProgress = (
+  candles: CandlestickData[],
+  direction: "long" | "short",
+  plan: AgentResponse["tradePlan"]
+): { hitTargets: number[]; stopHit: boolean } => {
+  if (!candles.length) {
+    return { hitTargets: [], stopHit: false };
+  }
+
+  const stopLoss =
+    typeof plan.stopLoss === "number" && Number.isFinite(plan.stopLoss)
+      ? plan.stopLoss
+      : null;
+  const targets = Array.isArray(plan.takeProfits)
+    ? plan.takeProfits.filter(
+        (value): value is number =>
+          typeof value === "number" && Number.isFinite(value)
+      )
+    : [];
+
+  if (!targets.length && stopLoss === null) {
+    return { hitTargets: [], stopHit: false };
+  }
+
+  const hitTargets = new Set<number>();
+  let stopHit = false;
+
+  for (const candle of candles) {
+    const { high, low } = candle;
+
+    if (!stopHit && stopLoss !== null) {
+      const stopCondition =
+        direction === "short"
+          ? low <= stopLoss || high >= stopLoss
+          : low <= stopLoss;
+      if (stopCondition) {
+        stopHit = true;
+      }
+    }
+
+    targets.forEach((target, index) => {
+      const targetHit =
+        direction === "short" ? low <= target : high >= target;
+      if (targetHit) {
+        hitTargets.add(index);
+      }
+    });
+
+    if (stopHit && hitTargets.size === targets.length) {
+      break;
+    }
+  }
+
+  return {
+    hitTargets: Array.from(hitTargets).sort((a, b) => a - b),
+    stopHit,
+  };
+};
+
 export type HistoryLiveChartProps = {
   symbol: string;
   provider: CexProvider;
@@ -60,6 +130,8 @@ export type HistoryLiveChartProps = {
   timeframe: string;
   snapshotCapturedAt?: string | null;
   snapshotCandles?: CandlestickData[];
+  tradePlan?: AgentResponse["tradePlan"] | null;
+  direction?: "long" | "short" | null;
   variant?: "default" | "chartOnly";
 };
 
@@ -70,10 +142,13 @@ export function HistoryLiveChart({
   timeframe,
   snapshotCapturedAt,
   snapshotCandles,
+  tradePlan,
+  direction,
   variant = "default",
 }: HistoryLiveChartProps) {
   const { languageTag, messages, __, locale } = useLanguage();
   const historyCopy = messages.history.liveComparison;
+  const progressCopy = historyCopy.progress ?? FALLBACK_PROGRESS_COPY;
   const liveCopy = messages.live;
   const chartOnly = variant === "chartOnly";
 
@@ -86,6 +161,7 @@ export function HistoryLiveChart({
   const chartContainerRef = useRef<HTMLDivElement | null>(null);
   const chartApiRef = useRef<IChartApi | null>(null);
   const candleSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
+  const snapshotSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const indicatorSeriesRef = useRef<IndicatorSeriesMap>({});
   const crosshairHandlerRef = useRef<
     ((param: MouseEventParams) => void) | null
@@ -121,6 +197,7 @@ export function HistoryLiveChart({
     summaryStats: MarketSnapshot["summaryStats"];
     updatedAt: string | null;
   } | null>(null);
+  const [hasLiveData, setHasLiveData] = useState(false);
   const [isChartLoading, setIsChartLoading] = useState(false);
   const [chartError, setChartError] = useState<string | null>(null);
   const [isChartVisible, setIsChartVisible] = useState(false);
@@ -169,6 +246,105 @@ export function HistoryLiveChart({
     [languageTag]
   );
 
+  const snapshotProgress = useMemo(
+    (): { hitTargets: number[]; stopHit: boolean } => {
+      if (!snapshotCandles?.length || !tradePlan || !direction) {
+        return { hitTargets: [], stopHit: false };
+      }
+      return computePlanProgress(snapshotCandles, direction, tradePlan);
+    },
+    [direction, snapshotCandles, tradePlan]
+  );
+
+  const liveProgress = useMemo(
+    (): { hitTargets: number[]; stopHit: boolean } => {
+      if (
+        !hasLiveData ||
+        !candles.length ||
+        !snapshotCandles?.length ||
+        !tradePlan ||
+        !direction
+      ) {
+        return { hitTargets: [], stopHit: false };
+      }
+
+      const lastSnapshotTimeRaw = snapshotCandles[snapshotCandles.length - 1]?.time;
+      const lastSnapshotTime =
+        typeof lastSnapshotTimeRaw === "number" ? lastSnapshotTimeRaw : NaN;
+
+      const relevantCandles = candles.filter((candle) => {
+        const numericTime =
+          typeof candle.time === "number" ? candle.time : Number.NaN;
+        if (!Number.isFinite(numericTime)) {
+          return false;
+        }
+        if (Number.isFinite(lastSnapshotTime)) {
+          return numericTime >= lastSnapshotTime;
+        }
+        return true;
+      });
+
+      if (!relevantCandles.length) {
+        return { hitTargets: [], stopHit: false };
+      }
+
+      return computePlanProgress(relevantCandles, direction, tradePlan);
+    },
+    [candles, direction, hasLiveData, snapshotCandles, tradePlan]
+  );
+
+  const progressDelta =
+    liveProgress.hitTargets.length || liveProgress.stopHit
+      ? (() => {
+          const baselineTargets = new Set(snapshotProgress.hitTargets);
+          const hitTargets = liveProgress.hitTargets.filter(
+            (index) => !baselineTargets.has(index)
+          );
+          const stopHit = liveProgress.stopHit && !snapshotProgress.stopHit;
+          return { hitTargets, stopHit };
+        })()
+      : { hitTargets: [] as number[], stopHit: false };
+  const targetStatuses = useMemo(
+    () =>
+      direction && tradePlan?.takeProfits?.length
+        ? tradePlan.takeProfits
+            .map((value, index) => {
+              if (typeof value !== "number" || !Number.isFinite(value)) {
+                return null;
+              }
+              const liveHit = liveProgress.hitTargets.includes(index);
+              const snapshotHit = snapshotProgress.hitTargets.includes(index);
+              const status = liveHit
+                ? "live"
+                : snapshotHit
+                ? "snapshot"
+                : "pending";
+              return {
+                index,
+                value,
+                status,
+              };
+            })
+            .filter(
+              (
+                item
+              ): item is { index: number; value: number; status: "live" | "snapshot" | "pending" } =>
+                item !== null
+            )
+        : [],
+    [direction, liveProgress.hitTargets, snapshotProgress.hitTargets, tradePlan]
+  );
+  const totalTargets = targetStatuses.length;
+  const hitTargetCount = targetStatuses.filter(
+    (item) => item.status === "live" || item.status === "snapshot"
+  ).length;
+  const summaryLabel =
+    totalTargets > 0
+      ? progressCopy.summary
+          .replace("{hit}", String(hitTargetCount))
+          .replace("{total}", String(totalTargets))
+      : null;
+
   const setHoverState = useCallback((value: HoverData | null) => {
     hoverDataRef.current = value;
     setHoverData(value);
@@ -190,6 +366,7 @@ export function HistoryLiveChart({
     }
     chartApiRef.current = null;
     candleSeriesRef.current = null;
+    snapshotSeriesRef.current = null;
     indicatorSeriesRef.current = {};
     crosshairHandlerRef.current = null;
     hoverDataRef.current = null;
@@ -280,17 +457,20 @@ export function HistoryLiveChart({
             setCandles(snapshotCandles);
             setIsChartVisible(true);
             setChartError(null);
+            setHasLiveData(false);
           } else {
             setCandles([]);
             setIsChartVisible(false);
             setChartError(historyCopy.empty);
             teardownChart();
             setHoverState(null);
+            setHasLiveData(false);
           }
           return;
         }
 
         setCandles(parsedCandles);
+        setHasLiveData(true);
         setIsChartVisible(true);
         setChartError(null);
       } catch (error) {
@@ -304,6 +484,7 @@ export function HistoryLiveChart({
           setChartError(
             error instanceof Error ? error.message : historyCopy.error
           );
+          setHasLiveData(false);
         } else {
           setCandles([]);
           setChartMeta(null);
@@ -313,6 +494,7 @@ export function HistoryLiveChart({
           setChartError(
             error instanceof Error ? error.message : historyCopy.error
           );
+          setHasLiveData(false);
         }
       } finally {
         if (!cancelled && !silent) {
@@ -349,6 +531,7 @@ export function HistoryLiveChart({
       setCandles(snapshotCandles);
       setIsChartVisible(true);
       setChartError(null);
+      setHasLiveData(false);
     }
   }, [snapshotCandles]);
 
@@ -382,6 +565,20 @@ export function HistoryLiveChart({
         autoSize: true,
       });
 
+      const snapshotSeries = chart.addCandlestickSeries({
+        upColor: withAlpha("#22c55e", 0.38),
+        borderUpColor: withAlpha("#22c55e", 0.38),
+        wickUpColor: withAlpha("#22c55e", 0.28),
+        downColor: withAlpha("#ef4444", 0.38),
+        borderDownColor: withAlpha("#ef4444", 0.38),
+        wickDownColor: withAlpha("#ef4444", 0.28),
+        priceScaleId: "right",
+      });
+      snapshotSeries.applyOptions({
+        priceLineVisible: false,
+        lastValueVisible: false,
+      });
+
       const candleSeries = chart.addCandlestickSeries({
         upColor: "#22c55e",
         borderUpColor: "#22c55e",
@@ -389,6 +586,7 @@ export function HistoryLiveChart({
         downColor: "#ef4444",
         borderDownColor: "#ef4444",
         wickDownColor: "#ef4444",
+        priceScaleId: "right",
       });
 
       if (!chartOnly) {
@@ -401,6 +599,7 @@ export function HistoryLiveChart({
 
       chartApiRef.current = chart;
       candleSeriesRef.current = candleSeries;
+      snapshotSeriesRef.current = snapshotSeries;
 
       const handler = (param: MouseEventParams) => {
         const targetSeries = candleSeriesRef.current;
@@ -469,6 +668,19 @@ export function HistoryLiveChart({
       timeScale.fitContent();
     }
 
+    const snapshotSeries = snapshotSeriesRef.current;
+    if (snapshotSeries) {
+      if (snapshotCandles?.length) {
+        snapshotSeries.setData(snapshotCandles);
+        snapshotSeries.applyOptions({
+          visible: hasLiveData,
+        });
+      } else {
+        snapshotSeries.setData([]);
+        snapshotSeries.applyOptions({ visible: false });
+      }
+    }
+
     suppressRangeEventRef.current = false;
 
     if (!chartOnly) {
@@ -509,7 +721,15 @@ export function HistoryLiveChart({
     return () => {
       window.removeEventListener("resize", handleResize);
     };
-  }, [candles, chartOnly, hoverDateFormatter, indicatorVisibility, setHoverState]);
+  }, [
+    candles,
+    chartOnly,
+    hasLiveData,
+    hoverDateFormatter,
+    indicatorVisibility,
+    setHoverState,
+    snapshotCandles,
+  ]);
 
   const handleTimeframeChange = (next: (typeof TIMEFRAME_OPTIONS)[number]) => {
     setActiveTimeframe(next);
@@ -668,6 +888,9 @@ export function HistoryLiveChart({
     );
   }
 
+  const showProgressBadges =
+    hasLiveData && (progressDelta.hitTargets.length > 0 || progressDelta.stopHit);
+
   const priceChangePct = summaryStats?.priceChangePercent ?? null;
   const changeBadgeClass =
     priceChangePct === null
@@ -790,6 +1013,63 @@ export function HistoryLiveChart({
                 </button>
               ))}
             </div>
+            {showProgressBadges ? (
+              <div className="mt-4 flex flex-wrap gap-2">
+                {progressDelta.hitTargets.map((index) => (
+                  <span
+                    key={`tp-hit-${index}`}
+                    className="rounded-full border border-[var(--swimm-up)]/40 bg-[var(--swimm-up)]/10 px-3 py-1 text-xs font-semibold text-[var(--swimm-up)]"
+                  >
+                    {progressCopy.tpHit.replace("{number}", String(index + 1))}
+                  </span>
+                ))}
+                {progressDelta.stopHit ? (
+                  <span className="rounded-full border border-[var(--swimm-down)]/40 bg-[var(--swimm-down)]/10 px-3 py-1 text-xs font-semibold text-[var(--swimm-down)]">
+                    {progressCopy.stopHit}
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
+            {summaryLabel ? (
+              <div className="mt-2 space-y-2">
+                <span className="inline-flex rounded-full border border-[var(--swimm-neutral-300)] bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--swimm-neutral-500)]">
+                  {summaryLabel}
+                </span>
+                {targetStatuses.length ? (
+                  <div className="flex flex-wrap gap-2">
+                    {targetStatuses.map((target) => {
+                      const label = progressCopy.targetLabel.replace(
+                        "{number}",
+                        String(target.index + 1)
+                      );
+                      const statusLabel =
+                        target.status === "live"
+                          ? progressCopy.statusLive
+                          : target.status === "snapshot"
+                          ? progressCopy.statusSnapshot
+                          : progressCopy.statusPending;
+                      const badgeClass =
+                        target.status === "live"
+                          ? "border-[var(--swimm-up)]/40 bg-[var(--swimm-up)]/10 text-[var(--swimm-up)]"
+                          : target.status === "snapshot"
+                          ? "border-[var(--swimm-primary-500)]/40 bg-[var(--swimm-primary-500)]/10 text-[var(--swimm-primary-700)]"
+                          : "border-[var(--swimm-neutral-300)] bg-white text-[var(--swimm-neutral-500)]";
+                      return (
+                        <span
+                          key={`tp-status-${target.index}`}
+                          className={`flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold ${badgeClass}`}
+                        >
+                          <span>{label}</span>
+                          <span className="text-[0.7rem] uppercase tracking-wide">
+                            {statusLabel}
+                          </span>
+                        </span>
+                      );
+                    })}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
             {chartOnly ? null : (
               <div className="mt-4 flex flex-wrap gap-2">
                 <div className="rounded-xl border border-[var(--swimm-neutral-300)] bg-white px-4 py-3 text-xs text-[var(--swimm-neutral-500)]">
