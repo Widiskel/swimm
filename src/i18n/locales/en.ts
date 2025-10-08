@@ -862,30 +862,46 @@ const en = {
       ctaPrimaryGuest: "Sign in to analyse",
       ctaSecondaryAuthenticated: "View saved history",
       ctaSecondaryGuest: "Browse capabilities",
-      privyWaiting:
-        "Waiting for Privy connection... actions unlock as soon as authentication is ready.",
-      highlights: [
-        {
-          title: "Multi-exchange market feed",
-          description:
-            "Monitor spot and futures order books across providers with synced timeframes and depth.",
-        },
-        {
-          title: "Agent trade brief",
-          description:
-            "Generate SWIMM summaries, rationales, and full trade plans straight from the live chart.",
-        },
-        {
-          title: "Indicator control",
-          description:
-            "Toggle SMA, EMA, and Bollinger overlays while you inspect execution zones.",
-        },
-        {
-          title: "History + feedback",
-          description:
-            "Capture agent output, verdicts, and snapshots to review performance after the fact.",
-        },
-      ],
+        privyWaiting:
+          "Waiting for Privy connection... actions unlock as soon as authentication is ready.",
+        highlightsHeading: "Core strengths",
+        highlights: [
+          {
+            title: "Flexible market intake",
+            description:
+              "Pick crypto or gold, flip spot or futures, auto-match the right provider, and find symbols fast with the modal search.",
+          },
+          {
+            title: "Live order-flow dashboard",
+            description:
+              "Stream fresh candlesticks, toggle MA/EMA/Bollinger overlays, and read 50-level order books before you run the agent.",
+          },
+          {
+            title: "Trade-ready plans",
+            description:
+              "Get a complete brief—summary, entries, five targets, stop loss, execution window, sizing notes, and supporting narrative—in one shot.",
+          },
+          {
+            title: "Multi-source intelligence",
+            description:
+              "Blend Binance, Bybit, and Twelve Data pricing with Tavily research, CryptoPanic headlines, and Sentient model reasoning.",
+          },
+          {
+            title: "History control center",
+            description:
+              "Save, update, and share analyses backed by performance metrics plus filters for pair, action, verdict, and date.",
+          },
+          {
+            title: "Execution feedback loop",
+            description:
+              "Mark whether plans were executed, log feedback, and surface success or miss states so the desk keeps learning.",
+          },
+          {
+            title: "Bilingual & secure access",
+            description:
+              "Switch languages instantly and gate deeper analysis behind Privy authentication for team-only visibility.",
+          },
+        ],
       metrics: [
         {
           value: "6",

@@ -845,31 +845,47 @@ const id = {
       ctaPrimaryAuthenticated: "Buka analisa SWIMM",
       ctaPrimaryGuest: "Masuk untuk analisa",
       ctaSecondaryAuthenticated: "Lihat riwayat tersimpan",
-      ctaSecondaryGuest: "Lihat kapabilitas",
-      privyWaiting:
-        "Menunggu koneksi Privy... tombol aktif segera setelah autentikasi siap.",
-      highlights: [
-        {
-          title: "Feed pasar multi-bursa",
-          description:
-            "Pantau order book spot dan futures lintas provider dengan timeframe dan depth tersinkron.",
-        },
-        {
-          title: "Brief trading agent",
-          description:
-            "Hasilkan ringkasan SWIMM, rasional, dan rencana trading lengkap langsung dari chart live.",
-        },
-        {
-          title: "Kontrol indikator",
-          description:
-            "Aktifkan atau nonaktifkan SMA, EMA, dan Bollinger sambil meninjau zona eksekusi.",
-        },
-        {
-          title: "Riwayat + feedback",
-          description:
-            "Simpan output agent, verdict, dan snapshot untuk evaluasi performa setelahnya.",
-        },
-      ],
+        ctaSecondaryGuest: "Lihat kapabilitas",
+        privyWaiting:
+          "Menunggu koneksi Privy... tombol aktif segera setelah autentikasi siap.",
+        highlightsHeading: "Kekuatan utama",
+        highlights: [
+          {
+            title: "Intake pasar fleksibel",
+            description:
+              "Pilih kripto atau emas, ganti mode spot/futures, sesuaikan provider otomatis, dan cari simbol kilat lewat modal.",
+          },
+          {
+            title: "Dashboard order flow live",
+            description:
+              "Stream candlestick terbaru, toggle SMA/EMA/Bollinger, dan baca order book 50 level sebelum menjalankan agent.",
+          },
+          {
+            title: "Rencana siap eksekusi",
+            description:
+              "Dapatkan paket lengkap—ringkasan, entry, lima target, stop loss, execution window, sizing notes, dan narasi pendukung.",
+          },
+          {
+            title: "Intel multi-sumber",
+            description:
+              "Gabungkan harga Binance, Bybit, Twelve Data dengan riset Tavily, headline CryptoPanic, dan reasoning model Sentient.",
+          },
+          {
+            title: "Pusat kendali riwayat",
+            description:
+              "Simpan, perbarui, dan bagikan analisa dengan metrik performa plus filter pair, aksi, verdict, dan tanggal.",
+          },
+          {
+            title: "Loop umpan balik eksekusi",
+            description:
+              "Tandai apakah rencana dijalankan, catat feedback, dan tampilkan status sukses/gagal agar tim terus belajar.",
+          },
+          {
+            title: "Akses bilingual & aman",
+            description:
+              "Ganti bahasa seketika dan lindungi analisa mendalam di balik autentikasi Privy untuk tim internal.",
+          },
+        ],
       metrics: [
         {
           value: "6",

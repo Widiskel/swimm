@@ -108,7 +108,11 @@ export default function HomePage() {
                   {introduction.privyWaiting}
                 </p>
               ) : null}
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="space-y-3">
+                <h3 className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--swimm-neutral-400)]">
+                  {introduction.highlightsHeading}
+                </h3>
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {heroHighlights.map((highlight) => (
                   <div
                     key={highlight.title}
@@ -123,6 +127,7 @@ export default function HomePage() {
                     </div>
                   </div>
                 ))}
+                </div>
               </div>
             </div>
 
