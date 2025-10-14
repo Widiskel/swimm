@@ -16,8 +16,15 @@ import {
   mapTimeframeToBybitIntervalSymbol,
   isBybitPairTradable,
 } from "@/features/market/exchanges/bybit";
-import { DEFAULT_PROVIDER, isCexProvider, type CexProvider } from "@/features/market/exchanges";
-import { fetchGoldCandles, fetchGoldMarketSummary } from "@/features/market/exchanges/twelvedata";
+import {
+  DEFAULT_PROVIDER,
+  isCexProvider,
+  type CexProvider,
+} from "@/features/market/exchanges";
+import {
+  fetchGoldCandles,
+  fetchGoldMarketSummary,
+} from "@/features/market/exchanges/twelvedata";
 import {
   DEFAULT_MARKET_MODE,
   DEFAULT_ASSET_CATEGORY,
@@ -118,7 +125,8 @@ type AgentPayload = {
 
 installFetchLogger();
 
-const FIREWORKS_API_URL = "https://api.fireworks.ai/inference/v1/chat/completions";
+const FIREWORKS_API_URL =
+  "https://api.fireworks.ai/inference/v1/chat/completions";
 const DEFAULT_FIREWORKS_MODEL =
   "accounts/sentientfoundation/models/dobby-unhinged-llama-3-3-70b-new";
 const TAVILY_ARTICLE_LIMIT = 5;
@@ -143,7 +151,10 @@ const ALLOWED_TIMEFRAMES = ["1m", "5m", "15m", "1h", "4h", "1d"] as const;
 type Timeframe = (typeof ALLOWED_TIMEFRAMES)[number];
 const DEFAULT_TIMEFRAME: Timeframe = "5m";
 
-const TIMEFRAME_CONFIG: Record<Timeframe, { entryPct: number; stopPct: number; tpStepPct: number }> = {
+const TIMEFRAME_CONFIG: Record<
+  Timeframe,
+  { entryPct: number; stopPct: number; tpStepPct: number }
+> = {
   "1m": { entryPct: 0.0015, stopPct: 0.004, tpStepPct: 0.0025 },
   "5m": { entryPct: 0.0025, stopPct: 0.006, tpStepPct: 0.0035 },
   "15m": { entryPct: 0.004, stopPct: 0.01, tpStepPct: 0.006 },
@@ -278,7 +289,8 @@ const calculateVolatility = (values: number[]) => {
   }
   const mean = values.reduce((acc, value) => acc + value, 0) / values.length;
   const variance =
-    values.reduce((acc, value) => acc + (value - mean) ** 2, 0) / (values.length - 1);
+    values.reduce((acc, value) => acc + (value - mean) ** 2, 0) /
+    (values.length - 1);
   return Math.sqrt(variance);
 };
 
@@ -287,7 +299,11 @@ const calculateATR = (candles: BinanceCandle[], period = 14) => {
     return null;
   }
   let total = 0;
-  for (let index = candles.length - period; index < candles.length; index += 1) {
+  for (
+    let index = candles.length - period;
+    index < candles.length;
+    index += 1
+  ) {
     const current = candles[index];
     const previous = candles[index - 1];
     const highLow = current.high - current.low;
@@ -353,17 +369,31 @@ const buildHistoryInsightsForPrompt = async (
       day: "2-digit",
     });
 
-    const buyCount = docs.filter((doc) => doc.decision?.action?.toLowerCase() === "buy" || doc.response.decision?.action?.toLowerCase() === "buy").length;
-    const sellCount = docs.filter((doc) => doc.decision?.action?.toLowerCase() === "sell" || doc.response.decision?.action?.toLowerCase() === "sell").length;
+    const buyCount = docs.filter(
+      (doc) =>
+        doc.decision?.action?.toLowerCase() === "buy" ||
+        doc.response.decision?.action?.toLowerCase() === "buy"
+    ).length;
+    const sellCount = docs.filter(
+      (doc) =>
+        doc.decision?.action?.toLowerCase() === "sell" ||
+        doc.response.decision?.action?.toLowerCase() === "sell"
+    ).length;
     const verdictCounts = docs.reduce(
       (acc, doc) => {
         acc[doc.verdict] += 1;
         return acc;
       },
-      { accurate: 0, inaccurate: 0, unknown: 0 } as Record<HistoryVerdict, number>
+      { accurate: 0, inaccurate: 0, unknown: 0 } as Record<
+        HistoryVerdict,
+        number
+      >
     );
     const observed = verdictCounts.accurate + verdictCounts.inaccurate;
-    const successRate = observed > 0 ? Math.round((verdictCounts.accurate / observed) * 100) : null;
+    const successRate =
+      observed > 0
+        ? Math.round((verdictCounts.accurate / observed) * 100)
+        : null;
 
     const summaryLines = [
       tAgent(locale, "history.savedPlans", {
@@ -385,9 +415,17 @@ const buildHistoryInsightsForPrompt = async (
       tAgent(locale, `history.verdict.${value}`);
 
     const entryLines = docs.map((doc) => {
-      const action = (doc.decision?.action ?? doc.response.decision?.action ?? "").toUpperCase() || "-";
-      const createdAt = doc.createdAt instanceof Date ? doc.createdAt : new Date(doc.createdAt);
-      const dateLabel = Number.isNaN(createdAt.getTime()) ? "-" : dateFormatter.format(createdAt);
+      const action =
+        (
+          doc.decision?.action ??
+          doc.response.decision?.action ??
+          ""
+        ).toUpperCase() || "-";
+      const createdAt =
+        doc.createdAt instanceof Date ? doc.createdAt : new Date(doc.createdAt);
+      const dateLabel = Number.isNaN(createdAt.getTime())
+        ? "-"
+        : dateFormatter.format(createdAt);
       const tf = doc.timeframe?.toUpperCase() ?? "-";
       const verdict = verdictLabel(doc.verdict);
       const feedbackSnippet = doc.feedback?.trim()
@@ -401,13 +439,17 @@ const buildHistoryInsightsForPrompt = async (
       timeframe: timeframe.toUpperCase(),
     });
 
-    return [header, ...summaryLines, "", ...(entryLines.slice(0, HISTORY_SAMPLE_LIMIT))].join("\n");
+    return [
+      header,
+      ...summaryLines,
+      "",
+      ...entryLines.slice(0, HISTORY_SAMPLE_LIMIT),
+    ].join("\n");
   } catch (error) {
     console.error("Failed to build history insights", error);
     return null;
   }
 };
-
 
 const sanitizeChartPoints = (value: unknown): ChartPoint[] => {
   if (!Array.isArray(value)) {
@@ -466,15 +508,15 @@ const repairJsonString = (input: string) => {
     const char = input[i];
     const prev = input[i - 1];
 
-    if (char === '"' && prev !== '\\') {
+    if (char === '"' && prev !== "\\") {
       inString = !inString;
       result += char;
       continue;
     }
 
     if (inString) {
-      if (char === '\r') {
-        if (input[i + 1] === '\n') {
+      if (char === "\r") {
+        if (input[i + 1] === "\n") {
           result += "\\n";
           i += 1;
         } else {
@@ -482,11 +524,11 @@ const repairJsonString = (input: string) => {
         }
         continue;
       }
-      if (char === '\n') {
+      if (char === "\n") {
         result += "\\n";
         continue;
       }
-      if (char === '\t') {
+      if (char === "\t") {
         result += "\\t";
         continue;
       }
@@ -537,7 +579,7 @@ const stripJsonComments = (input: string) => {
       continue;
     }
 
-    if (char === '"' && prev !== '\\') {
+    if (char === '"' && prev !== "\\") {
       inString = !inString;
     }
 
@@ -555,17 +597,22 @@ const stripTrailingCommas = (input: string) => {
     const char = input[i];
     const prev = input[i - 1];
 
-    if (char === '"' && prev !== '\\') {
+    if (char === '"' && prev !== "\\") {
       inString = !inString;
       output += char;
       continue;
     }
 
-    if (!inString && char === ',') {
+    if (!inString && char === ",") {
       let j = i + 1;
       while (j < input.length) {
         const lookahead = input[j];
-        if (lookahead === ' ' || lookahead === '\n' || lookahead === '\r' || lookahead === '\t') {
+        if (
+          lookahead === " " ||
+          lookahead === "\n" ||
+          lookahead === "\r" ||
+          lookahead === "\t"
+        ) {
           j += 1;
           continue;
         }
@@ -573,7 +620,7 @@ const stripTrailingCommas = (input: string) => {
       }
 
       const next = input[j];
-      if (next === '}' || next === ']') {
+      if (next === "}" || next === "]") {
         i = j - 1;
         continue;
       }
@@ -612,7 +659,7 @@ const autoCloseJson = (input: string) => {
       continue;
     }
 
-    if (char === '\\' && inString) {
+    if (char === "\\" && inString) {
       escapeNext = true;
       continue;
     }
@@ -626,17 +673,17 @@ const autoCloseJson = (input: string) => {
       continue;
     }
 
-    if (char === '{') {
-      stack.push('}');
+    if (char === "{") {
+      stack.push("}");
       continue;
     }
 
-    if (char === '[') {
-      stack.push(']');
+    if (char === "[") {
+      stack.push("]");
       continue;
     }
 
-    if ((char === '}' || char === ']') && stack.length > 0) {
+    if ((char === "}" || char === "]") && stack.length > 0) {
       const expected = stack[stack.length - 1];
       if (expected === char) {
         stack.pop();
@@ -652,7 +699,7 @@ const autoCloseJson = (input: string) => {
     return output;
   }
 
-  return `${output}${stack.reverse().join('')}`;
+  return `${output}${stack.reverse().join("")}`;
 };
 
 const ensureStringArray = (value: unknown): string[] => {
@@ -664,7 +711,9 @@ const ensureStringArray = (value: unknown): string[] => {
   }
   if (typeof value === "string" && value.trim().length > 0) {
     return value
-      .split(/\n|\r|ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢|\-/)
+      .split(
+        /\n|\r|ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢|\-/
+      )
       .map((item) => item.trim())
       .filter(Boolean)
       .slice(0, 12);
@@ -707,8 +756,12 @@ const buildMarketAnalytics = (
   const smaShort = calculateSMA(closes, smaShortPeriod);
   const smaLong = calculateSMA(closes, smaLongPeriod);
   const rsi = calculateRSI(trimmed);
-  const volatilityRaw = calculateVolatility(closes.slice(-Math.min(30, closes.length)));
-  const volatilityPct = volatilityRaw ? (volatilityRaw / last.close) * 100 : null;
+  const volatilityRaw = calculateVolatility(
+    closes.slice(-Math.min(30, closes.length))
+  );
+  const volatilityPct = volatilityRaw
+    ? (volatilityRaw / last.close) * 100
+    : null;
   const atr = calculateATR(trimmed);
   const atrPct = atr ? (atr / last.close) * 100 : null;
   const chartPoints: ChartPoint[] = trimmed.slice(-60).map((item) => ({
@@ -719,7 +772,9 @@ const buildMarketAnalytics = (
   const technical: string[] = [];
   if (typeof smaShort === "number" && typeof smaLong === "number") {
     technical.push(
-      `SMA${smaShortPeriod}: ${smaShort.toFixed(2)} | SMA${smaLongPeriod}: ${smaLong.toFixed(2)}`
+      `SMA${smaShortPeriod}: ${smaShort.toFixed(
+        2
+      )} | SMA${smaLongPeriod}: ${smaLong.toFixed(2)}`
     );
     if (smaShort > smaLong) {
       technical.push(tAgent(locale, "marketAnalytics.bullishSma"));
@@ -738,10 +793,15 @@ const buildMarketAnalytics = (
     );
   }
   technical.push(
-    `${tAgent(locale, "marketAnalytics.priceRangeLabel")}: ${low.toFixed(2)} - ${high.toFixed(2)}`
+    `${tAgent(locale, "marketAnalytics.priceRangeLabel")}: ${low.toFixed(
+      2
+    )} - ${high.toFixed(2)}`
   );
   technical.push(
-    `${tAgent(locale, "marketAnalytics.sessionChangeLabel")}: ${changePct.toFixed(2)}%`
+    `${tAgent(
+      locale,
+      "marketAnalytics.sessionChangeLabel"
+    )}: ${changePct.toFixed(2)}%`
   );
   if (typeof atr === "number" && typeof atrPct === "number") {
     technical.push(
@@ -780,14 +840,25 @@ const buildMarketAnalytics = (
     return "high";
   })();
 
-  const volatilityDescriptor = tAgent(locale, `marketAnalytics.volatilityBucket.${volatilityBucket}`);
+  const volatilityDescriptor = tAgent(
+    locale,
+    `marketAnalytics.volatilityBucket.${volatilityBucket}`
+  );
   if (volatilityDescriptor && !technical.includes(volatilityDescriptor)) {
     technical.push(volatilityDescriptor);
   }
 
-  const smaDescriptor = tAgent(locale, `marketAnalytics.smaRelation.${smaRelationKey}`);
+  const smaDescriptor = tAgent(
+    locale,
+    `marketAnalytics.smaRelation.${smaRelationKey}`
+  );
 
-  const focusKey: "bullishBreakout" | "bearishBreakout" | "momentumLong" | "momentumShort" | "rangePlay" = (() => {
+  const focusKey:
+    | "bullishBreakout"
+    | "bearishBreakout"
+    | "momentumLong"
+    | "momentumShort"
+    | "rangePlay" = (() => {
     if (typeof changePct !== "number" || Number.isNaN(changePct)) {
       return "rangePlay";
     }
@@ -797,10 +868,16 @@ const buildMarketAnalytics = (
     if (changePct <= -2.5) {
       return "bearishBreakout";
     }
-    if (changePct >= 1.2 && (volatilityBucket === "medium" || volatilityBucket === "high")) {
+    if (
+      changePct >= 1.2 &&
+      (volatilityBucket === "medium" || volatilityBucket === "high")
+    ) {
       return "momentumLong";
     }
-    if (changePct <= -1.2 && (volatilityBucket === "medium" || volatilityBucket === "high")) {
+    if (
+      changePct <= -1.2 &&
+      (volatilityBucket === "medium" || volatilityBucket === "high")
+    ) {
       return "momentumShort";
     }
     if (Math.abs(changePct) <= 0.7 && volatilityBucket === "low") {
@@ -813,11 +890,20 @@ const buildMarketAnalytics = (
     timeframe: timeframe.toUpperCase(),
   });
 
-  const volatilityName = tAgent(locale, `marketAnalytics.volatilityBucketName.${volatilityBucket}`);
+  const volatilityName = tAgent(
+    locale,
+    `marketAnalytics.volatilityBucketName.${volatilityBucket}`
+  );
   const keyMetrics = [
-    tAgent(locale, "marketAnalytics.keyMetrics.close", { value: last.close.toFixed(2) }),
-    tAgent(locale, "marketAnalytics.keyMetrics.change", { value: changePct.toFixed(2) }),
-    tAgent(locale, "marketAnalytics.keyMetrics.smaSignal", { value: smaDescriptor }),
+    tAgent(locale, "marketAnalytics.keyMetrics.close", {
+      value: last.close.toFixed(2),
+    }),
+    tAgent(locale, "marketAnalytics.keyMetrics.change", {
+      value: changePct.toFixed(2),
+    }),
+    tAgent(locale, "marketAnalytics.keyMetrics.smaSignal", {
+      value: smaDescriptor,
+    }),
   ];
   if (typeof atr === "number" && typeof atrPct === "number") {
     keyMetrics.push(
@@ -828,7 +914,9 @@ const buildMarketAnalytics = (
     );
   }
   keyMetrics.push(
-    tAgent(locale, "marketAnalytics.keyMetrics.volatility", { value: volatilityName })
+    tAgent(locale, "marketAnalytics.keyMetrics.volatility", {
+      value: volatilityName,
+    })
   );
 
   const chartNarrative = tAgent(locale, "marketAnalytics.chartNarrative", {
@@ -836,17 +924,22 @@ const buildMarketAnalytics = (
     momentum: momentumLabel,
     price: last.close.toFixed(2),
   });
-  const chartForecast = changePct > 0
-    ? tAgent(locale, "marketAnalytics.forecast.positive")
-    : changePct < 0
-    ? tAgent(locale, "marketAnalytics.forecast.negative")
-    : tAgent(locale, "marketAnalytics.forecast.flat");
+  const chartForecast =
+    changePct > 0
+      ? tAgent(locale, "marketAnalytics.forecast.positive")
+      : changePct < 0
+      ? tAgent(locale, "marketAnalytics.forecast.negative")
+      : tAgent(locale, "marketAnalytics.forecast.flat");
 
   const promptSeries = trimmed
     .slice(-40)
     .map(
       (item) =>
-        `${new Date(item.openTime).toISOString()}|O:${item.open.toFixed(2)} H:${item.high.toFixed(2)} L:${item.low.toFixed(2)} C:${item.close.toFixed(2)} V:${item.volume.toFixed(2)}`
+        `${new Date(item.openTime).toISOString()}|O:${item.open.toFixed(
+          2
+        )} H:${item.high.toFixed(2)} L:${item.low.toFixed(
+          2
+        )} C:${item.close.toFixed(2)} V:${item.volume.toFixed(2)}`
     )
     .join("\n");
 
@@ -867,8 +960,15 @@ const buildMarketAnalytics = (
   };
 };
 
-const buildDefaultFundamentals = (summary: string, timeframe: Timeframe, locale: Locale) => {
-  const lines = summary.split("\n").map((line) => line.trim()).filter(Boolean);
+const buildDefaultFundamentals = (
+  summary: string,
+  timeframe: Timeframe,
+  locale: Locale
+) => {
+  const lines = summary
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
   const priceLine = lines.find((line) => {
     const lower = line.toLowerCase();
     return lower.includes("harga terakhir") || lower.includes("last price");
@@ -877,7 +977,9 @@ const buildDefaultFundamentals = (summary: string, timeframe: Timeframe, locale:
     const lower = line.toLowerCase();
     return lower.includes("perubahan") || lower.includes("change");
   });
-  const volumeLine = lines.find((line) => line.toLowerCase().includes("volume"));
+  const volumeLine = lines.find((line) =>
+    line.toLowerCase().includes("volume")
+  );
 
   const fundamentals = [
     priceLine ?? tAgent(locale, "fundamentals.priceUnavailable"),
@@ -889,12 +991,13 @@ const buildDefaultFundamentals = (summary: string, timeframe: Timeframe, locale:
   }
 
   fundamentals.push(
-    tAgent(locale, "fundamentals.macroReminder", { timeframe: timeframe.toUpperCase() })
+    tAgent(locale, "fundamentals.macroReminder", {
+      timeframe: timeframe.toUpperCase(),
+    })
   );
 
   return fundamentals;
 };
-
 
 const buildUserMessage = (
   params: {
@@ -941,7 +1044,10 @@ const buildUserMessage = (
     promptSeries: tAgent(locale, "userPrompt.placeholders.promptSeries"),
     history: tAgent(locale, "userPrompt.placeholders.history"),
     unknownDataset: tAgent(locale, "userPrompt.placeholders.unknownDataset"),
-    datasetPreviewLabel: tAgent(locale, "userPrompt.placeholders.datasetPreviewLabel"),
+    datasetPreviewLabel: tAgent(
+      locale,
+      "userPrompt.placeholders.datasetPreviewLabel"
+    ),
     keyMetrics: tAgent(locale, "userPrompt.placeholders.keyMetrics"),
     analysisFocus: tAgent(locale, "userPrompt.placeholders.analysisFocus"),
     cryptoNews: tAgent(locale, "userPrompt.placeholders.cryptoNews"),
@@ -960,7 +1066,10 @@ const buildUserMessage = (
   const datasetBlock = params.datasetPreview
     ? `${tAgent(locale, "userPrompt.datasetNameLabel")}: ${
         params.datasetName ?? placeholders.unknownDataset
-      }\n${placeholders.datasetPreviewLabel}:\n${excerpt(params.datasetPreview, 2000)}`
+      }\n${placeholders.datasetPreviewLabel}:\n${excerpt(
+        params.datasetPreview,
+        2000
+      )}`
     : placeholders.dataset;
 
   const historyBlock = params.historyInsights?.trim().length
@@ -972,7 +1081,9 @@ const buildUserMessage = (
     : placeholders.manual;
 
   const technicalBlock = params.marketAnalytics.technical.length
-    ? params.marketAnalytics.technical.map((item, index) => `${index + 1}. ${item}`).join("\n")
+    ? params.marketAnalytics.technical
+        .map((item, index) => `${index + 1}. ${item}`)
+        .join("\n")
     : placeholders.technical;
 
   const keyMetricsBlock = params.marketAnalytics.keyMetrics.length
@@ -1000,16 +1111,20 @@ const buildUserMessage = (
                 : ""
             }`,
             result.url
-              ? `   ${tAgent(locale, "userPrompt.tavily.urlLabel")}: ${result.url}`
+              ? `   ${tAgent(locale, "userPrompt.tavily.urlLabel")}: ${
+                  result.url
+                }`
               : null,
             result.publishedDate
-              ? `   ${tAgent(locale, "userPrompt.tavily.publishedLabel")}: ${result.publishedDate}`
+              ? `   ${tAgent(locale, "userPrompt.tavily.publishedLabel")}: ${
+                  result.publishedDate
+                }`
               : null,
             result.content
-              ? `   ${tAgent(locale, "userPrompt.tavily.summaryLabel")}: ${excerpt(
-                  result.content,
-                  320
-                )}`
+              ? `   ${tAgent(
+                  locale,
+                  "userPrompt.tavily.summaryLabel"
+                )}: ${excerpt(result.content, 320)}`
               : null,
           ];
           return parts.filter(Boolean).join("\n");
@@ -1024,21 +1139,25 @@ const buildUserMessage = (
           const parts = [
             `${index + 1}. ${article.title}`,
             article.url
-              ? `   ${tAgent(locale, "userPrompt.tavily.urlLabel")}: ${article.url}`
+              ? `   ${tAgent(locale, "userPrompt.tavily.urlLabel")}: ${
+                  article.url
+                }`
               : null,
             article.publishedDate
-              ? `   ${tAgent(locale, "userPrompt.tavily.publishedLabel")}: ${article.publishedDate}`
+              ? `   ${tAgent(locale, "userPrompt.tavily.publishedLabel")}: ${
+                  article.publishedDate
+                }`
               : null,
             article.content
-              ? `   ${tAgent(locale, "userPrompt.tavily.excerptLabel")}: ${excerpt(
-                  article.content,
-                  320
-                )}`
+              ? `   ${tAgent(
+                  locale,
+                  "userPrompt.tavily.excerptLabel"
+                )}: ${excerpt(article.content, 320)}`
               : article.rawContent
-              ? `   ${tAgent(locale, "userPrompt.tavily.rawExcerptLabel")}: ${excerpt(
-                  article.rawContent,
-                  320
-                )}`
+              ? `   ${tAgent(
+                  locale,
+                  "userPrompt.tavily.rawExcerptLabel"
+                )}: ${excerpt(article.rawContent, 320)}`
               : null,
           ];
           return parts.filter(Boolean).join("\n");
@@ -1050,7 +1169,8 @@ const buildUserMessage = (
     ? params.cryptoNews
         .map((headline, index) => {
           const sentimentScore =
-            typeof headline.sentimentScore === "number" && Number.isFinite(headline.sentimentScore)
+            typeof headline.sentimentScore === "number" &&
+            Number.isFinite(headline.sentimentScore)
               ? Math.round(headline.sentimentScore)
               : null;
           const sentimentKey =
@@ -1058,16 +1178,29 @@ const buildUserMessage = (
               ? `userPrompt.news.sentimentValues.${headline.sentimentLabel}`
               : "userPrompt.news.sentimentValues.neutral";
           const sentimentLabel = tAgent(locale, sentimentKey);
-          const sentimentLine = `   ${tAgent(locale, "userPrompt.news.sentimentLabel")}: ${
+          const sentimentLine = `   ${tAgent(
+            locale,
+            "userPrompt.news.sentimentLabel"
+          )}: ${
             sentimentLabel || tAgent(locale, "userPrompt.news.sentimentUnknown")
           }${sentimentScore !== null ? ` (${sentimentScore})` : ""}`;
           const parts = [
             `${index + 1}. ${headline.title}`,
-            headline.source ? `   ${tAgent(locale, "userPrompt.news.sourceLabel")}: ${headline.source}` : null,
-            headline.publishedAt
-              ? `   ${tAgent(locale, "userPrompt.news.publishedLabel")}: ${headline.publishedAt}`
+            headline.source
+              ? `   ${tAgent(locale, "userPrompt.news.sourceLabel")}: ${
+                  headline.source
+                }`
               : null,
-            headline.url ? `   ${tAgent(locale, "userPrompt.news.urlLabel")}: ${headline.url}` : null,
+            headline.publishedAt
+              ? `   ${tAgent(locale, "userPrompt.news.publishedLabel")}: ${
+                  headline.publishedAt
+                }`
+              : null,
+            headline.url
+              ? `   ${tAgent(locale, "userPrompt.news.urlLabel")}: ${
+                  headline.url
+                }`
+              : null,
             sentimentLine,
           ];
           return parts.filter(Boolean).join("\n");
@@ -1084,7 +1217,9 @@ const buildUserMessage = (
     history: tAgent(locale, "userPrompt.labels.history"),
     pair: tAgent(locale, "userPrompt.labels.pair"),
     timeframe: tAgent(locale, "userPrompt.labels.timeframe"),
-    summary: tAgent(locale, "userPrompt.labels.summary", { pair: formattedPair }),
+    summary: tAgent(locale, "userPrompt.labels.summary", {
+      pair: formattedPair,
+    }),
     keyMetrics: tAgent(locale, "userPrompt.labels.keyMetrics"),
     analysisFocus: tAgent(locale, "userPrompt.labels.analysisFocus"),
     narrative: tAgent(locale, "userPrompt.labels.narrative"),
@@ -1236,7 +1371,7 @@ const stripArrayField = (input: string, fieldName: string) => {
     while (cursor < output.length && /\s/.test(output[cursor])) {
       cursor += 1;
     }
-    if (output[cursor] !== ':') {
+    if (output[cursor] !== ":") {
       searchStart = cursor;
       continue;
     }
@@ -1244,7 +1379,7 @@ const stripArrayField = (input: string, fieldName: string) => {
     while (cursor < output.length && /\s/.test(output[cursor])) {
       cursor += 1;
     }
-    if (output[cursor] !== '[') {
+    if (output[cursor] !== "[") {
       searchStart = cursor;
       continue;
     }
@@ -1257,25 +1392,23 @@ const stripArrayField = (input: string, fieldName: string) => {
       const char = output[cursor];
       const prev = output[cursor - 1];
 
-      if (char === '"' && prev !== '\\') {
+      if (char === '"' && prev !== "\\") {
         inString = !inString;
         continue;
       }
       if (inString) {
         continue;
       }
-      if (char === '[') {
+      if (char === "[") {
         depth += 1;
         continue;
       }
-      if (char === ']') {
+      if (char === "]") {
         depth -= 1;
         if (depth === 0) {
           const endBracket = cursor;
           output =
-            output.slice(0, startBracket) +
-            '[]' +
-            output.slice(endBracket + 1);
+            output.slice(0, startBracket) + "[]" + output.slice(endBracket + 1);
           searchStart = startBracket + 2;
           break;
         }
@@ -1319,7 +1452,10 @@ const parseModelPayload = (content: string) => {
           secondaryError instanceof Error
             ? secondaryError.message
             : String(secondaryError ?? "unknown error");
-        console.warn("Sentient JSON parse (after repair) failed", secondaryMessage);
+        console.warn(
+          "Sentient JSON parse (after repair) failed",
+          secondaryMessage
+        );
         const stripped = stripArrayField(repaired, "points");
         if (stripped !== repaired) {
           try {
@@ -1329,7 +1465,10 @@ const parseModelPayload = (content: string) => {
               tertiaryError instanceof Error
                 ? tertiaryError.message
                 : String(tertiaryError ?? "unknown error");
-            console.warn("Sentient JSON parse (after strip) failed", tertiaryMessage);
+            console.warn(
+              "Sentient JSON parse (after strip) failed",
+              tertiaryMessage
+            );
           }
         }
       }
@@ -1344,18 +1483,26 @@ const parseModelPayload = (content: string) => {
           tertiaryError instanceof Error
             ? tertiaryError.message
             : String(tertiaryError ?? "unknown error");
-        console.warn("Sentient JSON parse (original strip) failed", tertiaryMessage);
+        console.warn(
+          "Sentient JSON parse (original strip) failed",
+          tertiaryMessage
+        );
       }
     }
 
-    const message = error instanceof Error ? error.message : String(error ?? "unknown error");
+    const message =
+      error instanceof Error ? error.message : String(error ?? "unknown error");
     console.warn(
       "Sentient JSON parse failed",
       message,
       jsonString.slice(0, 400),
-      jsonString === originalJsonString ? undefined : originalJsonString.slice(0, 400)
+      jsonString === originalJsonString
+        ? undefined
+        : originalJsonString.slice(0, 400)
     );
-    return { highlights: ["PARSE_WARNING: " + message] } as Partial<AgentPayload>;
+    return {
+      highlights: ["PARSE_WARNING: " + message],
+    } as Partial<AgentPayload>;
   }
 };
 
@@ -1368,7 +1515,8 @@ const buildTradePlan = (
   },
   locale: Locale
 ): TradePlan => {
-  const biasDraft = typeof draft?.bias === "string" ? draft.bias.toLowerCase() : null;
+  const biasDraft =
+    typeof draft?.bias === "string" ? draft.bias.toLowerCase() : null;
   const bias: "long" | "short" | "neutral" =
     biasDraft === "long" || biasDraft === "short" || biasDraft === "neutral"
       ? biasDraft
@@ -1396,40 +1544,49 @@ const buildTradePlan = (
     };
   }
 
-  const entryArrayCandidate = ensureNumericArray((draft as Record<string, unknown>)?.entries);
+  const entryArrayCandidate = ensureNumericArray(
+    (draft as Record<string, unknown>)?.entries
+  );
   const entryCandidate = ensureNumber(draft?.entry);
   const marketPrice =
-    (typeof marketSupport.context.lastPrice === "number" && marketSupport.context.lastPrice > 0
+    (typeof marketSupport.context.lastPrice === "number" &&
+    marketSupport.context.lastPrice > 0
       ? marketSupport.context.lastPrice
       : marketSupport.analytics.lastClose) ?? null;
 
   const primaryEntry =
-    entryCandidate ?? entryArrayCandidate[0] ?? (marketPrice !== null ? marketPrice : null);
+    entryCandidate ??
+    entryArrayCandidate[0] ??
+    (marketPrice !== null ? marketPrice : null);
   const normalizedPrimary =
     primaryEntry !== null ? Number(primaryEntry.toFixed(2)) : null;
 
-  const timeframeSettings = resolveTimeframeConfig(marketSupport.context.timeframe);
+  const timeframeSettings = resolveTimeframeConfig(
+    marketSupport.context.timeframe
+  );
   const entryOffsetPct = timeframeSettings.entryPct;
   const stopPct = timeframeSettings.stopPct;
   const tpStepPct = timeframeSettings.tpStepPct;
 
-  const fallbackEntries = normalizedPrimary !== null
-    ? action === "buy"
-      ? [
-          Number((normalizedPrimary * (1 - entryOffsetPct)).toFixed(4)),
-          Number(normalizedPrimary.toFixed(4)),
-        ]
-      : action === "sell"
-      ? [
-          Number(normalizedPrimary.toFixed(4)),
-          Number((normalizedPrimary * (1 + entryOffsetPct)).toFixed(4)),
-        ]
-      : [Number(normalizedPrimary.toFixed(4))]
-    : [];
+  const fallbackEntries =
+    normalizedPrimary !== null
+      ? action === "buy"
+        ? [
+            Number((normalizedPrimary * (1 - entryOffsetPct)).toFixed(4)),
+            Number(normalizedPrimary.toFixed(4)),
+          ]
+        : action === "sell"
+        ? [
+            Number(normalizedPrimary.toFixed(4)),
+            Number((normalizedPrimary * (1 + entryOffsetPct)).toFixed(4)),
+          ]
+        : [Number(normalizedPrimary.toFixed(4))]
+      : [];
 
-  const rawEntries = (entryArrayCandidate.length
-    ? entryArrayCandidate.map((value) => Number(value.toFixed(4)))
-    : fallbackEntries
+  const rawEntries = (
+    entryArrayCandidate.length
+      ? entryArrayCandidate.map((value) => Number(value.toFixed(4)))
+      : fallbackEntries
   ).filter((value) => Number.isFinite(value));
 
   let entries = rawEntries.slice(0, 4);
@@ -1441,27 +1598,40 @@ const buildTradePlan = (
   }
 
   const stopLossCandidate = ensureNumber(draft?.stopLoss);
-  const fallbackStopLoss = normalizedPrimary !== null
-    ? action === "buy"
-      ? Number((normalizedPrimary * (1 - stopPct)).toFixed(4))
-      : action === "sell"
-      ? Number((normalizedPrimary * (1 + stopPct)).toFixed(4))
-      : null
-    : null;
+  const fallbackStopLoss =
+    normalizedPrimary !== null
+      ? action === "buy"
+        ? Number((normalizedPrimary * (1 - stopPct)).toFixed(4))
+        : action === "sell"
+        ? Number((normalizedPrimary * (1 + stopPct)).toFixed(4))
+        : null
+      : null;
   let stopLoss =
-    stopLossCandidate !== null ? Number(stopLossCandidate.toFixed(4)) : fallbackStopLoss;
+    stopLossCandidate !== null
+      ? Number(stopLossCandidate.toFixed(4))
+      : fallbackStopLoss;
 
   const takeProfitCandidate = ensureNumericArray(draft?.takeProfits);
-  const fallbackTakeProfits = normalizedPrimary !== null
-    ? action === "buy"
-      ? [1, 2, 3, 4, 5].map((step) => normalizedPrimary * (1 + tpStepPct * step))
-      : action === "sell"
-      ? [1, 2, 3, 4, 5].map((step) => normalizedPrimary * (1 - tpStepPct * step))
-      : []
-    : [];
-  let takeProfits = (takeProfitCandidate.length ? takeProfitCandidate : fallbackTakeProfits)
+  const fallbackTakeProfits =
+    normalizedPrimary !== null
+      ? action === "buy"
+        ? [1, 2, 3, 4, 5].map(
+            (step) => normalizedPrimary * (1 + tpStepPct * step)
+          )
+        : action === "sell"
+        ? [1, 2, 3, 4, 5].map(
+            (step) => normalizedPrimary * (1 - tpStepPct * step)
+          )
+        : []
+      : [];
+  let takeProfits = (
+    takeProfitCandidate.length ? takeProfitCandidate : fallbackTakeProfits
+  )
     .map((value) => Number(value.toFixed(4)))
-    .filter((value, index, array) => Number.isFinite(value) && array.indexOf(value) === index)
+    .filter(
+      (value, index, array) =>
+        Number.isFinite(value) && array.indexOf(value) === index
+    )
     .slice(0, 5);
 
   if (bias === "long") {
@@ -1482,7 +1652,9 @@ const buildTradePlan = (
   if (comparisonEntry !== null) {
     const maxEntryDeviation = stopPct * 3;
     const filteredEntries = entries.filter((value) => {
-      const diffPct = Math.abs(value - comparisonEntry) / Math.max(Math.abs(comparisonEntry), 1e-8);
+      const diffPct =
+        Math.abs(value - comparisonEntry) /
+        Math.max(Math.abs(comparisonEntry), 1e-8);
       return diffPct <= maxEntryDeviation;
     });
     if (filteredEntries.length) {
@@ -1493,7 +1665,9 @@ const buildTradePlan = (
 
     const maxTpDeviation = tpStepPct * 8;
     const filteredTps = takeProfits.filter((value) => {
-      const diffPct = Math.abs(value - comparisonEntry) / Math.max(Math.abs(comparisonEntry), 1e-8);
+      const diffPct =
+        Math.abs(value - comparisonEntry) /
+        Math.max(Math.abs(comparisonEntry), 1e-8);
       return diffPct <= maxTpDeviation;
     });
     if (filteredTps.length) {
@@ -1512,7 +1686,9 @@ const buildTradePlan = (
       const invalidStop =
         stopLoss === null ||
         stopLoss >= referenceEntry ||
-        Math.abs(stopLoss - referenceEntry) / Math.max(Math.abs(referenceEntry), 1e-8) > stopPct * 2.5;
+        Math.abs(stopLoss - referenceEntry) /
+          Math.max(Math.abs(referenceEntry), 1e-8) >
+          stopPct * 2.5;
       if (invalidStop) {
         const base = normalizedPrimary ?? referenceEntry;
         stopLoss = Number((base * (1 - stopPct)).toFixed(4));
@@ -1521,7 +1697,9 @@ const buildTradePlan = (
       const invalidStop =
         stopLoss === null ||
         stopLoss <= referenceEntry ||
-        Math.abs(stopLoss - referenceEntry) / Math.max(Math.abs(referenceEntry), 1e-8) > stopPct * 2.5;
+        Math.abs(stopLoss - referenceEntry) /
+          Math.max(Math.abs(referenceEntry), 1e-8) >
+          stopPct * 2.5;
       if (invalidStop) {
         const base = normalizedPrimary ?? referenceEntry;
         stopLoss = Number((base * (1 + stopPct)).toFixed(4));
@@ -1531,7 +1709,9 @@ const buildTradePlan = (
 
   const executionWindow = ensureString(
     draft?.executionWindow,
-    `${new Date().toISOString()} - ${new Date(Date.now() + 60 * 60 * 1000).toISOString()}`
+    `${new Date().toISOString()} - ${new Date(
+      Date.now() + 60 * 60 * 1000
+    ).toISOString()}`
   );
 
   const sizingNotesDefault =
@@ -1586,9 +1766,11 @@ const buildAgentPayload = (
     return "hold";
   })();
 
-  const confidenceRaw = typeof decision.confidence === "number" ? decision.confidence : 0.62;
+  const confidenceRaw =
+    typeof decision.confidence === "number" ? decision.confidence : 0.62;
   const timeframe =
-    typeof decision.timeframe === "string" && decision.timeframe.trim().length > 0
+    typeof decision.timeframe === "string" &&
+    decision.timeframe.trim().length > 0
       ? decision.timeframe
       : pickFallbackTimeframe(objective);
   const rationale = ensureString(
@@ -1607,16 +1789,27 @@ const buildAgentPayload = (
   const marketDraft: Partial<AgentPayload["market"]> = draft.market ?? {};
   const chartDraft: Partial<AgentPayload["market"]["chart"]> =
     (marketDraft as Record<string, unknown>).chart ?? {};
-  const chartPoints = sanitizeChartPoints((chartDraft as Record<string, unknown>).points);
+  const chartPoints = sanitizeChartPoints(
+    (chartDraft as Record<string, unknown>).points
+  );
   const chartInterval = ensureString(
     (chartDraft as Record<string, unknown>).interval,
     marketSupport.context.interval
   );
 
-  const tradePlan = buildTradePlan(draft.tradePlan, action, marketSupport, locale);
+  const tradePlan = buildTradePlan(
+    draft.tradePlan,
+    action,
+    marketSupport,
+    locale
+  );
 
-  const technical = ensureStringArray((marketDraft as Record<string, unknown>).technical);
-  const fundamental = ensureStringArray((marketDraft as Record<string, unknown>).fundamental);
+  const technical = ensureStringArray(
+    (marketDraft as Record<string, unknown>).technical
+  );
+  const fundamental = ensureStringArray(
+    (marketDraft as Record<string, unknown>).fundamental
+  );
   const supportiveHighlights = baseHighlights.slice(0, 12);
 
   return {
@@ -1641,7 +1834,9 @@ const buildAgentPayload = (
       pair: marketSupport.context.symbol,
       chart: {
         interval: chartInterval,
-        points: chartPoints.length ? chartPoints : marketSupport.analytics.chartPoints,
+        points: chartPoints.length
+          ? chartPoints
+          : marketSupport.analytics.chartPoints,
         narrative: ensureString(
           (chartDraft as Record<string, unknown>).narrative,
           marketSupport.analytics.chartNarrative
@@ -1651,10 +1846,16 @@ const buildAgentPayload = (
           marketSupport.analytics.chartForecast
         ),
       },
-      technical: technical.length ? technical : marketSupport.analytics.technical,
+      technical: technical.length
+        ? technical
+        : marketSupport.analytics.technical,
       fundamental: fundamental.length
         ? fundamental
-        : buildDefaultFundamentals(marketSupport.summary, preferredTimeframe, locale),
+        : buildDefaultFundamentals(
+            marketSupport.summary,
+            preferredTimeframe,
+            locale
+          ),
     },
     tradePlan,
   };
@@ -1673,7 +1874,9 @@ export async function POST(request: Request) {
   }
 
   const locale: Locale =
-    typeof body.locale === "string" && isLocale(body.locale) ? body.locale : "en";
+    typeof body.locale === "string" && isLocale(body.locale)
+      ? body.locale
+      : "en";
 
   if (!body.objective || body.objective.trim().length === 0) {
     return NextResponse.json(
@@ -1692,37 +1895,58 @@ export async function POST(request: Request) {
     );
   }
 
-  const creditSnapshot = await ensureUserCredits(session.userId);
-  if (creditSnapshot.balance <= 0) {
+  let creditsRemaining = 0;
+  let shouldRefundCredits = false;
+
+  try {
+    await ensureUserCredits(session.userId, { email: session.email ?? null });
+    const debit = await decrementUserCredits(session.userId, 1);
+    console.log(debit);
+    if (!debit) {
+      return NextResponse.json(
+        { error: tAgent(locale, "errors.insufficientCredits") },
+        { status: 403 }
+      );
+    }
+    creditsRemaining = debit.balance;
+    shouldRefundCredits = true;
+  } catch (creditError) {
+    console.error("Failed to debit user credits", creditError);
     return NextResponse.json(
-      { error: tAgent(locale, "errors.insufficientCredits") },
-      { status: 403 }
+      { error: tAgent(locale, "errors.debitFailed") },
+      { status: 500 }
     );
   }
-
-  const debit = await decrementUserCredits(session.userId, 1);
-  if (!debit) {
-    return NextResponse.json(
-      { error: tAgent(locale, "errors.insufficientCredits") },
-      { status: 403 }
-    );
-  }
-
-  const creditsRemaining = debit.balance;
-  let shouldRefundCredits = true;
 
   const settings = await getUserSettings(session.userId);
 
-  const binanceAuth = settings?.binanceApiKey ? { apiKey: settings.binanceApiKey } : undefined;
-  const bybitAuth = settings?.bybitApiKey ? { apiKey: settings.bybitApiKey } : undefined;
+  const binanceAuth = settings?.binanceApiKey
+    ? { apiKey: settings.binanceApiKey }
+    : undefined;
+  const bybitAuth = settings?.bybitApiKey
+    ? { apiKey: settings.bybitApiKey }
+    : undefined;
 
-  const providerParam = typeof body.provider === "string" ? body.provider.toLowerCase() : DEFAULT_PROVIDER;
-  const provider: CexProvider = isCexProvider(providerParam) ? providerParam : DEFAULT_PROVIDER;
-  const modeParam = typeof body.mode === "string" ? body.mode.toLowerCase() : DEFAULT_MARKET_MODE;
-  const mode: MarketMode = isMarketMode(modeParam) ? modeParam : DEFAULT_MARKET_MODE;
+  const providerParam =
+    typeof body.provider === "string"
+      ? body.provider.toLowerCase()
+      : DEFAULT_PROVIDER;
+  const provider: CexProvider = isCexProvider(providerParam)
+    ? providerParam
+    : DEFAULT_PROVIDER;
+  const modeParam =
+    typeof body.mode === "string"
+      ? body.mode.toLowerCase()
+      : DEFAULT_MARKET_MODE;
+  const mode: MarketMode = isMarketMode(modeParam)
+    ? modeParam
+    : DEFAULT_MARKET_MODE;
   const categoryParam =
-    typeof body.category === "string" ? body.category.toLowerCase() : DEFAULT_ASSET_CATEGORY;
-  const assetCategory: AssetCategory = categoryParam === "gold" ? "gold" : "crypto";
+    typeof body.category === "string"
+      ? body.category.toLowerCase()
+      : DEFAULT_ASSET_CATEGORY;
+  const assetCategory: AssetCategory =
+    categoryParam === "gold" ? "gold" : "crypto";
 
   const requestedSymbol = (() => {
     const explicit = body.pairSymbol?.toUpperCase();
@@ -1731,205 +1955,231 @@ export async function POST(request: Request) {
     }
     if (provider === "bybit") {
       return mode === "futures"
-        ? process.env.BYBIT_FUTURES_SYMBOL ?? process.env.BYBIT_SYMBOL ?? "BTCUSDT"
+        ? process.env.BYBIT_FUTURES_SYMBOL ??
+            process.env.BYBIT_SYMBOL ??
+            "BTCUSDT"
         : process.env.BYBIT_SYMBOL ?? "BTCUSDT";
     }
     return "BTCUSDT";
   })();
 
-  const providerLabel = translate(locale, `market.summary.providerLabel.${provider}`);
-  const isSupportedSymbol = provider === "twelvedata"
-    ? requestedSymbol.toUpperCase() === "XAUUSD"
-    : provider === "bybit"
-    ? await isBybitPairTradable(requestedSymbol, mode)
-    : await isPairTradable(requestedSymbol, binanceAuth, mode);
-
-
-  if (!isSupportedSymbol) {
-    return NextResponse.json(
-      {
-        error: translate(locale, "agent.errors.unsupportedSymbol", {
-          symbol: requestedSymbol,
-          provider: providerLabel,
-        }),
-      },
-      { status: 400 }
-    );
-  }
-
-  const symbol = requestedSymbol;
-
-  const urls = Array.isArray(body.urls)
-    ? body.urls.filter((url) => typeof url === "string" && url.trim().length > 0)
-    : [];
-  const manualNotes = body.manualNotes?.trim() ?? "";
-  const datasetPreview = body.datasetPreview?.trim() ?? "";
-  const dataMode = body.dataMode ?? "scrape";
-  const timeframe = normalizeTimeframe(body.timeframe);
-
-  const baseCurrency = extractBaseCurrency(symbol);
-  const cryptoHeadlinesPromise =
-    assetCategory === "crypto" && baseCurrency
-      ? fetchCryptoPanicHeadlines(baseCurrency)
-      : Promise.resolve({ headlines: [], limited: false });
-
-  const historyInsightsPromise = buildHistoryInsightsForPrompt(
-    session.userId,
-    symbol,
-    timeframe,
-    locale
+  const providerLabel = translate(
+    locale,
+    `market.summary.providerLabel.${provider}`
   );
 
-  const explicitNewsUrls = dataMode === "scrape" ? urls : [];
-  const tavilyContentPromise = (async () => {
-    let search = objective.length > 0
-      ? await fetchTavilySearch(objective, { maxResults: 3 })
-      : null;
+  let controller: AbortController | null = null;
+  let timeout: NodeJS.Timeout | null = null;
 
-    if (!search) {
-      search = await fetchTavilySearch(`${symbol} ${timeframe.toUpperCase()}`, { maxResults: 3 });
+  try {
+    const isSupportedSymbol =
+      provider === "twelvedata"
+        ? requestedSymbol.toUpperCase() === "XAUUSD"
+        : provider === "bybit"
+        ? await isBybitPairTradable(requestedSymbol, mode)
+        : await isPairTradable(requestedSymbol, binanceAuth, mode);
+
+    if (!isSupportedSymbol) {
+      throw Object.assign(
+        new Error(
+          translate(locale, "agent.errors.unsupportedSymbol", {
+            symbol: requestedSymbol,
+            provider: providerLabel,
+          })
+        ),
+        { status: 400 }
+      );
     }
 
-    const seen = new Set<string>();
-    const collected: string[] = [];
-    const push = (value: string | null) => {
-      if (!value) {
-        return;
-      }
-      if (seen.has(value)) {
-        return;
-      }
-      seen.add(value);
-      if (collected.length < TAVILY_ARTICLE_LIMIT) {
-        collected.push(value);
-      }
-    };
+    const symbol = requestedSymbol;
 
-    for (const url of explicitNewsUrls) {
-      const normalized = normalizeNewsUrl(url);
-      if (normalized) {
-        push(normalized);
-      }
-    }
+    const urls = Array.isArray(body.urls)
+      ? body.urls.filter(
+          (url) => typeof url === "string" && url.trim().length > 0
+        )
+      : [];
+    const manualNotes = body.manualNotes?.trim() ?? "";
+    const datasetPreview = body.datasetPreview?.trim() ?? "";
+    const dataMode = body.dataMode ?? "scrape";
+    const timeframe = normalizeTimeframe(body.timeframe);
 
-    if (search?.results?.length) {
-      for (const item of search.results.slice(0, 3)) {
-        const normalized = normalizeNewsUrl(item.url);
+    const baseCurrency = extractBaseCurrency(symbol);
+    const cryptoHeadlinesPromise =
+      assetCategory === "crypto" && baseCurrency
+        ? fetchCryptoPanicHeadlines(baseCurrency)
+        : Promise.resolve({ headlines: [], limited: false });
+
+    const historyInsightsPromise = buildHistoryInsightsForPrompt(
+      session.userId,
+      symbol,
+      timeframe,
+      locale
+    );
+
+    const explicitNewsUrls = dataMode === "scrape" ? urls : [];
+    const tavilyContentPromise = (async () => {
+      let search =
+        objective.length > 0
+          ? await fetchTavilySearch(objective, { maxResults: 3 })
+          : null;
+
+      if (!search) {
+        search = await fetchTavilySearch(
+          `${symbol} ${timeframe.toUpperCase()}`,
+          { maxResults: 3 }
+        );
+      }
+
+      const seen = new Set<string>();
+      const collected: string[] = [];
+      const push = (value: string | null) => {
+        if (!value) {
+          return;
+        }
+        if (seen.has(value)) {
+          return;
+        }
+        seen.add(value);
+        if (collected.length < TAVILY_ARTICLE_LIMIT) {
+          collected.push(value);
+        }
+      };
+
+      for (const url of explicitNewsUrls) {
+        const normalized = normalizeNewsUrl(url);
         if (normalized) {
           push(normalized);
         }
-        if (collected.length >= TAVILY_ARTICLE_LIMIT) {
-          break;
+      }
+
+      if (search?.results?.length) {
+        for (const item of search.results.slice(0, 3)) {
+          const normalized = normalizeNewsUrl(item.url);
+          if (normalized) {
+            push(normalized);
+          }
+          if (collected.length >= TAVILY_ARTICLE_LIMIT) {
+            break;
+          }
         }
       }
+
+      const articles = collected.length
+        ? await fetchTavilyExtract(collected, {
+            maxUrls: Math.min(collected.length, 3),
+          })
+        : [];
+
+      return { search, articles };
+    })();
+
+    const apiKey = process.env.FIREWORKS_API_KEY;
+    if (!apiKey) {
+      throw Object.assign(new Error(tAgent(locale, "errors.missingApiKey")), {
+        status: 500,
+      });
     }
 
-    const articles = collected.length
-      ? await fetchTavilyExtract(collected, { maxUrls: Math.min(collected.length, 3) })
-      : [];
+    // Provider-specific data fetch
+    let summaryData: unknown;
+    let candles: BinanceCandle[] = [];
+    if (provider === "bybit") {
+      [summaryData, candles] = await Promise.all([
+        fetchBybitMarketSummary(symbol, bybitAuth, mode),
+        fetchBybitCandles(symbol, timeframe, { limit: 500 }, bybitAuth, mode),
+      ]);
+    } else if (provider === "twelvedata") {
+      const [goldInfo, goldCandles] = await Promise.all([
+        fetchGoldMarketSummary(symbol, locale),
+        fetchGoldCandles(symbol, timeframe, 500),
+      ]);
+      summaryData = goldInfo;
+      candles = goldCandles.map((item) => ({
+        openTime: item.openTime,
+        open: item.open,
+        high: item.high,
+        low: item.low,
+        close: item.close,
+        volume: item.volume,
+        closeTime: item.closeTime,
+      })) as unknown as BinanceCandle[];
+    } else {
+      [summaryData, candles] = await Promise.all([
+        fetchBinanceMarketSummary(symbol, binanceAuth, mode),
+        fetchBinanceCandles(
+          symbol,
+          CEX_INTERVAL_MAP[timeframe],
+          { limit: 500 },
+          binanceAuth,
+          mode
+        ),
+      ]);
+    }
 
-    return { search, articles };
-  })();
-
-  const apiKey = process.env.FIREWORKS_API_KEY;
-  if (!apiKey) {
-    return NextResponse.json(
-      { error: tAgent(locale, "errors.missingApiKey") },
-      { status: 500 }
-    );
-  }
-
-  // Provider-specific data fetch
-  let summaryData: unknown;
-  let candles: BinanceCandle[] = [];
-  if (provider === "bybit") {
-    [summaryData, candles] = await Promise.all([
-      fetchBybitMarketSummary(symbol, bybitAuth, mode),
-      fetchBybitCandles(symbol, timeframe, { limit: 500 }, bybitAuth, mode),
+    const [
+      { search: tavilySearch, articles: tavilyArticles },
+      historyInsights,
+      cryptoHeadlinesResult,
+    ] = await Promise.all([
+      tavilyContentPromise,
+      historyInsightsPromise,
+      cryptoHeadlinesPromise,
     ]);
-  } else if (provider === "twelvedata") {
-    const [goldInfo, goldCandles] = await Promise.all([
-      fetchGoldMarketSummary(symbol, locale),
-      fetchGoldCandles(symbol, timeframe, 500),
-    ]);
-    summaryData = goldInfo;
-    candles = goldCandles.map((item) => ({
-      openTime: item.openTime,
-      open: item.open,
-      high: item.high,
-      low: item.low,
-      close: item.close,
-      volume: item.volume,
-      closeTime: item.closeTime,
-    })) as unknown as BinanceCandle[];
-  } else {
-    [summaryData, candles] = await Promise.all([
-      fetchBinanceMarketSummary(symbol, binanceAuth, mode),
-      fetchBinanceCandles(
-        symbol,
-        CEX_INTERVAL_MAP[timeframe],
-        { limit: 500 },
-        binanceAuth,
-        mode
-      ),
-    ]);
-  }
-
-  const [
-    { search: tavilySearch, articles: tavilyArticles },
-    historyInsights,
-    cryptoHeadlinesResult,
-  ] = await Promise.all([
-    tavilyContentPromise,
-    historyInsightsPromise,
-    cryptoHeadlinesPromise,
-  ]);
-  const resolvedSymbol =
-    provider === "twelvedata"
-      ? symbol
-      : ((summaryData as { symbol?: string } | null)?.symbol ?? symbol);
-  const marketSummary =
-    provider === "bybit"
-      ? formatBybitSummary(summaryData as BinanceMarketSummary | null, locale, mode)
-      : provider === "twelvedata"
-      ? (summaryData as { summary: string }).summary
-      : formatBinanceSummary(summaryData as BinanceMarketSummary | null, locale, mode);
-  const marketAnalytics = buildMarketAnalytics(candles, timeframe, locale);
-  const cryptoNewsHeadlines =
-    assetCategory === "crypto" ? cryptoHeadlinesResult.headlines : [];
-  const cryptoNewsRateLimited =
-    assetCategory === "crypto" ? cryptoHeadlinesResult.limited : false;
-  const resolvedLastPrice =
-    (typeof marketAnalytics.lastClose === "number" && marketAnalytics.lastClose > 0
-      ? marketAnalytics.lastClose
-      : undefined) ??
-    (provider === "twelvedata"
-      ? ((summaryData as { stats?: { lastPrice?: number } }).stats?.lastPrice ?? 0)
-      : (summaryData as { lastPrice?: number }).lastPrice ?? 0);
-  const marketContext: MarketContext = {
-    symbol: resolvedSymbol,
-    timeframe,
-    interval:
+    const resolvedSymbol =
+      provider === "twelvedata"
+        ? symbol
+        : (summaryData as { symbol?: string } | null)?.symbol ?? symbol;
+    const marketSummary =
       provider === "bybit"
-        ? mapTimeframeToBybitIntervalSymbol(timeframe)
+        ? formatBybitSummary(
+            summaryData as BinanceMarketSummary | null,
+            locale,
+            mode
+          )
         : provider === "twelvedata"
-        ? timeframe
-        : CEX_INTERVAL_MAP[timeframe],
-    candles,
-    lastPrice: resolvedLastPrice,
-    mode,
-  };
+        ? (summaryData as { summary: string }).summary
+        : formatBinanceSummary(
+            summaryData as BinanceMarketSummary | null,
+            locale,
+            mode
+          );
+    const marketAnalytics = buildMarketAnalytics(candles, timeframe, locale);
+    const cryptoNewsHeadlines =
+      assetCategory === "crypto" ? cryptoHeadlinesResult.headlines : [];
+    const cryptoNewsRateLimited =
+      assetCategory === "crypto" ? cryptoHeadlinesResult.limited : false;
+    const resolvedLastPrice =
+      (typeof marketAnalytics.lastClose === "number" &&
+      marketAnalytics.lastClose > 0
+        ? marketAnalytics.lastClose
+        : undefined) ??
+      (provider === "twelvedata"
+        ? (summaryData as { stats?: { lastPrice?: number } }).stats
+            ?.lastPrice ?? 0
+        : (summaryData as { lastPrice?: number }).lastPrice ?? 0);
+    const marketContext: MarketContext = {
+      symbol: resolvedSymbol,
+      timeframe,
+      interval:
+        provider === "bybit"
+          ? mapTimeframeToBybitIntervalSymbol(timeframe)
+          : provider === "twelvedata"
+          ? timeframe
+          : CEX_INTERVAL_MAP[timeframe],
+      candles,
+      lastPrice: resolvedLastPrice,
+      mode,
+    };
 
-  const marketSupport = {
-    context: marketContext,
-    analytics: marketAnalytics,
-    summary: marketSummary,
-  } as const;
+    const marketSupport = {
+      context: marketContext,
+      analytics: marketAnalytics,
+      summary: marketSummary,
+    } as const;
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 45_000);
+    controller = new AbortController();
+    timeout = setTimeout(() => controller?.abort(), 45_000);
 
-  try {
     const buildBody = () =>
       JSON.stringify({
         model: process.env.FIREWORKS_MODEL ?? DEFAULT_FIREWORKS_MODEL,
@@ -1942,34 +2192,38 @@ export async function POST(request: Request) {
           },
           {
             role: "user",
-            content: buildUserMessage({
-              objective,
-              dataMode,
-              urls,
-              manualNotes,
-              datasetName: body.datasetName,
-              datasetPreview,
-              marketSummary,
-              timeframe,
-              historyInsights,
-              marketAnalytics: {
-                promptSeries: marketAnalytics.promptSeries,
-                technical: marketAnalytics.technical,
-                chartNarrative: marketAnalytics.chartNarrative,
-                chartForecast: marketAnalytics.chartForecast,
-                keyMetrics: marketAnalytics.keyMetrics,
-                analysisFocus: marketAnalytics.analysisFocus,
+            content: buildUserMessage(
+              {
+                objective,
+                dataMode,
+                urls,
+                manualNotes,
+                datasetName: body.datasetName,
+                datasetPreview,
+                marketSummary,
+                timeframe,
+                historyInsights,
+                marketAnalytics: {
+                  promptSeries: marketAnalytics.promptSeries,
+                  technical: marketAnalytics.technical,
+                  chartNarrative: marketAnalytics.chartNarrative,
+                  chartForecast: marketAnalytics.chartForecast,
+                  keyMetrics: marketAnalytics.keyMetrics,
+                  analysisFocus: marketAnalytics.analysisFocus,
+                },
+                tavilySearch,
+                tavilyArticles,
+                pairSymbol: marketSupport.context.symbol,
+                cryptoNews: cryptoNewsHeadlines,
               },
-              tavilySearch,
-              tavilyArticles,
-              pairSymbol: marketSupport.context.symbol,
-              cryptoNews: cryptoNewsHeadlines,
-            }, locale),
+              locale
+            ),
           },
         ],
       });
 
-    let modelResponse: Response | null = null;
+    let draft: Partial<AgentPayload> | null = null;
+    let lastParseError: Error | null = null;
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const response = await fetch(FIREWORKS_API_URL, {
         method: "POST",
@@ -1981,43 +2235,72 @@ export async function POST(request: Request) {
         signal: controller.signal,
       });
 
-      if (response.ok) {
-        modelResponse = response;
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => "");
+        const shouldRetry = response.status >= 500 && attempt === 0;
+        console.warn(
+          `[Fireworks] attempt ${attempt + 1} failed: ${response.status} ${response.statusText} ${errorText.slice(
+            0,
+            160
+          )}`
+        );
+        if (shouldRetry) {
+          await wait(800);
+          continue;
+        }
+
+        throw Object.assign(
+          new Error(
+            `Sentient Models error (${response.status}): ${
+              errorText || response.statusText
+            }`
+          ),
+          { status: response.status }
+        );
+      }
+
+      const result = (await response.json()) as {
+        choices?: Array<{ message?: { content?: string } }>;
+      };
+      const content = result.choices?.[0]?.message?.content;
+
+      if (!content) {
+        throw new Error(tAgent(locale, "errors.missingContent"));
+      }
+
+      try {
+        draft = parseModelPayload(content);
+        lastParseError = null;
         break;
+      } catch (error) {
+        lastParseError =
+          error instanceof Error
+            ? error
+            : new Error(String(error ?? "Unable to parse agent output"));
+        console.warn(
+          `[Fireworks] parse attempt ${attempt + 1} failed: ${lastParseError.message}`
+        );
+        if (attempt === 0) {
+          await wait(600);
+          continue;
+        }
+        throw lastParseError;
       }
+    }
 
-      const errorText = await response.text().catch(() => "");
-      const shouldRetry = response.status >= 500 && attempt === 0;
-      console.warn(
-        `[Fireworks] attempt ${attempt + 1} failed: ${response.status} ${
-          response.statusText
-        } ${errorText.slice(0, 160)}`
-      );
-      if (shouldRetry) {
-        await wait(800);
-        continue;
+    if (!draft) {
+      if (lastParseError) {
+        throw lastParseError;
       }
-
-      throw new Error(
-        `Sentient Models error (${response.status}): ${errorText || response.statusText}`
-      );
+      throw new Error("Unable to parse agent response.");
     }
-
-    if (!modelResponse) {
-      throw new Error("Sentient Models error: unknown failure");
-    }
-
-    const result = (await modelResponse.json()) as {
-      choices?: Array<{ message?: { content?: string } }>;
-    };
-    const content = result.choices?.[0]?.message?.content;
-
-    if (!content) {
-      throw new Error(tAgent(locale, "errors.missingContent"));
-    }
-
-    const draft = parseModelPayload(content);
-    const payload = buildAgentPayload(draft, objective, timeframe, marketSupport, locale);
+    const payload = buildAgentPayload(
+      draft,
+      objective,
+      timeframe,
+      marketSupport,
+      locale
+    );
 
     shouldRefundCredits = false;
     return NextResponse.json({
@@ -2030,31 +2313,28 @@ export async function POST(request: Request) {
     if (shouldRefundCredits) {
       await incrementUserCredits(session.userId, 1).catch(() => undefined);
     }
-    const message =
-      error instanceof Error && error.name === "AbortError"
-        ? tAgent(locale, "errors.timeout")
-        : error instanceof Error
-        ? error.message
-        : tAgent(locale, "errors.generic");
     const status =
       typeof (error as { status?: number }).status === "number"
         ? (error as { status: number }).status
-        : 500;
-    return NextResponse.json(
-      {
-        error: message,
-      },
-      { status }
-    );
+        : undefined;
+    const message =
+      error instanceof Error && error.name === "AbortError"
+        ? tAgent(locale, "errors.timeout")
+        : error instanceof Error && error.message
+        ? error.message
+        : tAgent(locale, "errors.generic");
+
+    return NextResponse.json({ error: message }, { status: status ?? 500 });
   } finally {
-    clearTimeout(timeout);
+    if (timeout) {
+      clearTimeout(timeout);
+    }
   }
 }
 
-
-
-
-const extractBaseCurrency = (symbol: string | null | undefined): string | null => {
+const extractBaseCurrency = (
+  symbol: string | null | undefined
+): string | null => {
   if (!symbol) {
     return null;
   }
@@ -2062,10 +2342,14 @@ const extractBaseCurrency = (symbol: string | null | undefined): string | null =
   if (!upper) {
     return null;
   }
-  const quote = KNOWN_CRYPTO_QUOTES.find((candidate) => upper.endsWith(candidate));
+  const quote = KNOWN_CRYPTO_QUOTES.find((candidate) =>
+    upper.endsWith(candidate)
+  );
   if (!quote) {
     return null;
   }
-  const base = upper.slice(0, upper.length - quote.length).replace(/[^A-Z0-9]/g, "");
+  const base = upper
+    .slice(0, upper.length - quote.length)
+    .replace(/[^A-Z0-9]/g, "");
   return base.length >= 2 ? base : null;
 };

@@ -843,29 +843,29 @@ export const LiveMarketSection = forwardRef<
                 provider: providerLabel,
               })}
             </div>
-            <motion.button
-              type="button"
-              onClick={onAnalyze}
-              disabled={!canRunAnalysis}
-              className="inline-flex items-center justify-center rounded-full border border-[var(--swimm-primary-500)] bg-[var(--swimm-primary-500)] px-6 py-3 text-sm font-semibold text-[var(--swimm-navy-900)] shadow-[var(--swimm-glow)] transition hover:bg-[var(--swimm-primary-700)] hover:text-white disabled:cursor-not-allowed disabled:border-[var(--swimm-neutral-300)] disabled:bg-[var(--swimm-neutral-300)]/40 disabled:text-[var(--swimm-neutral-500)]"
-              whileHover={{ y: -2 }}
-              whileTap={{ scale: 0.97 }}
-              transition={{ type: "spring", stiffness: 260, damping: 20 }}
-            >
-              {isRunningAnalysis && (
-                <motion.span
-                  className="mr-2 inline-block h-4 w-4 rounded-full border-2 border-[var(--swimm-primary-700)] border-t-transparent"
-                  animate={{ rotate: 360 }}
-                  transition={{ repeat: Infinity, ease: "linear", duration: 0.9 }}
-                />
-              )}
-              {isRunningAnalysis ? liveCopy.analyzingButton : liveCopy.analyzeButton}
-            </motion.button>
-            {creditsText ? (
-              <div className={`mt-1 text-xs font-medium ${creditsClass}`}>
-                {creditsText}
-              </div>
-            ) : null}
+            <div className="flex flex-col items-center gap-1 sm:items-end">
+              <motion.button
+                type="button"
+                onClick={onAnalyze}
+                disabled={!canRunAnalysis}
+                className="inline-flex items-center justify-center rounded-full border border-[var(--swimm-primary-500)] bg-[var(--swimm-primary-500)] px-6 py-3 text-sm font-semibold text-[var(--swimm-navy-900)] shadow-[var(--swimm-glow)] transition hover:bg-[var(--swimm-primary-700)] hover:text-white disabled:cursor-not-allowed disabled:border-[var(--swimm-neutral-300)] disabled:bg-[var(--swimm-neutral-300)]/40 disabled:text-[var(--swimm-neutral-500)]"
+                whileHover={{ y: -2 }}
+                whileTap={{ scale: 0.97 }}
+                transition={{ type: "spring", stiffness: 260, damping: 20 }}
+              >
+                {isRunningAnalysis && (
+                  <motion.span
+                    className="mr-2 inline-block h-4 w-4 rounded-full border-2 border-[var(--swimm-primary-700)] border-t-transparent"
+                    animate={{ rotate: 360 }}
+                    transition={{ repeat: Infinity, ease: "linear", duration: 0.9 }}
+                  />
+                )}
+                {isRunningAnalysis ? liveCopy.analyzingButton : liveCopy.analyzeButton}
+              </motion.button>
+              {creditsText ? (
+                <div className={`text-xs font-medium ${creditsClass}`}>{creditsText}</div>
+              ) : null}
+            </div>
           </div>
           {analysisError && (
             <div className="mt-4 rounded-2xl border border-[var(--swimm-down)]/30 bg-[var(--swimm-down)]/10 px-4 py-3 text-sm text-[var(--swimm-down)]">

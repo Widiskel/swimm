@@ -113,6 +113,12 @@ export default function AnalysisPage() {
   const canPersistHistory = sessionStatus === "authenticated";
   const availableCredits = session?.credits ?? 0;
 
+  useEffect(() => {
+    if (availableCredits > 0 && analysisError === analysisCopy.noCredits) {
+      setAnalysisError(null);
+    }
+  }, [analysisCopy.noCredits, analysisError, availableCredits]);
+
   const loadPairs = useCallback(async () => {
     const params = new URLSearchParams({
       provider,
@@ -239,7 +245,7 @@ export default function AnalysisPage() {
     return buildChartRangeLabels(points, languageTag);
   }, [languageTag, response]);
 
-  const canRunAnalysis = ready && authenticated && latestCandles.length > 0 && !isRunning && availableCredits > 0;
+  const canRunAnalysis = ready && authenticated && latestCandles.length > 0 && !isRunning;
   const handleAssetCategoryChange = (nextCategory: AssetCategory) => {
     if (nextCategory === assetCategory) {
       return;
@@ -386,10 +392,6 @@ export default function AnalysisPage() {
     if (!latestCandles.length || !ready || !authenticated) {
       return;
     }
-    if (availableCredits <= 0) {
-      setAnalysisError(analysisCopy.noCredits);
-      return;
-    }
     const objective = `Analyse ${modeLabel} trading pair ${formattedPair} on timeframe ${timeframe} using ${providerLabel}`;
 
     setIsRunning(true);
@@ -469,6 +471,7 @@ export default function AnalysisPage() {
       }
     } catch (runError) {
       console.error(runError);
+      void refreshSession();
       if (runError instanceof Error && runError.message) {
         setAnalysisError(runError.message);
       } else {
@@ -480,7 +483,6 @@ export default function AnalysisPage() {
   }, [
     analysisCopy.agentFailure,
     analysisCopy.agentGenericError,
-    analysisCopy.noCredits,
     authenticated,
     formattedPair,
     languageTag,
@@ -496,7 +498,6 @@ export default function AnalysisPage() {
     timeframe,
     lastClosedTimeSec,
     assetCategory,
-    availableCredits,
   ]);
 
   // Auto-run analyze when a new candle closes for the selected timeframe (strict closed-candle)

@@ -328,6 +328,7 @@ const id = {
       missingContent: "Sentient Models API tidak mengembalikan konten.",
       sessionRequired: "Masuk terlebih dahulu untuk menjalankan agent SWIMM.",
       insufficientCredits: "Kredit kamu habis. Silakan isi ulang sebelum menjalankan analisa lagi.",
+      debitFailed: "Gagal memotong kredit. Silakan coba lagi sebentar lagi.",
       timeout: "Permintaan ke Sentient Models melewati batas waktu.",
       generic: "Integrasi Sentient Models gagal.",
     },

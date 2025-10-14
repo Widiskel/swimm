@@ -1,0 +1,102 @@
+#!/usr/bin/env node
+
+const { readFileSync } = require("node:fs");
+const { resolve } = require("node:path");
+const { MongoClient, ServerApiVersion } = require("mongodb");
+
+const loadEnv = () => {
+  const envPath = resolve(process.cwd(), ".env");
+  let content;
+  try {
+    content = readFileSync(envPath, "utf-8");
+  } catch {
+    return;
+  }
+  for (const line of content.split(/\r?\n/)) {
+    if (!line || line.trim().startsWith("#")) {
+      continue;
+    }
+    const idx = line.indexOf("=");
+    if (idx === -1) {
+      continue;
+    }
+    const key = line.slice(0, idx).trim();
+    const rawValue = line.slice(idx + 1).trim();
+    const cleaned = rawValue.replace(/^"(.*)"$/, "$1").replace(/^'(.*)'$/, "$1");
+    if (key && !(key in process.env)) {
+      process.env[key] = cleaned;
+    }
+  }
+};
+
+const usage = () => {
+  console.log("Usage: node scripts/add-credits.js <email> <amount>");
+  process.exit(1);
+};
+
+const main = async () => {
+  loadEnv();
+
+  const [, , emailArg, amountArg] = process.argv;
+  if (!emailArg || !amountArg) {
+    usage();
+  }
+
+  const email = emailArg.trim().toLowerCase();
+  const amount = Number.parseInt(amountArg, 10);
+
+  if (!Number.isFinite(amount) || amount <= 0) {
+    console.error("Amount must be a positive integer.");
+    process.exit(1);
+  }
+
+  const uri = process.env.MONGODB_URI;
+  if (!uri) {
+    console.error("MONGODB_URI is not defined in environment.");
+    process.exit(1);
+  }
+
+  const dbName = process.env.MONGODB_DB_NAME ?? "swimm";
+
+  const client = new MongoClient(uri, {
+    serverApi: {
+      version: ServerApiVersion.v1,
+      strict: true,
+      deprecationErrors: true,
+    },
+  });
+
+  try {
+    await client.connect();
+    const db = client.db(dbName);
+    const session = await db.collection("sessions").findOne({ email });
+
+    if (!session) {
+      console.error(`No session found for email: ${email}`);
+      process.exit(1);
+    }
+
+    const now = new Date();
+    await db.collection("user_credits").updateOne(
+      { userId: session.userId },
+      {
+        $inc: { balance: amount },
+        $set: { updatedAt: now },
+        $setOnInsert: { userId: session.userId, createdAt: now },
+      },
+      { upsert: true }
+    );
+
+    const updated = await db.collection("user_credits").findOne({ userId: session.userId });
+    console.log(
+      `Credits updated for ${email} (userId: ${session.userId}). Current balance: ${updated?.balance ?? 0}`
+    );
+  } catch (error) {
+    console.error("Failed to update credits:", error);
+    process.exitCode = 1;
+  } finally {
+    await client.close().catch(() => undefined);
+  }
+};
+
+void main();

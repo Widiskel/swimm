@@ -21,7 +21,7 @@ export async function GET() {
 
     const refreshed = await touchSession(session.sessionId);
     const activeSession = refreshed ?? session;
-    const creditDoc = await ensureUserCredits(activeSession.userId);
+    const creditDoc = await ensureUserCredits(activeSession.userId, { email: activeSession.email ?? null });
     return NextResponse.json({
       session: toSessionResponse(activeSession, { credits: creditDoc.balance }),
     });
@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
       name: body.name ?? null,
       wallet: body.wallet ?? null,
     });
-    const credits = await ensureUserCredits(body.userId);
+    const credits = await ensureUserCredits(body.userId, { email: body.email ?? null });
 
     return NextResponse.json(
       { session: toSessionResponse(session, { credits: credits.balance }) },

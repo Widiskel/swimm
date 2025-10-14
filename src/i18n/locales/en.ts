@@ -327,6 +327,7 @@ const en = {
       missingContent: "Sentient Models API did not return any content.",
       sessionRequired: "Sign in to run the SWIMM agent.",
       insufficientCredits: "You have no credits remaining. Please top up before running another analysis.",
+      debitFailed: "Unable to debit credits. Please try again shortly.",
       timeout: "Request to Sentient Models timed out.",
       generic: "Sentient Models integration failed.",
     },
