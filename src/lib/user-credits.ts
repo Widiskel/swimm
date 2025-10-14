@@ -190,7 +190,7 @@ const applyBalanceChange = async (
     return null;
   }
 
-  const current = normalizeDoc(await collection.findOne(baseFilter));
+  const current = normalizeDoc(await collection.findOne(baseFilter) ?? undefined);
   if (!current || current.balance <= 0) {
     return null;
   }
