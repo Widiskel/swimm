@@ -6,6 +6,7 @@ import { motion } from "framer-motion";
 import { usePrivy } from "@privy-io/react-auth";
 
 import { useLanguage } from "@/providers/language-provider";
+import { useSession } from "@/providers/session-provider";
 import { useUserSettings } from "@/providers/user-settings-provider";
 import { resolveDisplayName } from "@/utils/resolve-display-name";
 
@@ -16,7 +17,8 @@ type ButtonState = "idle" | "loading";
 const GuardedAuthControls = () => {
   const { ready, authenticated, user, login, logout } = usePrivy();
   const { settings } = useUserSettings();
-  const { messages } = useLanguage();
+  const { messages, __ } = useLanguage();
+  const { session } = useSession();
   const copy = messages.auth;
   const [state, setState] = useState<ButtonState>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -91,6 +93,19 @@ const GuardedAuthControls = () => {
     return "US";
   }, [copy.defaultUser, displayName]);
 
+  const credits = session?.credits ?? 0;
+  const hasSessionCredits = typeof session?.credits === "number";
+  const creditsDisplay = hasSessionCredits
+    ? credits > 0
+      ? __("auth.creditsRemaining", { count: credits })
+      : copy.creditsEmpty
+    : copy.creditsLoading;
+  const creditsTone = !hasSessionCredits
+    ? "text-[var(--swimm-neutral-500)]"
+    : credits > 0
+    ? "text-[var(--swimm-primary-700)]"
+    : "text-[var(--swimm-down)]";
+
   if (!ready) {
     return (
       <motion.button
@@ -127,73 +142,84 @@ const GuardedAuthControls = () => {
   }
 
   return (
-    <div className="relative" ref={containerRef}>
-      <motion.button
-        type="button"
-        onClick={() => setMenuOpen((prev) => !prev)}
-        whileHover={{ y: -2 }}
-        whileTap={{ scale: 0.97 }}
-        transition={{ type: "spring", stiffness: 260, damping: 20 }}
-        aria-haspopup="menu"
-        aria-expanded={menuOpen}
-        className="flex h-11 w-11 items-center justify-center rounded-full border border-[var(--swimm-primary-500)] bg-[var(--swimm-primary-500)]/10 text-sm font-semibold uppercase tracking-[0.18em] text-[var(--swimm-primary-700)] shadow-[var(--swimm-glow)]"
-      >
-        {initials}
-      </motion.button>
-      {menuOpen ? (
-        <div className="absolute right-0 z-30 mt-3 w-52 rounded-2xl border border-[var(--swimm-neutral-200)] bg-white p-3 shadow-xl">
-          <div className="mb-3 border-b border-[var(--swimm-neutral-100)] pb-2 text-sm">
-            <p className="font-semibold text-[var(--swimm-navy-900)]">
-              {displayName ?? copy.defaultUser}
-            </p>
-            <p className="text-xs text-[var(--swimm-neutral-500)]">
-              {copy.authenticatedLabel}
-            </p>
+    <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2 rounded-full border border-[var(--swimm-neutral-200)] bg-white px-3 py-1 text-xs font-medium text-[var(--swimm-neutral-600)] shadow-sm">
+        <span className="uppercase tracking-wide text-[var(--swimm-neutral-500)]">
+          {copy.creditsLabel}
+        </span>
+        <span className={`font-semibold ${creditsTone}`}>{creditsDisplay}</span>
+      </div>
+      <div className="relative" ref={containerRef}>
+        <motion.button
+          type="button"
+          onClick={() => setMenuOpen((prev) => !prev)}
+          whileHover={{ y: -2 }}
+          whileTap={{ scale: 0.97 }}
+          transition={{ type: "spring", stiffness: 260, damping: 20 }}
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
+          className="flex h-11 w-11 items-center justify-center rounded-full border border-[var(--swimm-primary-500)] bg-[var(--swimm-primary-500)]/10 text-sm font-semibold uppercase tracking-[0.18em] text-[var(--swimm-primary-700)] shadow-[var(--swimm-glow)]"
+        >
+          {initials}
+        </motion.button>
+        {menuOpen ? (
+          <div className="absolute right-0 z-30 mt-3 w-52 rounded-2xl border border-[var(--swimm-neutral-200)] bg-white p-3 shadow-xl">
+            <div className="mb-3 border-b border-[var(--swimm-neutral-100)] pb-2 text-sm">
+              <p className="font-semibold text-[var(--swimm-navy-900)]">
+                {displayName ?? copy.defaultUser}
+              </p>
+              <p className="text-xs text-[var(--swimm-neutral-500)]">
+                {copy.authenticatedLabel}
+              </p>
+              <p className={`mt-1 text-xs font-medium ${creditsTone}`}>
+                {copy.creditsLabel}: {creditsDisplay}
+              </p>
+            </div>
+            <ul className="flex flex-col gap-1 text-sm">
+              <li>
+                <LinkButton
+                  href="/profile"
+                  label={messages.siteHeader.nav.profile}
+                  onNavigate={() => setMenuOpen(false)}
+                />
+              </li>
+              <li>
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  disabled={state === "loading"}
+                  className="flex w-full items-center justify-between rounded-xl border border-[var(--swimm-neutral-200)] px-3 py-2 text-[var(--swimm-neutral-600)] transition hover:border-[var(--swimm-down)]/40 hover:bg-[var(--swimm-down)]/10 hover:text-[var(--swimm-down)] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <span>
+                    {state === "loading" ? copy.logoutProcessing : copy.logout}
+                  </span>
+                  <svg viewBox="0 0 20 20" className="h-4 w-4" aria-hidden="true">
+                    <path
+                      d="M7 5V4a2 2 0 0 1 2-2h7v16H9a2 2 0 0 1-2-2v-1"
+                      stroke="currentColor"
+                      strokeWidth="1.6"
+                      fill="none"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                    <path
+                      d="M13 10H3m0 0 3-3m-3 3 3 3"
+                      stroke="currentColor"
+                      strokeWidth="1.6"
+                      fill="none"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </button>
+              </li>
+            </ul>
+            {error ? (
+              <p className="mt-3 text-xs text-[var(--swimm-down)]">{error}</p>
+            ) : null}
           </div>
-          <ul className="flex flex-col gap-1 text-sm">
-            <li>
-              <LinkButton
-                href="/profile"
-                label={messages.siteHeader.nav.profile}
-                onNavigate={() => setMenuOpen(false)}
-              />
-            </li>
-            <li>
-              <button
-                type="button"
-                onClick={handleLogout}
-                disabled={state === "loading"}
-                className="flex w-full items-center justify-between rounded-xl border border-[var(--swimm-neutral-200)] px-3 py-2 text-[var(--swimm-neutral-600)] transition hover:border-[var(--swimm-down)]/40 hover:bg-[var(--swimm-down)]/10 hover:text-[var(--swimm-down)] disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <span>
-                  {state === "loading" ? copy.logoutProcessing : copy.logout}
-                </span>
-                <svg viewBox="0 0 20 20" className="h-4 w-4" aria-hidden="true">
-                  <path
-                    d="M7 5V4a2 2 0 0 1 2-2h7v16H9a2 2 0 0 1-2-2v-1"
-                    stroke="currentColor"
-                    strokeWidth="1.6"
-                    fill="none"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <path
-                    d="M13 10H3m0 0 3-3m-3 3 3 3"
-                    stroke="currentColor"
-                    strokeWidth="1.6"
-                    fill="none"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              </button>
-            </li>
-          </ul>
-          {error ? (
-            <p className="mt-3 text-xs text-[var(--swimm-down)]">{error}</p>
-          ) : null}
-        </div>
-      ) : null}
+        ) : null}
+      </div>
     </div>
   );
 };

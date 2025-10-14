@@ -61,6 +61,7 @@ export type LiveMarketSectionProps = {
   onLastClosedTimeChange?: (closeTimeSec: number | null) => void;
   canRunAnalysis: boolean;
   onAnalyze: () => void;
+  creditsRemaining?: number | null;
   isRunningAnalysis: boolean;
   analysisError: string | null;
   sectionRef?: RefObject<HTMLElement> | MutableRefObject<HTMLElement | null> | null;
@@ -83,6 +84,7 @@ export const LiveMarketSection = forwardRef<
     canRunAnalysis,
     onAnalyze,
     isRunningAnalysis,
+    creditsRemaining,
     analysisError,
     sectionRef,
   },
@@ -91,6 +93,16 @@ export const LiveMarketSection = forwardRef<
   const { messages, languageTag, __, locale } = useLanguage();
   const liveCopy = messages.live;
   const providerLabel = useMemo(() => __("pairSelection.providerOptions." + provider), [__, provider]);
+  const creditsText = typeof creditsRemaining === "number"
+    ? (creditsRemaining > 0
+        ? __("live.credits.remaining", { count: creditsRemaining })
+        : __("live.credits.depleted"))
+    : null;
+  const creditsClass = typeof creditsRemaining === "number"
+    ? (creditsRemaining > 0
+        ? "text-[var(--swimm-neutral-500)]"
+        : "text-[var(--swimm-down)]")
+    : "";
 
   const handleSectionRef = useCallback(
     (node: HTMLElement | null) => {
@@ -849,6 +861,11 @@ export const LiveMarketSection = forwardRef<
               )}
               {isRunningAnalysis ? liveCopy.analyzingButton : liveCopy.analyzeButton}
             </motion.button>
+            {creditsText ? (
+              <div className={`mt-1 text-xs font-medium ${creditsClass}`}>
+                {creditsText}
+              </div>
+            ) : null}
           </div>
           {analysisError && (
             <div className="mt-4 rounded-2xl border border-[var(--swimm-down)]/30 bg-[var(--swimm-down)]/10 px-4 py-3 text-sm text-[var(--swimm-down)]">

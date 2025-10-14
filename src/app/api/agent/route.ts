@@ -38,6 +38,11 @@ import {
 import { installFetchLogger } from "@/lib/log-fetch";
 import { getMongoDb } from "@/lib/mongodb";
 import { getSessionFromCookie } from "@/lib/session";
+import {
+  decrementUserCredits,
+  ensureUserCredits,
+  incrementUserCredits,
+} from "@/lib/user-credits";
 import { getUserSettings } from "@/lib/user-settings";
 import { getLanguageTag, isLocale, type Locale } from "@/i18n/messages";
 import { translate, type Replacements } from "@/i18n/translate";
@@ -1680,7 +1685,33 @@ export async function POST(request: Request) {
   const objective = body.objective.trim();
 
   const session = await getSessionFromCookie();
-  const settings = session ? await getUserSettings(session.userId) : null;
+  if (!session) {
+    return NextResponse.json(
+      { error: tAgent(locale, "errors.sessionRequired") },
+      { status: 401 }
+    );
+  }
+
+  const creditSnapshot = await ensureUserCredits(session.userId);
+  if (creditSnapshot.balance <= 0) {
+    return NextResponse.json(
+      { error: tAgent(locale, "errors.insufficientCredits") },
+      { status: 403 }
+    );
+  }
+
+  const debit = await decrementUserCredits(session.userId, 1);
+  if (!debit) {
+    return NextResponse.json(
+      { error: tAgent(locale, "errors.insufficientCredits") },
+      { status: 403 }
+    );
+  }
+
+  const creditsRemaining = debit.balance;
+  let shouldRefundCredits = true;
+
+  const settings = await getUserSettings(session.userId);
 
   const binanceAuth = settings?.binanceApiKey ? { apiKey: settings.binanceApiKey } : undefined;
   const bybitAuth = settings?.bybitApiKey ? { apiKey: settings.bybitApiKey } : undefined;
@@ -1742,9 +1773,12 @@ export async function POST(request: Request) {
       ? fetchCryptoPanicHeadlines(baseCurrency)
       : Promise.resolve({ headlines: [], limited: false });
 
-  const historyInsightsPromise = session
-    ? buildHistoryInsightsForPrompt(session.userId, symbol, timeframe, locale)
-    : Promise.resolve(null);
+  const historyInsightsPromise = buildHistoryInsightsForPrompt(
+    session.userId,
+    symbol,
+    timeframe,
+    locale
+  );
 
   const explicitNewsUrls = dataMode === "scrape" ? urls : [];
   const tavilyContentPromise = (async () => {
@@ -1985,24 +2019,32 @@ export async function POST(request: Request) {
     const draft = parseModelPayload(content);
     const payload = buildAgentPayload(draft, objective, timeframe, marketSupport, locale);
 
+    shouldRefundCredits = false;
     return NextResponse.json({
       ...payload,
       newsHeadlines: cryptoNewsHeadlines,
       newsRateLimited: cryptoNewsRateLimited,
+      creditsRemaining,
     });
   } catch (error) {
+    if (shouldRefundCredits) {
+      await incrementUserCredits(session.userId, 1).catch(() => undefined);
+    }
     const message =
       error instanceof Error && error.name === "AbortError"
         ? tAgent(locale, "errors.timeout")
         : error instanceof Error
         ? error.message
         : tAgent(locale, "errors.generic");
-
+    const status =
+      typeof (error as { status?: number }).status === "number"
+        ? (error as { status: number }).status
+        : 500;
     return NextResponse.json(
       {
         error: message,
       },
-      { status: 500 }
+      { status }
     );
   } finally {
     clearTimeout(timeout);

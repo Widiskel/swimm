@@ -7,6 +7,7 @@ import {
   toSessionResponse,
   touchSession,
 } from "@/lib/session";
+import { ensureUserCredits } from "@/lib/user-credits";
 
 const buildError = (message: string, status = 400) =>
   NextResponse.json({ error: message }, { status });
@@ -19,7 +20,11 @@ export async function GET() {
     }
 
     const refreshed = await touchSession(session.sessionId);
-    return NextResponse.json({ session: toSessionResponse(refreshed ?? session) });
+    const activeSession = refreshed ?? session;
+    const creditDoc = await ensureUserCredits(activeSession.userId);
+    return NextResponse.json({
+      session: toSessionResponse(activeSession, { credits: creditDoc.balance }),
+    });
   } catch (error) {
     console.error("Failed to read session", error);
     return buildError("Unable to read session.", 500);
@@ -45,8 +50,12 @@ export async function POST(request: NextRequest) {
       name: body.name ?? null,
       wallet: body.wallet ?? null,
     });
+    const credits = await ensureUserCredits(body.userId);
 
-    return NextResponse.json({ session: toSessionResponse(session) }, { status: 201 });
+    return NextResponse.json(
+      { session: toSessionResponse(session, { credits: credits.balance }) },
+      { status: 201 }
+    );
   } catch (error) {
     console.error("Failed to create session", error);
     return buildError("Unable to create session.", 500);

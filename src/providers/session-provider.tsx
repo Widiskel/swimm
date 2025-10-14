@@ -19,6 +19,7 @@ export type SessionData = {
   wallet?: string | null;
   createdAt: string;
   expiresAt: string;
+  credits: number;
 };
 
 type SessionStatus = "loading" | "authenticated" | "guest";
@@ -32,6 +33,20 @@ type SessionContextValue = {
 
 const SessionContext = createContext<SessionContextValue | null>(null);
 
+const normalizeSession = (session: SessionData | null) => {
+  if (!session) {
+    return null;
+  }
+  const credits =
+    typeof session.credits === "number" && Number.isFinite(session.credits)
+      ? Math.max(0, Math.floor(session.credits))
+      : 0;
+  return {
+    ...session,
+    credits,
+  };
+};
+
 const fetchSession = async () => {
   const response = await fetch("/api/session", {
     method: "GET",
@@ -42,7 +57,7 @@ const fetchSession = async () => {
     throw new Error(`Session request failed with ${response.status}`);
   }
   const payload = (await response.json()) as { session: SessionData | null };
-  return payload.session ?? null;
+  return normalizeSession(payload.session ?? null);
 };
 
 const createServerSession = async (
@@ -67,7 +82,7 @@ const createServerSession = async (
     throw new Error(`Failed to create session (${response.status})`);
   }
   const payload = (await response.json()) as { session: SessionData | null };
-  return payload.session ?? null;
+  return normalizeSession(payload.session ?? null);
 };
 
 const destroyServerSession = async () => {

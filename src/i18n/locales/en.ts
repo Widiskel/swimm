@@ -108,6 +108,10 @@ const en = {
       "Analysis will use {pair} from {provider} with timeframe {timeframe}.",
     analyzeButton: "Analyze",
     analyzingButton: "Analyzing...",
+    credits: {
+      remaining: "{count} credits left",
+      depleted: "No credits remaining",
+    },
     errors: {
       fetchSnapshot: "Failed to retrieve market data from the provider.",
       renderChart: "Unable to display the chart. Please try again.",
@@ -321,6 +325,8 @@ const en = {
       objectiveRequired: "Analysis objective is required.",
       missingApiKey: "Sentient Models API key is not configured.",
       missingContent: "Sentient Models API did not return any content.",
+      sessionRequired: "Sign in to run the SWIMM agent.",
+      insufficientCredits: "You have no credits remaining. Please top up before running another analysis.",
       timeout: "Request to Sentient Models timed out.",
       generic: "Sentient Models integration failed.",
     },
@@ -601,6 +607,10 @@ const en = {
     logoutError: "Logout failed. Please try again.",
     authenticatedLabel: "Authenticated",
     defaultUser: "Account",
+    creditsLabel: "Credits",
+    creditsRemaining: "{count} left",
+    creditsEmpty: "No credits",
+    creditsLoading: "Loading...",
     envMissing: "Set NEXT_PUBLIC_PRIVY_APP_ID to enable authentication.",
   },
   analysisPage: {
@@ -616,6 +626,7 @@ const en = {
     updatedToast: "Fresh analysis ready · {time}",
     agentFailure: "The agent failed to respond.",
     agentGenericError: "Something went wrong while running the agent. Please try again.",
+    noCredits: "You're out of credits. Please top up before running another analysis.",
   },
   history: {
     connecting: "Checking your sign-in status...",

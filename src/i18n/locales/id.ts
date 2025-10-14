@@ -109,6 +109,10 @@ const id = {
       "Analisa akan menggunakan pair {pair} dari {provider} dengan timeframe {timeframe}.",
     analyzeButton: "Analisa",
     analyzingButton: "Analisa berjalan...",
+    credits: {
+      remaining: "{count} kredit tersisa",
+      depleted: "Kredit tidak tersedia",
+    },
     errors: {
       fetchSnapshot: "Gagal mengambil data pasar dari provider.",
       renderChart: "Gagal menampilkan chart. Coba lagi.",
@@ -322,6 +326,8 @@ const id = {
       objectiveRequired: "Tujuan analisa wajib diisi.",
       missingApiKey: "Sentient Models API key belum dikonfigurasi.",
       missingContent: "Sentient Models API tidak mengembalikan konten.",
+      sessionRequired: "Masuk terlebih dahulu untuk menjalankan agent SWIMM.",
+      insufficientCredits: "Kredit kamu habis. Silakan isi ulang sebelum menjalankan analisa lagi.",
       timeout: "Permintaan ke Sentient Models melewati batas waktu.",
       generic: "Integrasi Sentient Models gagal.",
     },
@@ -583,6 +589,10 @@ const id = {
     logoutError: "Logout gagal. Silakan coba lagi.",
     authenticatedLabel: "Terautentikasi",
     defaultUser: "Akun",
+    creditsLabel: "Kredit",
+    creditsRemaining: "sisa {count}",
+    creditsEmpty: "Kredit habis",
+    creditsLoading: "Memuat...",
     envMissing:
       "Setel NEXT_PUBLIC_PRIVY_APP_ID untuk mengaktifkan autentikasi.",
   },
@@ -599,6 +609,7 @@ const id = {
     updatedToast: "Analisa terbaru siap · {time}",
     agentFailure: "Agent gagal merespon.",
     agentGenericError: "Terjadi masalah saat menjalankan agent. Coba ulangi.",
+    noCredits: "Kredit kamu habis. Isi ulang sebelum menjalankan analisa lagi.",
   },
   history: {
     connecting: "Memeriksa status login Anda...",

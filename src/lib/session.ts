@@ -27,6 +27,7 @@ type SessionPublicData = {
   wallet?: string | null;
   expiresAt: string;
   createdAt: string;
+  credits: number;
 };
 
 let sessionCollectionPromise: Promise<Collection<SessionDocument>> | null = null;
@@ -159,7 +160,10 @@ export const destroySession = async () => {
   cookieStore.delete(SESSION_COOKIE_NAME);
 };
 
-export const toSessionResponse = (session: SessionDocument | null): SessionPublicData | null => {
+export const toSessionResponse = (
+  session: SessionDocument | null,
+  options?: { credits?: number }
+): SessionPublicData | null => {
   if (!session) {
     return null;
   }
@@ -171,6 +175,7 @@ export const toSessionResponse = (session: SessionDocument | null): SessionPubli
     wallet: session.wallet ?? null,
     createdAt: session.createdAt.toISOString(),
     expiresAt: session.expiresAt.toISOString(),
+    credits: Math.max(0, options?.credits ?? 0),
   };
 };
 

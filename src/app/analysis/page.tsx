@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
@@ -60,7 +60,12 @@ export default function AnalysisPage() {
   const savePanelCopy = messages.analysis.savePanel;
   const { ready, authenticated, login } = usePrivy();
   const { saveEntry } = useHistory();
-  const { status: sessionStatus, isSyncing: isSessionSyncing } = useSession();
+  const {
+    status: sessionStatus,
+    isSyncing: isSessionSyncing,
+    session,
+    refresh: refreshSession,
+  } = useSession();
 
   const [assetCategory, setAssetCategory] = useState<AssetCategory>(DEFAULT_ASSET_CATEGORY);
   const [provider, setProvider] = useState<CexProvider>(DEFAULT_PROVIDER);
@@ -106,6 +111,7 @@ export default function AnalysisPage() {
     }
   );
   const canPersistHistory = sessionStatus === "authenticated";
+  const availableCredits = session?.credits ?? 0;
 
   const loadPairs = useCallback(async () => {
     const params = new URLSearchParams({
@@ -233,8 +239,7 @@ export default function AnalysisPage() {
     return buildChartRangeLabels(points, languageTag);
   }, [languageTag, response]);
 
-  const canRunAnalysis = ready && authenticated && latestCandles.length > 0 && !isRunning;
-
+  const canRunAnalysis = ready && authenticated && latestCandles.length > 0 && !isRunning && availableCredits > 0;
   const handleAssetCategoryChange = (nextCategory: AssetCategory) => {
     if (nextCategory === assetCategory) {
       return;
@@ -381,6 +386,10 @@ export default function AnalysisPage() {
     if (!latestCandles.length || !ready || !authenticated) {
       return;
     }
+    if (availableCredits <= 0) {
+      setAnalysisError(analysisCopy.noCredits);
+      return;
+    }
     const objective = `Analyse ${modeLabel} trading pair ${formattedPair} on timeframe ${timeframe} using ${providerLabel}`;
 
     setIsRunning(true);
@@ -434,6 +443,7 @@ export default function AnalysisPage() {
         throw new Error(analysisCopy.agentGenericError);
       }
       setResponse(payload);
+      void refreshSession();
       setAnalysisCandles(latestCandles.slice(-180));
       setSaveFeedback("");
       setSaveStatus("idle");
@@ -470,6 +480,7 @@ export default function AnalysisPage() {
   }, [
     analysisCopy.agentFailure,
     analysisCopy.agentGenericError,
+    analysisCopy.noCredits,
     authenticated,
     formattedPair,
     languageTag,
@@ -480,10 +491,12 @@ export default function AnalysisPage() {
     provider,
     providerLabel,
     ready,
+    refreshSession,
     selectedPair,
     timeframe,
     lastClosedTimeSec,
     assetCategory,
+    availableCredits,
   ]);
 
   // Auto-run analyze when a new candle closes for the selected timeframe (strict closed-candle)
@@ -613,6 +626,7 @@ export default function AnalysisPage() {
           canRunAnalysis={canRunAnalysis}
           onAnalyze={handleAnalyze}
           isRunningAnalysis={isRunning}
+          creditsRemaining={availableCredits}
           analysisError={analysisError}
           sectionRef={chartSectionRef}
         />
